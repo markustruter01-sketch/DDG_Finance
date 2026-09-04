@@ -459,11 +459,16 @@ def _health_path() -> str:
     return f"{prefix}/health" if prefix else "/health"
 
 
+def _liveness_path() -> str:
+    prefix = API_PREFIX.rstrip("/")
+    return f"{prefix}/liveness" if prefix else "/liveness"
+
+
 class TradingAPIAuthMiddleware(BaseHTTPMiddleware):
     """Require the shared API secret for every route except liveness health."""
 
     async def dispatch(self, request: StarletteRequest, call_next) -> StarletteResponse:
-        if request.url.path == _health_path():
+        if request.url.path in {_health_path(), _liveness_path()}:
             return await call_next(request)
 
         expected_secret = os.getenv("TRADING_API_SECRET", "").strip()

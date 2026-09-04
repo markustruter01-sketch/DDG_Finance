@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import JSONResponse
 from loguru import logger
 
 from core.pipeline import get_last_run, reset_error_state
@@ -49,6 +50,25 @@ async def runner_status() -> dict:
                 "error": "runner heartbeat table unreadable",
             },
         ) from exc
+
+
+@system_router.get("/liveness")
+async def liveness() -> dict:
+    """Return the minimal unauthenticated runner liveness probe."""
+    from core.runner_heartbeat import RunnerHeartbeatReadError, get_runner_status
+
+    try:
+        status = get_runner_status()
+        runner_state = status["verdict"]
+        age_seconds = status["age_seconds"]
+    except RunnerHeartbeatReadError:
+        runner_state = "UNKNOWN"
+        age_seconds = None
+
+    body = {"runner": runner_state, "age_seconds": age_seconds}
+    if runner_state == "ALIVE":
+        return body
+    return JSONResponse(status_code=503, content=body)
 
 
 def _get_signal_guard_status() -> dict | None:

@@ -6,6 +6,7 @@ from core.equity_universe import set_screen_data
 from analysis.bot2_momentum_pead_v4 import (
     Bar,
     Series,
+    _sgov_daily_return,
     build_event_schedule,
     build_momentum_cache,
     screen_universe_current,
@@ -173,9 +174,61 @@ def test_experiment_18_default_sharpe_reproduces_exactly():
         rebalance_frequency="monthly",
         target_volatility=None,
         realized_volatility_window=126,
+        idle_capital="cash",
     )
 
     assert result["sharpe"] == 0.7016876886753177
+
+
+def test_sgov_idle_capital_changes_result(monkeypatch):
+    data = _parameter_universe()
+    sgov = _series("SGOV", count=800, slope=0.02)
+    monkeypatch.setattr(
+        "analysis.bot2_momentum_pead_v4._load_sgov_series",
+        lambda end: sgov,
+    )
+    cache = build_momentum_cache(
+        data,
+        set(data),
+        universe_size=500,
+        end=date(2020, 1, 31),
+    )
+
+    cash_result = simulate_momentum(
+        data,
+        set(data),
+        universe_size=500,
+        start=date(2019, 1, 1),
+        end=date(2020, 1, 31),
+        ranking_cache=cache,
+        idle_capital="cash",
+    )
+    sgov_result = simulate_momentum(
+        data,
+        set(data),
+        universe_size=500,
+        start=date(2019, 1, 1),
+        end=date(2020, 1, 31),
+        ranking_cache=cache,
+        idle_capital="sgov",
+    )
+
+    assert sgov_result["idle_interest_earned"] > 0
+    assert sgov_result["return"] != cash_result["return"]
+
+
+def test_sgov_before_first_stored_bar_earns_zero():
+    sgov = Series(
+        "SGOV",
+        [
+            Bar(date(2020, 6, 1), 100, 100, 100, 100, 1),
+            Bar(date(2020, 6, 2), 100, 100, 100, 101, 1),
+        ],
+    )
+
+    assert _sgov_daily_return(sgov, date(2020, 5, 29)) == 0.0
+    assert _sgov_daily_return(sgov, date(2020, 6, 1)) == 0.0
+    assert _sgov_daily_return(sgov, date(2020, 6, 2)) == 0.01
 
 
 def test_target_volatility_changes_result_and_is_capped():

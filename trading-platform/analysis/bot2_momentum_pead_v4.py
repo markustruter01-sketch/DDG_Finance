@@ -38,6 +38,7 @@ from core.equity_universe import (  # noqa: E402
     set_screen_data,
 )
 from analysis.bot2_data_pipeline import EARNINGS_SYMBOLS, EARNINGS_TABLE  # noqa: E402
+from analysis.bot2_sp500_data import REFERENCE_PRICE_SOURCES  # noqa: E402
 from analysis.bot2_momentum_pead_v3 import (  # noqa: E402
     ALPACA_BARS_URL,
     ASSET_TABLE,
@@ -770,6 +771,42 @@ def _holding_value(
     return value
 
 
+def _load_sgov_series(end: date) -> Series:
+    """Load the dedicated SGOV reference series without changing the equity panel."""
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT DISTINCT ON (date)
+                       date, open, high, low, close, volume
+                  FROM {PRICE_TABLE}
+                 WHERE symbol='SGOV'
+                   AND date <= %s
+                   AND source = ANY(%s)
+                 ORDER BY date,
+                          CASE
+                              WHEN source='alpaca_sip_adjusted' THEN 0
+                              WHEN source='alpaca_iex_adjusted' THEN 1
+                              ELSE 2
+                          END
+                """,
+                (end, list(REFERENCE_PRICE_SOURCES)),
+            )
+            rows = cur.fetchall()
+    if not rows:
+        raise RuntimeError("SGOV idle-capital mode requires stored SGOV reference bars")
+    return Series("SGOV", [Bar(row[0], *map(float, row[1:])) for row in rows])
+
+
+def _sgov_daily_return(series: Series, day: date) -> float:
+    """Return SGOV's close-to-close return for ``day`` or zero when unavailable."""
+    current = series.by_date.get(day)
+    previous = _bar_before(series, day)
+    if current is None or previous is None or previous.close <= 0:
+        return 0.0
+    return current.close / previous.close - 1
+
+
 def simulate_true_rotation(
     series: dict[str, Series],
     symbols: set[str],
@@ -1019,6 +1056,7 @@ def simulate_momentum(
     rebalance_frequency: RebalanceFrequency = "monthly",
     target_volatility: float | None = None,
     realized_volatility_window: int = 126,
+    idle_capital: Literal["cash", "sgov"] = "cash",
 ) -> dict[str, Any]:
     """One-cash momentum book; selector is used only for controls."""
     if top_n <= 0:
@@ -1027,6 +1065,8 @@ def simulate_momentum(
         raise ValueError("target_volatility must be positive when provided")
     if realized_volatility_window <= 0:
         raise ValueError("realized_volatility_window must be positive")
+    if idle_capital not in {"cash", "sgov"}:
+        raise ValueError("idle_capital must be 'cash' or 'sgov'")
     if not isinstance(ranking_cache, MomentumCache):
         raise TypeError(
             "ranking_cache must be built by build_momentum_cache so its "
@@ -1071,10 +1111,16 @@ def simulate_momentum(
     stops = 0
     rebalance_multipliers: list[float] = []
     scaling_fallbacks = 0
+    sgov_series = _load_sgov_series(end) if idle_capital == "sgov" else None
+    idle_interest_earned = 0.0
 
     for day in calendar:
         if day < start:
             continue
+        if sgov_series is not None:
+            cash_before_idle_return = cash
+            cash *= 1 + _sgov_daily_return(sgov_series, day)
+            idle_interest_earned += cash - cash_before_idle_return
         for symbol, holding in list(holdings.items()):
             bar = series[symbol].by_date.get(day)
             if bar is not None and bar.low <= holding.stop:
@@ -1155,6 +1201,11 @@ def simulate_momentum(
         min(rebalance_multipliers) if rebalance_multipliers else 1.0
     )
     result["average_daily_deployment_pct"] = result["mean_deployment"] * 100.0
+    result["idle_capital"] = idle_capital
+    result["idle_interest_earned"] = idle_interest_earned
+    result["idle_interest_pct_of_starting_equity"] = (
+        idle_interest_earned / STARTING_EQUITY * 100.0
+    )
     return result
 
 

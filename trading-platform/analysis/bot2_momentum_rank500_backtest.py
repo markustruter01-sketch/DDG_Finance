@@ -10,10 +10,14 @@ simulator, and supplies all ranking calls through core.equity_universe.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import os
+import pickle
 import random
 import statistics
 import sys
+import time
 from array import array
 from bisect import bisect_left
 from collections import defaultdict
@@ -85,6 +89,9 @@ SAMPLE_MONTHS = (
     (2022, 6),
     (2026, 6),
 )
+CACHE_VERSION = 1
+CACHE_ROOT = _ROOT / ".cache" / "bot2-momentum-research"
+EXPECTED_EXPERIMENT_18_SHARPE = 0.7016876886753177
 
 
 class CompactBar(NamedTuple):
@@ -329,6 +336,337 @@ def _load_compact_panel(
         f"| from={WARMUP_START} | through={end} | storage=packed_arrays"
     )
     return series
+
+
+def _cache_spec(
+    candidate_symbols: set[str],
+    end: date,
+    *,
+    universe_size: int,
+    lookback_bars: int,
+    skip_bars: int,
+    top_n: int,
+    rebalance_frequency: str,
+) -> dict[str, Any]:
+    """Return every input that can change the cached panel or ranking result."""
+    return {
+        "cache_version": CACHE_VERSION,
+        "universe": {
+            "candidate_symbols": sorted(candidate_symbols),
+            "size": universe_size,
+        },
+        "window": {
+            "warmup_start": WARMUP_START.isoformat(),
+            "backtest_start": BACKTEST_START.isoformat(),
+            "backtest_end": end.isoformat(),
+        },
+        "price_table": PRICE_TABLE,
+        "price_sources": list(PRICE_SOURCES),
+        "lookback_bars": lookback_bars,
+        "skip_bars": skip_bars,
+        "top_n": top_n,
+        "rebalance_frequency": rebalance_frequency,
+    }
+
+
+def _cache_key(spec: dict[str, Any]) -> str:
+    encoded = json.dumps(spec, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _cache_paths(cache_key: str) -> tuple[Path, Path]:
+    return (
+        CACHE_ROOT / f"panel-{cache_key}.pkl",
+        CACHE_ROOT / f"ranking-{cache_key}.pkl",
+    )
+
+
+def _write_cache(path: Path, payload: dict[str, Any]) -> int:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    with temporary.open("wb") as handle:
+        pickle.dump(payload, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    os.replace(temporary, path)
+    return path.stat().st_size
+
+
+def _read_cache(
+    path: Path,
+    *,
+    kind: str,
+    expected_key: str,
+    expected_spec: dict[str, Any],
+) -> dict[str, Any] | None:
+    if not path.exists():
+        print(
+            f"cache_key_check | kind={kind} | path={path} | "
+            "status=MISS reason=file_missing"
+        )
+        return None
+    try:
+        with path.open("rb") as handle:
+            payload = pickle.load(handle)
+    except Exception as exc:
+        print(
+            f"cache_key_check | kind={kind} | path={path} | "
+            f"status=MISS reason=unreadable:{type(exc).__name__}"
+        )
+        return None
+    actual_key = payload.get("cache_key") if isinstance(payload, dict) else None
+    actual_spec = payload.get("spec") if isinstance(payload, dict) else None
+    matches = (
+        isinstance(payload, dict)
+        and payload.get("cache_version") == CACHE_VERSION
+        and payload.get("kind") == kind
+        and actual_key == expected_key
+        and actual_spec == expected_spec
+    )
+    print(
+        f"cache_key_check | kind={kind} | path={path} | "
+        f"expected={expected_key} | actual={actual_key} | "
+        f"match={'PASS' if matches else 'FAIL'}"
+    )
+    return payload if matches else None
+
+
+def _serialize_panel(series: dict[str, PackedSeries]) -> dict[str, dict[str, array]]:
+    return {
+        symbol: {
+            "days": array("I", data.days._ordinals),
+            "open": array("d", data.bars._open),
+            "high": array("d", data.bars._high),
+            "low": array("d", data.bars._low),
+            "close": array("d", data.bars._close),
+            "volume": array("d", data.bars._volume),
+        }
+        for symbol, data in series.items()
+    }
+
+
+def _deserialize_panel(
+    payload: dict[str, dict[str, array]],
+) -> dict[str, PackedSeries]:
+    return {
+        symbol: PackedSeries(
+            symbol,
+            values["days"],
+            values["open"],
+            values["high"],
+            values["low"],
+            values["close"],
+            values["volume"],
+        )
+        for symbol, values in payload.items()
+    }
+
+
+def _load_or_build_panel_cache(
+    candidate_symbols: set[str],
+    end: date,
+    *,
+    universe_size: int,
+    lookback_bars: int,
+    skip_bars: int,
+    top_n: int,
+    rebalance_frequency: str,
+    force_rebuild: bool = False,
+) -> tuple[dict[str, PackedSeries], str, Path, bool]:
+    spec = _cache_spec(
+        candidate_symbols,
+        end,
+        universe_size=universe_size,
+        lookback_bars=lookback_bars,
+        skip_bars=skip_bars,
+        top_n=top_n,
+        rebalance_frequency=rebalance_frequency,
+    )
+    key = _cache_key(spec)
+    panel_path, _ = _cache_paths(key)
+    if not force_rebuild:
+        payload = _read_cache(
+            panel_path,
+            kind="panel",
+            expected_key=key,
+            expected_spec=spec,
+        )
+        if payload is not None:
+            return _deserialize_panel(payload["series"]), key, panel_path, True
+    series = _load_compact_panel(candidate_symbols, end)
+    size = _write_cache(
+        panel_path,
+        {
+            "cache_version": CACHE_VERSION,
+            "kind": "panel",
+            "cache_key": key,
+            "spec": spec,
+            "series": _serialize_panel(series),
+        },
+    )
+    print(f"cache_saved | kind=panel | path={panel_path} | bytes={size}")
+    return series, key, panel_path, False
+
+
+def _load_or_build_ranking_cache(
+    series: dict[str, PackedSeries],
+    candidate_symbols: set[str],
+    end: date,
+    *,
+    universe_size: int,
+    lookback_bars: int,
+    skip_bars: int,
+    top_n: int,
+    rebalance_frequency: str,
+    force_rebuild: bool = False,
+) -> tuple[MomentumCache, str, Path, bool]:
+    spec = _cache_spec(
+        candidate_symbols,
+        end,
+        universe_size=universe_size,
+        lookback_bars=lookback_bars,
+        skip_bars=skip_bars,
+        top_n=top_n,
+        rebalance_frequency=rebalance_frequency,
+    )
+    key = _cache_key(spec)
+    _, ranking_path = _cache_paths(key)
+    if not force_rebuild:
+        payload = _read_cache(
+            ranking_path,
+            kind="ranking",
+            expected_key=key,
+            expected_spec=spec,
+        )
+        if payload is not None:
+            cache = MomentumCache(
+                lookback_bars=lookback_bars,
+                skip_bars=skip_bars,
+                top_n=top_n,
+                rebalance_frequency=rebalance_frequency,
+            )
+            cache.update(payload["ranking"])
+            return cache, key, ranking_path, True
+    ranking_cache = build_momentum_cache(
+        series,
+        set(series) & candidate_symbols,
+        universe_size,
+        end,
+        lookback_bars=lookback_bars,
+        skip_bars=skip_bars,
+        top_n=top_n,
+        rebalance_frequency=rebalance_frequency,
+    )
+    size = _write_cache(
+        ranking_path,
+        {
+            "cache_version": CACHE_VERSION,
+            "kind": "ranking",
+            "cache_key": key,
+            "spec": spec,
+            "ranking": ranking_cache,
+        },
+    )
+    print(f"cache_saved | kind=ranking | path={ranking_path} | bytes={size}")
+    return ranking_cache, key, ranking_path, False
+
+
+def _cache_benchmark() -> dict[str, Any]:
+    """Build, persist, reload, and verify Experiment 18 without DB writes."""
+    end = _latest_complete_month_end()
+    assets, candidate_symbols = _load_assets()
+    parameters = {
+        "universe_size": TARGET_UNIVERSE,
+        "lookback_bars": 252,
+        "skip_bars": 22,
+        "top_n": TOP_N,
+        "rebalance_frequency": "monthly",
+    }
+    spec = _cache_spec(candidate_symbols, end, **parameters)
+    key = _cache_key(spec)
+    panel_path, ranking_path = _cache_paths(key)
+
+    cold_started = time.perf_counter()
+    panel_started = time.perf_counter()
+    cold_series, _, _, _ = _load_or_build_panel_cache(
+        candidate_symbols, end, **parameters, force_rebuild=True
+    )
+    cold_panel_seconds = time.perf_counter() - panel_started
+    set_screen_data(assets, cold_series)
+    ranking_started = time.perf_counter()
+    cold_ranking, _, _, _ = _load_or_build_ranking_cache(
+        cold_series, candidate_symbols, end, **parameters, force_rebuild=True
+    )
+    cold_ranking_seconds = time.perf_counter() - ranking_started
+    cold_total_seconds = time.perf_counter() - cold_started
+    print(f"cold_stage_seconds | panel={cold_panel_seconds:.6f}")
+    print(f"cold_stage_seconds | ranking={cold_ranking_seconds:.6f}")
+    print(f"cold_stage_seconds | total={cold_total_seconds:.6f}")
+
+    warm_started = time.perf_counter()
+    warm_panel_started = time.perf_counter()
+    warm_series, warm_key, warm_panel_path, warm_panel_hit = _load_or_build_panel_cache(
+        candidate_symbols, end, **parameters
+    )
+    warm_panel_seconds = time.perf_counter() - warm_panel_started
+    set_screen_data(assets, warm_series)
+    warm_ranking_started = time.perf_counter()
+    warm_ranking, warm_ranking_key, warm_ranking_path, warm_ranking_hit = (
+        _load_or_build_ranking_cache(
+            warm_series, candidate_symbols, end, **parameters
+        )
+    )
+    warm_ranking_seconds = time.perf_counter() - warm_ranking_started
+    warm_total_seconds = time.perf_counter() - warm_started
+    print(f"warm_stage_seconds | panel={warm_panel_seconds:.6f}")
+    print(f"warm_stage_seconds | ranking={warm_ranking_seconds:.6f}")
+    print(f"warm_stage_seconds | total={warm_total_seconds:.6f}")
+    print(
+        f"cache_paths | key={key} | panel={warm_panel_path} | "
+        f"panel_bytes={warm_panel_path.stat().st_size} | ranking={warm_ranking_path} | "
+        f"ranking_bytes={warm_ranking_path.stat().st_size}"
+    )
+    print(
+        f"cache_hit_check | panel={'PASS' if warm_panel_hit else 'FAIL'} "
+        f"| ranking={'PASS' if warm_ranking_hit else 'FAIL'} "
+        f"| panel_key_match={'PASS' if warm_key == key else 'FAIL'} "
+        f"| ranking_key_match={'PASS' if warm_ranking_key == key else 'FAIL'}"
+    )
+
+    warm_result = simulate_momentum(
+        warm_series,
+        set(warm_series) & candidate_symbols,
+        TARGET_UNIVERSE,
+        BACKTEST_START,
+        end,
+        warm_ranking,
+        lookback_bars=252,
+        skip_bars=22,
+        top_n=TOP_N,
+        rebalance_frequency="monthly",
+    )
+    warm_sharpe = warm_result["sharpe"]
+    print(
+        f"warm_correctness | experiment=18 | sharpe={warm_sharpe!r} "
+        f"| expected={EXPECTED_EXPERIMENT_18_SHARPE!r} "
+        f"| match={'PASS' if warm_sharpe == EXPECTED_EXPERIMENT_18_SHARPE else 'FAIL'}"
+    )
+    if warm_sharpe != EXPECTED_EXPERIMENT_18_SHARPE:
+        raise RuntimeError(
+            f"STOP: warm Experiment 18 Sharpe differs: "
+            f"{warm_sharpe!r} != {EXPECTED_EXPERIMENT_18_SHARPE!r}"
+        )
+    print(
+        f"cache_saving | seconds={cold_total_seconds - warm_total_seconds:.6f} "
+        f"| percent={(1 - warm_total_seconds / cold_total_seconds) * 100:.2f}"
+    )
+    return {
+        "cache_key": key,
+        "panel_path": str(panel_path),
+        "ranking_path": str(ranking_path),
+        "cold_seconds": cold_total_seconds,
+        "warm_seconds": warm_total_seconds,
+        "saving_seconds": cold_total_seconds - warm_total_seconds,
+        "sharpe": warm_sharpe,
+    }
 
 
 def _first_session(days: Iterable[date], year: int, month: int) -> date:
@@ -589,7 +927,20 @@ def run() -> dict[str, Any]:
     windows = _windows(end)
     experiment_id = _register(end, windows)
     assets, candidate_symbols = _load_assets()
-    series = _load_compact_panel(candidate_symbols, end)
+    cache_parameters = {
+        "universe_size": TARGET_UNIVERSE,
+        "lookback_bars": 252,
+        "skip_bars": 22,
+        "top_n": TOP_N,
+        "rebalance_frequency": "monthly",
+    }
+    series, panel_cache_key, panel_cache_path, panel_cache_hit = (
+        _load_or_build_panel_cache(
+            candidate_symbols,
+            end,
+            **cache_parameters,
+        )
+    )
     panel_symbols = set(series) & candidate_symbols
     set_screen_data(assets, series)
     print(
@@ -601,10 +952,21 @@ def run() -> dict[str, Any]:
         f"window_selection | first_full_500={BACKTEST_START} "
         f"| latest_complete_month_end={end} | windows={json.dumps(_jsonable(windows))}"
     )
-    ranking_cache = build_momentum_cache(
-        series, panel_symbols, TARGET_UNIVERSE, end
+    ranking_cache, ranking_cache_key, ranking_cache_path, ranking_cache_hit = (
+        _load_or_build_ranking_cache(
+            series,
+            candidate_symbols,
+            end,
+            **cache_parameters,
+        )
     )
-    print(f"ranking_cache | monthly_rebalances={len(ranking_cache)}")
+    print(
+        f"ranking_cache | monthly_rebalances={len(ranking_cache)} "
+        f"| panel_cache_key={panel_cache_key} | ranking_cache_key={ranking_cache_key} "
+        f"| panel_cache={'HIT' if panel_cache_hit else 'REBUILT'} "
+        f"| ranking_cache={'HIT' if ranking_cache_hit else 'REBUILT'} "
+        f"| panel_path={panel_cache_path} | ranking_path={ranking_cache_path}"
+    )
 
     spy_series = __import__(
         "analysis.bot2_momentum_pead_v4", fromlist=["_spy_series"]
@@ -768,9 +1130,17 @@ def main() -> int:
         action="store_true",
         help="Use the previously audited development asset table.",
     )
+    parser.add_argument(
+        "--cache-benchmark",
+        action="store_true",
+        help="Time cold and warm Experiment 18 panel/ranking-cache runs without DB writes.",
+    )
     args = parser.parse_args()
     if not args.use_stored_assets:
         raise SystemExit("refusing to refresh assets; pass --use-stored-assets")
+    if args.cache_benchmark:
+        _cache_benchmark()
+        return 0
     result = run()
     return 0 if result["evaluation"]["outcome"] == "PASS" else 4
 

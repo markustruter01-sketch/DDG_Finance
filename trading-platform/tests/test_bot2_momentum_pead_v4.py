@@ -3,8 +3,10 @@ from datetime import date, timedelta
 import pytest
 
 from core.equity_universe import set_screen_data
+import analysis.bot2_momentum_rank500_backtest as rank500_backtest
 from analysis.bot2_momentum_pead_v4 import (
     Bar,
+    MomentumCache,
     Series,
     _sgov_daily_return,
     build_event_schedule,
@@ -115,6 +117,62 @@ def test_default_arguments_match_explicit_defaults():
         top_n=20,
         rebalance_frequency="monthly",
     )
+
+
+def test_changed_cache_parameter_changes_key_and_forces_rebuild(monkeypatch, tmp_path):
+    monkeypatch.setattr(rank500_backtest, "CACHE_ROOT", tmp_path)
+    calls = []
+
+    def fake_build(series, symbols, universe_size, end, **kwargs):
+        calls.append(kwargs.copy())
+        cache = MomentumCache(
+            lookback_bars=kwargs["lookback_bars"],
+            skip_bars=kwargs["skip_bars"],
+            top_n=kwargs["top_n"],
+            rebalance_frequency=kwargs["rebalance_frequency"],
+        )
+        cache[date(2019, 1, 2)] = [("AAA", 0.1, 0.2)]
+        return cache
+
+    monkeypatch.setattr(rank500_backtest, "build_momentum_cache", fake_build)
+    common = {
+        "universe_size": 500,
+        "lookback_bars": 252,
+        "skip_bars": 22,
+        "rebalance_frequency": "monthly",
+    }
+    first, first_key, _, first_hit = rank500_backtest._load_or_build_ranking_cache(
+        {},
+        {"AAA"},
+        date(2020, 1, 31),
+        top_n=20,
+        **common,
+    )
+    second, second_key, _, second_hit = rank500_backtest._load_or_build_ranking_cache(
+        {},
+        {"AAA"},
+        date(2020, 1, 31),
+        top_n=20,
+        **common,
+    )
+    changed, changed_key, _, changed_hit = (
+        rank500_backtest._load_or_build_ranking_cache(
+            {},
+            {"AAA"},
+            date(2020, 1, 31),
+            top_n=50,
+            **common,
+        )
+    )
+
+    assert first_key == second_key
+    assert first_key != changed_key
+    assert first_hit is False
+    assert second_hit is True
+    assert changed_hit is False
+    assert len(calls) == 2
+    assert first == second
+    assert changed.top_n == 50
 
 
 def test_default_volatility_arguments_keep_the_unscaled_result():

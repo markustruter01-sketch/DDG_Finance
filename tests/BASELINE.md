@@ -1,16 +1,21 @@
 # Test Baseline
 
-Date: 2026-08-26
+Date: 2026-09-05
 
 ## Full suite
 
 ```text
-Tracked test files: 14
-Passed test files: 14
-Failed test files: 0
-Total tests passed: 355
+Tracked test files: 38
+Passed test files: 37
+Failed test files: 1
+Total tests collected: 560
+Total tests passed: 559
+Total tests failed: 1
+Warnings: 1
 ```
 
-This is the known-good baseline for future comparisons. The count decreased
-because the retired Kraken analytics route and its dedicated legacy P&L test
-were archived and removed; all remaining collected tests pass.
+Known failure:
+`kraken-bot/test_bot2_momentum.py::test_first_trading_day_skips_weekend_and_january_holiday`
+
+The failure is the pre-existing Bot 2 first-trading-day holiday behavior. No
+other tests failed in the full workspace-root run.

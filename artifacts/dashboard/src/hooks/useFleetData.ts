@@ -61,6 +61,7 @@ export interface MarketState { regime?: string }
 export interface StatusSummary {
   kill_switch?: { tripped: boolean };
   kill_switch_tripped?: boolean;
+  kill_switch_armed?: boolean;
 }
 
 export interface EntryWindow {
@@ -235,6 +236,7 @@ export function useFleetData() {
     killTripped: summary == null
       ? null
       : summary.kill_switch?.tripped ?? summary.kill_switch_tripped ?? null,
+    killSwitchArmed: summary?.kill_switch_armed ?? null,
     lastCycle:   fleet?.generated_at,
     entryWindows: entryWindowData?.windows,
     runnerStatus: runnerStatusQuery.data,

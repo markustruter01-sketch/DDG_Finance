@@ -9,9 +9,8 @@ Environment variables (set automatically by Replit):
   DATABASE_URL  — postgres://user:pass@host:port/dbname
   PGHOST, PGPORT, PGUSER, PGPASSWORD, PGDATABASE  (individual vars)
 
-Fallback: if PostgreSQL is unreachable, is_pg_available() returns False
-and callers transparently fall back to SQLite.  This preserves local
-development compatibility.
+ PostgreSQL is required at process startup.  Missing or invalid database
+ configuration is a fail-closed startup error.
 
 Tables managed here
 -------------------
@@ -25,9 +24,11 @@ Tables managed here
 from __future__ import annotations
 
 import os
+import sys
 from contextlib import contextmanager
 from datetime import datetime
 from typing import Generator
+from urllib.parse import urlparse
 
 from loguru import logger
 
@@ -35,15 +36,18 @@ try:
     import psycopg2
     from psycopg2 import pool as pg_pool
     _PSYCOPG2_AVAILABLE = True
-except ImportError:
+    _PSYCOPG2_IMPORT_ERROR: ImportError | None = None
+except ImportError as exc:
     _PSYCOPG2_AVAILABLE = False
-    logger.warning("DB | psycopg2 not installed — PostgreSQL unavailable, using SQLite fallback")
+    _PSYCOPG2_IMPORT_ERROR = exc
 
 
 # ── Connection pool ────────────────────────────────────────────────────────
 
 _pool: "pg_pool.ThreadedConnectionPool | None" = None
 _pg_ok: bool = False
+EXPECTED_DB_HOST = "ep-nameless-hill"
+DB_STARTUP_EXIT_CODE = 70
 
 
 def _get_dsn() -> str | None:
@@ -51,7 +55,10 @@ def _get_dsn() -> str | None:
     if url:
         return url
     host = os.environ.get("PGHOST")
-    if host:
+    if host and all(
+        os.environ.get(name)
+        for name in ("PGUSER", "PGPASSWORD", "PGDATABASE")
+    ):
         return (
             f"postgresql://{os.environ['PGUSER']}:{os.environ['PGPASSWORD']}"
             f"@{host}:{os.environ.get('PGPORT', 5432)}/{os.environ['PGDATABASE']}"
@@ -59,21 +66,63 @@ def _get_dsn() -> str | None:
     return None
 
 
+def _dsn_host(dsn: str) -> str | None:
+    """Return only the hostname from a PostgreSQL URL or libpq-style DSN."""
+    try:
+        parsed = urlparse(dsn)
+        if parsed.hostname:
+            return parsed.hostname
+    except ValueError:
+        pass
+
+    for part in dsn.split():
+        if part.startswith("host="):
+            return part.split("=", 1)[1].strip("'\"") or None
+    return None
+
+
 def _init_pool() -> None:
     global _pool, _pg_ok
     if not _PSYCOPG2_AVAILABLE:
-        return
+        logger.critical(
+            "DB | PostgreSQL driver unavailable: "
+            f"{_PSYCOPG2_IMPORT_ERROR or 'psycopg2 import failed'}"
+        )
+        raise SystemExit(DB_STARTUP_EXIT_CODE)
     dsn = _get_dsn()
     if dsn is None:
-        logger.warning("DB | No DATABASE_URL found — using SQLite fallback")
-        return
+        logger.critical(
+            "DB | PostgreSQL DSN missing or incomplete: "
+            "set DATABASE_URL or PGHOST, PGUSER, PGPASSWORD, and PGDATABASE"
+        )
+        raise SystemExit(DB_STARTUP_EXIT_CODE)
+    host = _dsn_host(dsn)
+    if not host:
+        logger.critical("DB | PostgreSQL DSN has no parseable database host")
+        raise SystemExit(DB_STARTUP_EXIT_CODE)
     try:
         _pool = pg_pool.ThreadedConnectionPool(minconn=2, maxconn=20, dsn=dsn)
+        if EXPECTED_DB_HOST not in host:
+            logger.critical(
+                "DB | Unexpected PostgreSQL host: "
+                f"actual={host!r}; expected host containing {EXPECTED_DB_HOST!r}"
+            )
+            _pool.closeall()
+            _pool = None
+            raise SystemExit(DB_STARTUP_EXIT_CODE)
         _pg_ok = True
-        logger.info("DB | PostgreSQL connection pool initialised (min=2, max=20)")
+        logger.info(
+            "DB | PostgreSQL connection pool initialised "
+            f"(min=2, max=20, host={host})"
+        )
+    except SystemExit:
+        raise
     except Exception as exc:
-        logger.error(f"DB | Failed to create PostgreSQL pool: {exc} — falling back to SQLite")
+        logger.critical(
+            f"DB | Failed to create PostgreSQL pool for host={host}: {exc}"
+        )
         _pg_ok = False
+        raise SystemExit(DB_STARTUP_EXIT_CODE) from exc
 
 
 # Initialise on import

@@ -32,6 +32,7 @@
 - [Bot 2 v4 rotation boundary](bot2-v4-rotation-boundary.md) — keep one-book PEAD rotation research isolated; document v3 ledger discrepancies rather than changing locked results.
 - [Alpaca vault position separation](alpaca-vault-position-separation.md) — client order IDs do not split net same-symbol positions; track vault ownership and guard strategy closes.
 - [Test baseline and module patching](test-baseline-and-module-patching.md) — module reloads can split package attributes from class globals; patch the exact module object and keep a dated suite baseline.
+- [Pytest collection roots](pytest-collection-roots.md) — root and subdirectory invocations need equivalent nearest pytest configs to collect the full cross-project suite.
 - [Pause-state fail closed](pause-state-fail-closed.md) — runner must enforce both static profile and canonical DB pause state; aliases need explicit rows during identity migrations.
 - [Live deleveraging ledger sync](live-delever-ledger-sync.md) — partial sells require matching execution-ledger quantity and replacement stop ID before worker restart.
 - [Client order ID uniqueness](client-order-id-uniqueness.md) — every Alpaca submission needs a bounded per-call UUID and one duplicate-ID retry.

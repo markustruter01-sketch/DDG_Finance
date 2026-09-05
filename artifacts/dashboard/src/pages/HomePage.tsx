@@ -795,7 +795,7 @@ export default function HomePage() {
   const {
     fleet, oracle, spy, jerome, total,
     positionsByBot, wfMap,
-    regime, killTripped, lastCycle, mktOpen, entryWindows,
+    regime, killTripped, killSwitchArmed, lastCycle, mktOpen, entryWindows,
     runnerStatus, runnerStatusError,
   } = useFleetData();
 
@@ -878,7 +878,15 @@ export default function HomePage() {
           <div className="home-header-actions">
             <div className={`home-live-state ${killTripped == null ? "is-unknown" : ""}`}>
               <span className={`home-live-dot ${killTripped == null ? "is-unknown" : killTripped ? "is-alert" : ""}`} />
-              <span>{killTripped == null ? "KILL SWITCH UNKNOWN" : killTripped ? "KILL SWITCH" : "SYSTEM ARMED"}</span>
+              <span>
+                {killTripped == null || killSwitchArmed == null
+                  ? "KILL SWITCH UNKNOWN"
+                  : killTripped
+                    ? "KILL SWITCH"
+                    : killSwitchArmed
+                      ? "SYSTEM ARMED"
+                      : "SYSTEM DISARMED"}
+              </span>
             </div>
             <RegimeChip regime={regime} />
             <ExportDropdown

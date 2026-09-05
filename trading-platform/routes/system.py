@@ -18,6 +18,7 @@ from data.cache import get_cache_stats
 from data.economic_calendar import is_blackout_active
 from execution.broker import get_account, get_positions
 from execution.kill_switch import get_state as ks_get_state
+from config.settings import settings
 
 from routes._deps import (
     EXPECTED_JOB_COUNT,
@@ -1108,6 +1109,7 @@ async def status_summary() -> dict:
         "market_open": market_open,
         "next_market_open": next_market_open,
         "kill_switch_tripped": ks.get("tripped", False),
+        "kill_switch_armed": settings.kill_switch_armed,
         "alpaca_maintenance": alpaca_maintenance,
         "trading_mode": trading_mode,
         "afterhours_crypto": _ah_summary,

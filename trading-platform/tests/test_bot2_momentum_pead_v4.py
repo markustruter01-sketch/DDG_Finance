@@ -2,6 +2,7 @@ from datetime import date, timedelta
 
 import pytest
 
+from core.equity_universe import set_screen_data
 from analysis.bot2_momentum_pead_v4 import (
     Bar,
     Series,
@@ -12,6 +13,13 @@ from analysis.bot2_momentum_pead_v4 import (
     simulate_momentum,
     simulate_true_rotation,
     _rebalance_days,
+)
+from analysis.bot2_momentum_rank500_backtest import (
+    BACKTEST_START,
+    TARGET_UNIVERSE,
+    _latest_complete_month_end,
+    _load_assets,
+    _load_compact_panel,
 )
 
 
@@ -106,6 +114,122 @@ def test_default_arguments_match_explicit_defaults():
         top_n=20,
         rebalance_frequency="monthly",
     )
+
+
+def test_default_volatility_arguments_keep_the_unscaled_result():
+    data = _parameter_universe()
+    implicit = _momentum_result(data)
+    explicit = simulate_momentum(
+        data,
+        set(data),
+        universe_size=500,
+        start=date(2019, 1, 1),
+        end=date(2020, 1, 31),
+        ranking_cache=build_momentum_cache(
+            data,
+            set(data),
+            universe_size=500,
+            end=date(2020, 1, 31),
+        ),
+        target_volatility=None,
+        realized_volatility_window=126,
+    )
+
+    assert implicit["sharpe"] == explicit["sharpe"]
+    assert implicit["return"] == explicit["return"]
+    assert implicit["max_drawdown"] == explicit["max_drawdown"]
+    assert explicit["average_multiplier"] == 1.0
+    assert explicit["minimum_multiplier"] == 1.0
+    assert explicit["scaling_fallbacks"] == 0
+
+
+def test_experiment_18_default_sharpe_reproduces_exactly():
+    assets, candidates = _load_assets()
+    end = _latest_complete_month_end()
+    series = _load_compact_panel(candidates, end)
+    panel_symbols = set(series) & candidates
+    set_screen_data(assets, series)
+    ranking_cache = build_momentum_cache(
+        series,
+        panel_symbols,
+        TARGET_UNIVERSE,
+        end,
+        lookback_bars=252,
+        skip_bars=22,
+        top_n=20,
+        rebalance_frequency="monthly",
+    )
+
+    result = simulate_momentum(
+        series,
+        panel_symbols,
+        TARGET_UNIVERSE,
+        BACKTEST_START,
+        end,
+        ranking_cache,
+        lookback_bars=252,
+        skip_bars=22,
+        top_n=20,
+        rebalance_frequency="monthly",
+        target_volatility=None,
+        realized_volatility_window=126,
+    )
+
+    assert result["sharpe"] == 0.7016876886753177
+
+
+def test_target_volatility_changes_result_and_is_capped():
+    data = _parameter_universe()
+    baseline = _momentum_result(data)
+    scaled = simulate_momentum(
+        data,
+        set(data),
+        universe_size=500,
+        start=date(2019, 1, 1),
+        end=date(2020, 1, 31),
+        ranking_cache=build_momentum_cache(
+            data,
+            set(data),
+            universe_size=500,
+            end=date(2020, 1, 31),
+        ),
+        target_volatility=0.001,
+        realized_volatility_window=126,
+    )
+
+    assert (
+        baseline["return"],
+        baseline["sharpe"],
+        baseline["max_drawdown"],
+    ) != (
+        scaled["return"],
+        scaled["sharpe"],
+        scaled["max_drawdown"],
+    )
+    assert scaled["scaled_rebalances"] > 0
+    assert max(scaled["rebalance_multipliers"]) <= 1.0
+
+
+def test_insufficient_realized_volatility_history_uses_one():
+    data = _parameter_universe()
+    scaled = simulate_momentum(
+        data,
+        set(data),
+        universe_size=500,
+        start=date(2019, 1, 1),
+        end=date(2020, 1, 31),
+        ranking_cache=build_momentum_cache(
+            data,
+            set(data),
+            universe_size=500,
+            end=date(2020, 1, 31),
+        ),
+        target_volatility=0.12,
+        realized_volatility_window=126,
+    )
+
+    assert scaled["rebalance_multipliers"][0] == 1.0
+    assert scaled["scaling_fallbacks"] >= 1
 
 
 def test_changed_lookback_changes_result():

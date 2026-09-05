@@ -655,6 +655,28 @@ def _metrics(
     }
 
 
+def _volatility_multiplier(
+    curve: list[float],
+    target_volatility: float,
+    realized_volatility_window: int,
+) -> tuple[float, bool]:
+    """Return a capped portfolio-volatility multiplier and fallback status."""
+    daily_returns = [
+        curve[index] / curve[index - 1] - 1
+        for index in range(1, len(curve))
+        if curve[index - 1] > 0
+    ]
+    if len(daily_returns) < realized_volatility_window:
+        return 1.0, True
+    realized_volatility = (
+        statistics.stdev(daily_returns[-realized_volatility_window:])
+        * math.sqrt(252)
+    )
+    if realized_volatility <= 0:
+        return 1.0, True
+    return min(1.0, target_volatility / realized_volatility), False
+
+
 def _sell(
     holding: Holding,
     data: Series,
@@ -995,10 +1017,16 @@ def simulate_momentum(
     skip_bars: int = SKIP_BARS,
     top_n: int = TOP_N,
     rebalance_frequency: RebalanceFrequency = "monthly",
+    target_volatility: float | None = None,
+    realized_volatility_window: int = 126,
 ) -> dict[str, Any]:
     """One-cash momentum book; selector is used only for controls."""
     if top_n <= 0:
         raise ValueError("top_n must be positive")
+    if target_volatility is not None and target_volatility <= 0:
+        raise ValueError("target_volatility must be positive when provided")
+    if realized_volatility_window <= 0:
+        raise ValueError("realized_volatility_window must be positive")
     if not isinstance(ranking_cache, MomentumCache):
         raise TypeError(
             "ranking_cache must be built by build_momentum_cache so its "
@@ -1041,6 +1069,8 @@ def simulate_momentum(
     turnover = 0.0
     cost_paid = 0.0
     stops = 0
+    rebalance_multipliers: list[float] = []
+    scaling_fallbacks = 0
 
     for day in calendar:
         if day < start:
@@ -1063,10 +1093,23 @@ def simulate_momentum(
                 del holdings[symbol]
             ranked = ranking_cache.get(day, [])
             selected = selector(ranked) if selector else ranked
+            if target_volatility is None:
+                multiplier = 1.0
+                fallback = False
+            else:
+                multiplier, fallback = _volatility_multiplier(
+                    curve, target_volatility, realized_volatility_window
+                )
+            rebalance_multipliers.append(multiplier)
+            scaling_fallbacks += int(fallback)
             for symbol, weight in _weights(selected, top_n=top_n).items():
                 equity_open = cash + _holding_value(holdings, series, day)
                 cash, turnover, cost_paid = _buy(
-                    symbol, "momentum", equity_open * weight, series[symbol], day,
+                    symbol,
+                    "momentum",
+                    equity_open * weight * multiplier,
+                    series[symbol],
+                    day,
                     cash, holdings, event_log, turnover, cost_paid,
                 )
         equity_close = cash + _holding_value(holdings, series, day)
@@ -1095,6 +1138,23 @@ def simulate_momentum(
         dict(mode_days), stops, 0.0, 0, event_log,
     )
     result["allocation"] = "equal_weight"
+    result["target_volatility"] = target_volatility
+    result["realized_volatility_window"] = realized_volatility_window
+    result["rebalance_count"] = len(rebalance_multipliers)
+    result["rebalance_multipliers"] = rebalance_multipliers
+    result["scaled_rebalances"] = sum(
+        multiplier < 1.0 for multiplier in rebalance_multipliers
+    )
+    result["scaling_fallbacks"] = scaling_fallbacks
+    result["average_multiplier"] = (
+        statistics.fmean(rebalance_multipliers)
+        if rebalance_multipliers
+        else 1.0
+    )
+    result["minimum_multiplier"] = (
+        min(rebalance_multipliers) if rebalance_multipliers else 1.0
+    )
+    result["average_daily_deployment_pct"] = result["mean_deployment"] * 100.0
     return result
 
 

@@ -228,7 +228,7 @@ def test_sgov_before_first_stored_bar_earns_zero():
 
     assert _sgov_daily_return(sgov, date(2020, 5, 29)) == 0.0
     assert _sgov_daily_return(sgov, date(2020, 6, 1)) == 0.0
-    assert _sgov_daily_return(sgov, date(2020, 6, 2)) == 0.01
+    assert _sgov_daily_return(sgov, date(2020, 6, 2)) == pytest.approx(0.01)
 
 
 def test_target_volatility_changes_result_and_is_capped():

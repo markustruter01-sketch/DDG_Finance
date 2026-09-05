@@ -45,6 +45,7 @@ from analysis.bot2_momentum_pead_v3 import (  # noqa: E402
 )
 from analysis.bot2_momentum_pead_v4 import (  # noqa: E402
     CONTROL_ITERATIONS,
+    MomentumCache,
     RANDOM_SEED,
     SLIP,
     SLIPPAGE_BPS,

@@ -23,7 +23,7 @@ Leveraged Risk Override (v4.3)
 
 Persistence
 -----------
-  ratchet_stops table (PostgreSQL primary, SQLite fallback).
+ratchet_stops table in PostgreSQL.
 
 Schema
 ------
@@ -268,33 +268,6 @@ def _ensure_table_pg(conn) -> None:
     conn.commit()
 
 
-def _ensure_table_sqlite(db_path) -> None:
-    import sqlite3
-    with sqlite3.connect(db_path) as conn:
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS ratchet_stops (
-                symbol         TEXT PRIMARY KEY,
-                stop_price     REAL NOT NULL,
-                fill_price     REAL NOT NULL,
-                atr            REAL NOT NULL,
-                atr_multiplier REAL NOT NULL DEFAULT 2.0,
-                side           TEXT NOT NULL DEFAULT 'long',
-                last_updated   TEXT NOT NULL,
-                stop_order_id  TEXT
-            )
-        """)
-        for col_ddl in [
-            "ALTER TABLE ratchet_stops ADD COLUMN atr_multiplier REAL NOT NULL DEFAULT 2.0",
-            "ALTER TABLE ratchet_stops ADD COLUMN side TEXT NOT NULL DEFAULT 'long'",
-            "ALTER TABLE ratchet_stops ADD COLUMN stop_order_id TEXT",
-        ]:
-            try:
-                conn.execute(col_ddl)
-            except Exception:
-                pass  # Column already exists
-        conn.commit()
-
-
 def save_stop(
     symbol: str,
     stop_price: float,
@@ -306,178 +279,99 @@ def save_stop(
 ) -> None:
     today = date.today().isoformat()
     try:
-        from db.postgres import get_conn, is_pg_available, record_position_entry
-        if is_pg_available():
-            with get_conn() as conn:
-                _ensure_table_pg(conn)
-                with conn.cursor() as cur:
-                    cur.execute("""
-                        INSERT INTO ratchet_stops (symbol, stop_price, fill_price, atr, atr_multiplier, side, last_updated, stop_order_id)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                        ON CONFLICT (symbol) DO UPDATE SET
-                            stop_price     = EXCLUDED.stop_price,
-                            fill_price     = EXCLUDED.fill_price,
-                            atr            = EXCLUDED.atr,
-                            atr_multiplier = EXCLUDED.atr_multiplier,
-                            side           = EXCLUDED.side,
-                            last_updated   = EXCLUDED.last_updated,
-                            stop_order_id  = EXCLUDED.stop_order_id
-                    """, (symbol, stop_price, fill_price, atr, atr_multiplier, side, today, stop_order_id))
-                conn.commit()
-            # Record immutable entry timestamp (ON CONFLICT DO NOTHING keeps the FIRST open time)
-            record_position_entry(symbol, entry_price=fill_price)
-            logger.debug(f"Ratchet | Saved stop for {symbol}: ${stop_price:.4f} mult={atr_multiplier}× side={side} (pg)")
-            return
+        from db.postgres import get_conn, record_position_entry
+        with get_conn() as conn:
+            _ensure_table_pg(conn)
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO ratchet_stops (symbol, stop_price, fill_price, atr, atr_multiplier, side, last_updated, stop_order_id)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (symbol) DO UPDATE SET
+                        stop_price     = EXCLUDED.stop_price,
+                        fill_price     = EXCLUDED.fill_price,
+                        atr            = EXCLUDED.atr,
+                        atr_multiplier = EXCLUDED.atr_multiplier,
+                        side           = EXCLUDED.side,
+                        last_updated   = EXCLUDED.last_updated,
+                        stop_order_id  = EXCLUDED.stop_order_id
+                """, (symbol, stop_price, fill_price, atr, atr_multiplier, side, today, stop_order_id))
+            conn.commit()
+        # Record immutable entry timestamp (ON CONFLICT DO NOTHING keeps the FIRST open time)
+        record_position_entry(symbol, entry_price=fill_price)
+        logger.debug(f"Ratchet | Saved stop for {symbol}: ${stop_price:.4f} mult={atr_multiplier}× side={side} (pg)")
     except Exception as exc:
-        logger.warning(f"Ratchet | PG save failed for {symbol}: {exc} — falling back to SQLite")
-
-    _save_stop_sqlite(symbol, stop_price, fill_price, atr, atr_multiplier, side, today, stop_order_id)
-
-
-def _save_stop_sqlite(symbol, stop_price, fill_price, atr, atr_multiplier, side, today, stop_order_id=None) -> None:
-    import sqlite3
-    from pathlib import Path
-    db_path = Path(__file__).parent.parent / "trade_journal.db"
-    _ensure_table_sqlite(db_path)
-    with sqlite3.connect(db_path) as conn:
-        conn.execute("""
-            INSERT INTO ratchet_stops (symbol, stop_price, fill_price, atr, atr_multiplier, side, last_updated, stop_order_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(symbol) DO UPDATE SET
-                stop_price     = excluded.stop_price,
-                fill_price     = excluded.fill_price,
-                atr            = excluded.atr,
-                atr_multiplier = excluded.atr_multiplier,
-                side           = excluded.side,
-                last_updated   = excluded.last_updated,
-                stop_order_id  = excluded.stop_order_id
-        """, (symbol, stop_price, fill_price, atr, atr_multiplier, side, today, stop_order_id))
-        conn.commit()
-    logger.debug(f"Ratchet | Saved stop for {symbol}: ${stop_price:.4f} mult={atr_multiplier}× side={side} (sqlite)")
+        logger.critical(f"Ratchet | PostgreSQL save failed for {symbol}: {exc}")
+        raise
 
 
 def get_stop(symbol: str) -> Optional[dict]:
     """Return the persisted ratchet stop for *symbol*, or None if not tracked."""
     try:
-        from db.postgres import get_conn, is_pg_available
-        if is_pg_available():
-            with get_conn() as conn:
-                _ensure_table_pg(conn)
-                with conn.cursor() as cur:
-                    cur.execute(
-                        "SELECT symbol, stop_price, fill_price, atr, atr_multiplier, side, last_updated, stop_order_id "
-                        "FROM ratchet_stops WHERE symbol = %s",
-                        (symbol,),
-                    )
-                    row = cur.fetchone()
-            if row:
-                return {
-                    "symbol":         row[0],
-                    "stop_price":     row[1],
-                    "fill_price":     row[2],
-                    "atr":            row[3],
-                    "atr_multiplier": row[4],
-                    "side":           row[5] if row[5] else "long",
-                    "last_updated":   str(row[6]),
-                    "stop_order_id":  row[7],
-                }
-            return None
-    except Exception as exc:
-        logger.warning(f"Ratchet | PG get failed for {symbol}: {exc} — falling back to SQLite")
-
-    return _get_stop_sqlite(symbol)
-
-
-def _get_stop_sqlite(symbol: str) -> Optional[dict]:
-    import sqlite3
-    from pathlib import Path
-    db_path = Path(__file__).parent.parent / "trade_journal.db"
-    if not db_path.exists():
+        from db.postgres import get_conn
+        with get_conn() as conn:
+            _ensure_table_pg(conn)
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT symbol, stop_price, fill_price, atr, atr_multiplier, side, last_updated, stop_order_id "
+                    "FROM ratchet_stops WHERE symbol = %s",
+                    (symbol,),
+                )
+                row = cur.fetchone()
+        if row:
+            return {
+                "symbol":         row[0],
+                "stop_price":     row[1],
+                "fill_price":     row[2],
+                "atr":            row[3],
+                "atr_multiplier": row[4],
+                "side":           row[5] if row[5] else "long",
+                "last_updated":   str(row[6]),
+                "stop_order_id":  row[7],
+            }
         return None
-    _ensure_table_sqlite(db_path)
-    with sqlite3.connect(db_path) as conn:
-        conn.row_factory = sqlite3.Row
-        row = conn.execute(
-            "SELECT symbol, stop_price, fill_price, atr, atr_multiplier, side, last_updated, stop_order_id "
-            "FROM ratchet_stops WHERE symbol = ?",
-            (symbol,),
-        ).fetchone()
-    if row:
-        d = dict(row)
-        d.setdefault("side", "long")
-        d.setdefault("stop_order_id", None)
-        return d
-    return None
+    except Exception as exc:
+        logger.critical(f"Ratchet | PostgreSQL read failed for {symbol}: {exc}")
+        raise
 
 
 def load_all_stops() -> dict[str, dict]:
     result: dict[str, dict] = {}
     try:
-        from db.postgres import get_conn, is_pg_available
-        if is_pg_available():
-            with get_conn() as conn:
-                _ensure_table_pg(conn)
-                with conn.cursor() as cur:
-                    cur.execute(
-                        "SELECT symbol, stop_price, fill_price, atr, atr_multiplier, side, last_updated "
-                        "FROM ratchet_stops"
-                    )
-                    for row in cur.fetchall():
-                        result[row[0]] = {
-                            "symbol":         row[0],
-                            "stop_price":     row[1],
-                            "fill_price":     row[2],
-                            "atr":            row[3],
-                            "atr_multiplier": row[4],
-                            "side":           row[5] if row[5] else "long",
-                            "last_updated":   str(row[6]),
-                        }
-            return result
-    except Exception as exc:
-        logger.warning(f"Ratchet | PG load_all failed: {exc}")
-    try:
-        import sqlite3
-        from pathlib import Path
-        db_path = Path(__file__).parent.parent / "trade_journal.db"
-        if db_path.exists():
-            _ensure_table_sqlite(db_path)
-            with sqlite3.connect(db_path) as conn:
-                conn.row_factory = sqlite3.Row
-                for row in conn.execute(
+        from db.postgres import get_conn
+        with get_conn() as conn:
+            _ensure_table_pg(conn)
+            with conn.cursor() as cur:
+                cur.execute(
                     "SELECT symbol, stop_price, fill_price, atr, atr_multiplier, side, last_updated "
                     "FROM ratchet_stops"
-                ):
-                    d = dict(row)
-                    d.setdefault("side", "long")
-                    result[d["symbol"]] = d
-    except Exception:
-        pass
-    return result
+                )
+                for row in cur.fetchall():
+                    result[row[0]] = {
+                        "symbol":         row[0],
+                        "stop_price":     row[1],
+                        "fill_price":     row[2],
+                        "atr":            row[3],
+                        "atr_multiplier": row[4],
+                        "side":           row[5] if row[5] else "long",
+                        "last_updated":   str(row[6]),
+                    }
+        return result
+    except Exception as exc:
+        logger.critical(f"Ratchet | PostgreSQL load-all failed: {exc}")
+        raise
 
 
 def delete_stop(symbol: str) -> None:
     """Remove ratchet stop when a position is closed."""
     try:
-        from db.postgres import get_conn, is_pg_available
-        if is_pg_available():
-            with get_conn() as conn:
-                with conn.cursor() as cur:
-                    cur.execute("DELETE FROM ratchet_stops WHERE symbol = %s", (symbol,))
-                conn.commit()
-            return
+        from db.postgres import get_conn
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM ratchet_stops WHERE symbol = %s", (symbol,))
+            conn.commit()
     except Exception as exc:
-        logger.warning(f"Ratchet | PG delete failed for {symbol}: {exc}")
-
-    try:
-        import sqlite3
-        from pathlib import Path
-        db_path = Path(__file__).parent.parent / "trade_journal.db"
-        if db_path.exists():
-            with sqlite3.connect(db_path) as conn:
-                conn.execute("DELETE FROM ratchet_stops WHERE symbol = ?", (symbol,))
-                conn.commit()
-    except Exception as exc:
-        logger.warning(f"Ratchet | SQLite delete failed for {symbol}: {exc}")
+        logger.critical(f"Ratchet | PostgreSQL delete failed for {symbol}: {exc}")
+        raise
 
 
 # ── High-level helpers ─────────────────────────────────────────────────────

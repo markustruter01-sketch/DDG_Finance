@@ -117,15 +117,10 @@ def check_wash_sale(ticker: str, lookback_days: int = 30) -> dict:
     }
 
     try:
-        from db.postgres import get_conn, is_pg_available
-
-        if is_pg_available():
-            _check_pg(ticker, similar, cutoff, blocked_result)
-        else:
-            _check_sqlite(ticker, similar, cutoff, blocked_result)
+        _check_pg(ticker, similar, cutoff, blocked_result)
     except Exception as exc:
-        logger.warning(f"Compliance | Wash-sale check failed for {ticker}: {exc} — allowing trade")
-        return blocked_result  # fail-open: don't block on DB errors
+        logger.critical(f"Compliance | Wash-sale database check failed for {ticker}: {exc}")
+        raise
 
     if blocked_result["blocked"]:
         logger.warning(
@@ -171,41 +166,4 @@ def _check_pg(
         result["reason"] = (
             f"Wash-sale: {row[0]} closed at {row[2]:+.2f}% on {row[1]}; "
             f"buying {ticker} within 30 days is disallowed"
-        )
-
-
-def _check_sqlite(
-    ticker: str,
-    similar: frozenset[str],
-    cutoff: str,
-    result: dict,
-) -> None:
-    import sqlite3
-    from pathlib import Path
-    db_path = Path(__file__).parent.parent / "trade_journal.db"
-    if not db_path.exists():
-        return
-    placeholders = ", ".join(["?"] * len(similar))
-    query = f"""
-        SELECT ticker, date, pnl_percentage
-        FROM   trades
-        WHERE  status  = 'Closed_Loss'
-          AND  ticker  IN ({placeholders})
-          AND  date   >= ?
-        ORDER  BY date DESC
-        LIMIT  1
-    """
-    params = list(similar) + [cutoff]
-    with sqlite3.connect(db_path) as conn:
-        conn.row_factory = sqlite3.Row
-        row = conn.execute(query, params).fetchone()
-
-    if row:
-        result["blocked"]        = True
-        result["similar_ticker"] = row["ticker"]
-        result["loss_date"]      = row["date"]
-        result["pnl_pct"]        = row["pnl_percentage"]
-        result["reason"] = (
-            f"Wash-sale: {row['ticker']} closed at {row['pnl_percentage']:+.2f}% "
-            f"on {row['date']}; buying {ticker} within 30 days is disallowed"
         )

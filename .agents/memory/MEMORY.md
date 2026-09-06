@@ -45,6 +45,7 @@
 - [Bot 2 Alpaca reference coverage](bot2-alpaca-reference-coverage.md) — Alpaca metadata/history can be insufficient for historical universe parity; keep the gate fail-closed until a richer reference source is added.
 - [Rank audit streaming](rank-audit-streaming.md) — broad SIP audits must retain only per-symbol 252-session windows; full-panel Python materialization exceeds the development container’s memory.
 - [Bot 2 regime-filter experiment](bot2-regime-experiment.md) — prior-SPY-200-day-SMA filter stayed RISK_ON in Feb 2021 and failed to reduce 2021–2022 drawdown; keep Bot 2 paused.
+- [Bot 3 production data gap](bot3-production-data-gap.md) — the live inverse-vol planner needs Yahoo closes for all four assets; missing production history must block rebalance rather than use 25% placeholders.
 - [Strategy bench isolation](strategy-bench-isolation.md) — the bench is a static development-only research surface and must remain isolated from live trading and streaming navigation.
 - [Strategy Bench loading behavior](strategy-bench-loading.md) — canonical Helium runs can take minutes; render the research shell while the verified server run is pending.
 - [Research registry result shapes](research-registry-result-shapes.md) — pooled metrics may be direct or nested; ambiguous multi-strategy windows must remain NULL.

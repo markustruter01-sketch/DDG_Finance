@@ -317,7 +317,7 @@ def _cash_plan_inputs(
 
 
 def test_buys_within_available_funds_are_unchanged(monkeypatch):
-    account, positions, targets, prices = _cash_plan_inputs(cash=1_000.0)
+    account, positions, targets, prices = _cash_plan_inputs(cash=1_020.0)
     decisions = []
     monkeypatch.setattr(
         bot3,
@@ -334,7 +334,10 @@ def test_buys_within_available_funds_are_unchanged(monkeypatch):
 
 
 def test_buys_over_available_cash_scale_proportionally(monkeypatch):
-    account, positions, targets, prices = _cash_plan_inputs(cash=100.0)
+    account, positions, targets, prices = _cash_plan_inputs(
+        cash=100.0,
+        targets=_weights(0.0995, 0.199, 0.2985, 0.398),
+    )
     decisions = []
     monkeypatch.setattr(
         bot3,
@@ -344,10 +347,11 @@ def test_buys_over_available_cash_scale_proportionally(monkeypatch):
 
     plan = bot3._plan_orders(account, positions, targets, "cash-scale", prices)
 
-    assert math.isclose(sum(item["notional"] for item in plan), 100.0)
+    assert math.isclose(sum(item["notional"] for item in plan), 99.0)
+    assert sum(item["notional"] for item in plan) < 100.0
     assert all(
         math.isclose(item["notional"], expected)
-        for item, expected in zip(plan, [10.0, 20.0, 30.0, 40.0])
+        for item, expected in zip(plan, [9.9, 19.8, 29.7, 39.6])
     )
     scaling = [
         kwargs
@@ -359,8 +363,10 @@ def test_buys_over_available_cash_scale_proportionally(monkeypatch):
         "cash": 100.0,
         "sell_proceeds": 0.0,
         "available": 100.0,
-        "pre_scale_buy_total": 1_000.0,
-        "scale_factor": 0.1,
+        "spendable": 99.0,
+        "cash_buffer_pct": 0.01,
+        "pre_scale_buy_total": 995.0,
+        "scale_factor": 99.0 / 995.0,
     }
 
 
@@ -422,11 +428,11 @@ def test_scaled_zero_quantity_buy_is_dropped(monkeypatch):
 
 def test_buying_power_is_never_used_by_cash_guard(monkeypatch):
     account_low_bp, positions, targets, prices = _cash_plan_inputs(
-        cash=100.0,
+        cash=101.0101010101,
         buying_power=0.0,
     )
     account_high_bp, _, _, _ = _cash_plan_inputs(
-        cash=100.0,
+        cash=101.0101010101,
         buying_power=1_000_000.0,
     )
     monkeypatch.setattr(bot3, "_log_decision", lambda *args, **kwargs: None)

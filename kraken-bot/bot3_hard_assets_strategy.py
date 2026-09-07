@@ -53,6 +53,9 @@ CRYPTO = frozenset({"BTC/USD", "ETH/USD"})
 METALS = frozenset({"GLD", "SLV"})
 VAULT_SYMBOLS = frozenset({"BIL", "VOO"})
 DEFAULT_MAX_DEPLOYMENT = 1.0
+# Bot 3 submits market orders, so the fill price is unknown at planning time;
+# this buffer prevents a price move from funding itself on margin.
+CASH_BUFFER_PCT = 0.01
 TARGET_WEIGHT = 0.25
 VOL_LOOKBACK = 60
 WEIGHT_FLOOR = 0.10
@@ -965,10 +968,11 @@ def _plan_orders(
     if available < 0:
         raise RuntimeError(f"available funds are negative: {available:.2f}")
 
+    spendable = available * (1 - CASH_BUFFER_PCT)
     buy_items = [item for item in plan if item["side"] == "buy"]
     pre_scale_buy_total = sum(item["notional"] for item in buy_items)
-    if pre_scale_buy_total > available:
-        scale_factor = available / pre_scale_buy_total
+    if pre_scale_buy_total > spendable:
+        scale_factor = spendable / pre_scale_buy_total
         for item in buy_items:
             item["qty"] *= scale_factor
             item["notional"] = item["qty"] * item["price"]
@@ -986,6 +990,8 @@ def _plan_orders(
                 "cash": cash,
                 "sell_proceeds": sell_proceeds,
                 "available": available,
+                "spendable": spendable,
+                "cash_buffer_pct": CASH_BUFFER_PCT,
                 "pre_scale_buy_total": pre_scale_buy_total,
                 "scale_factor": scale_factor,
             },

@@ -607,7 +607,6 @@ def collect_live_snapshot() -> dict[str, Any]:
     accounts = []
     mismatches = []
     account_findings = []
-    fleet_equity = 0.0
     for bot_id in ACTIVE_BOTS:
         try:
             client = _client_for(bot_id)
@@ -643,7 +642,16 @@ def collect_live_snapshot() -> dict[str, Any]:
         mismatches.extend(_authoritative_quantity_mismatches(bot_id, positions))
         mismatches.extend(_order_mismatches(bot_id, orders))
         mismatches.extend(_stale_portfolio(bot_id))
-        fleet_equity += equity
+    fleet_equity: float | None
+    try:
+        from core.fleet_equity import get_fleet_equity
+
+        fleet_equity, _ = get_fleet_equity()
+    except Exception as exc:
+        logger.critical(f"Reconciliation | fleet equity read failed: {exc}")
+        mismatches.append(_reconciliation_check_failed("fleet_equity_read", exc))
+        fleet_equity = None
+
     mismatches.extend(
         _ledger_orphan_findings(
             {
@@ -653,14 +661,15 @@ def collect_live_snapshot() -> dict[str, Any]:
         )
     )
     fleet_hwm = fleet_equity
-    try:
-        from db.postgres import get_conn
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT COALESCE(MAX(total), %s) FROM (SELECT SUM(equity_usd) AS total FROM fleet_equity_snapshots GROUP BY snapshot_ts) s", (fleet_equity,))
-                fleet_hwm = float(cur.fetchone()[0] or fleet_equity)
-    except Exception as exc:
-        mismatches.append(_reconciliation_check_failed("fleet_hwm_read", exc))
+    if fleet_equity is not None:
+        try:
+            from db.postgres import get_conn
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT COALESCE(MAX(total), %s) FROM (SELECT SUM(equity_usd) AS total FROM fleet_equity_snapshots GROUP BY snapshot_ts) s", (fleet_equity,))
+                    fleet_hwm = float(cur.fetchone()[0] or fleet_equity)
+        except Exception as exc:
+            mismatches.append(_reconciliation_check_failed("fleet_hwm_read", exc))
     try:
         from core.bot_liveness import evaluate_liveness
         liveness_findings = evaluate_liveness()

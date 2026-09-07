@@ -93,6 +93,44 @@ def test_fleet_drawdown_trigger():
     assert ks.evaluate_snapshot(snapshot, now=100)[0]["trigger"] == "fleet_drawdown"
 
 
+def test_unknown_fleet_equity_triggers_fail_closed_without_drawdown():
+    snapshot = {"accounts": [], "fleet_equity": None, "fleet_hwm": 100}
+
+    triggers = ks.evaluate_snapshot(snapshot, now=100)
+    trigger_names = {trigger["trigger"] for trigger in triggers}
+
+    assert "fleet_equity_unknown" in trigger_names
+    assert "fleet_drawdown" not in trigger_names
+
+
+def test_zero_fleet_equity_triggers_fail_closed():
+    snapshot = {"accounts": [], "fleet_equity": 0, "fleet_hwm": 100}
+
+    triggers = ks.evaluate_snapshot(snapshot, now=100)
+
+    assert "fleet_equity_unknown" in {trigger["trigger"] for trigger in triggers}
+
+
+def test_valid_fleet_equity_below_high_water_mark_triggers_drawdown():
+    snapshot = {"accounts": [], "fleet_equity": 84, "fleet_hwm": 100}
+
+    triggers = ks.evaluate_snapshot(snapshot, now=100)
+    trigger_names = {trigger["trigger"] for trigger in triggers}
+
+    assert "fleet_drawdown" in trigger_names
+    assert "fleet_equity_unknown" not in trigger_names
+
+
+def test_fleet_equity_at_high_water_mark_has_neither_trigger():
+    snapshot = {"accounts": [], "fleet_equity": 100, "fleet_hwm": 100}
+
+    triggers = ks.evaluate_snapshot(snapshot, now=100)
+    trigger_names = {trigger["trigger"] for trigger in triggers}
+
+    assert "fleet_equity_unknown" not in trigger_names
+    assert "fleet_drawdown" not in trigger_names
+
+
 def test_trip_pauses_bots_and_only_cancels_non_protective_orders(monkeypatch):
     paused = []
     cancelled = []

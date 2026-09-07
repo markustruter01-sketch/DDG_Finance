@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import hmac
+import math
 import os
 import time
 from datetime import datetime, timezone
@@ -138,14 +139,30 @@ def evaluate_snapshot(snapshot: dict[str, Any], now: float | None = None) -> lis
     for account in snapshot.get("accounts", []):
         triggers.extend(evaluate_account(account, now=now))
 
-    current = float(snapshot.get("fleet_equity") or 0)
-    hwm = float(snapshot.get("fleet_hwm") or current)
-    threshold = float(getattr(settings, "kill_switch_drawdown_pct", 0.15))
-    if hwm > 0 and (hwm - current) / hwm > threshold:
+    raw_fleet_equity = snapshot.get("fleet_equity")
+    raw_fleet_hwm = snapshot.get("fleet_hwm")
+    try:
+        current = float(raw_fleet_equity) if raw_fleet_equity is not None else None
+    except (TypeError, ValueError):
+        current = None
+    if current is None:
         triggers.append({
-            "trigger": "fleet_drawdown",
-            "detail": f"fleet={current:.2f} hwm={hwm:.2f} threshold={threshold:.4f}",
+            "trigger": "fleet_equity_unknown",
+            "detail": f"fleet_equity is not a number: {raw_fleet_equity!r}",
         })
+    elif not math.isfinite(current) or current <= 0:
+        triggers.append({
+            "trigger": "fleet_equity_unknown",
+            "detail": f"fleet_equity must be finite and greater than zero: {raw_fleet_equity!r}",
+        })
+    else:
+        hwm = float(raw_fleet_hwm or current)
+        threshold = float(getattr(settings, "kill_switch_drawdown_pct", 0.15))
+        if hwm > 0 and (hwm - current) / hwm > threshold:
+            triggers.append({
+                "trigger": "fleet_drawdown",
+                "detail": f"fleet={current:.2f} hwm={hwm:.2f} threshold={threshold:.4f}",
+            })
 
     for mismatch in snapshot.get("mismatches", []):
         key = json.dumps(mismatch, sort_keys=True, default=str)

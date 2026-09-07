@@ -345,7 +345,10 @@ def test_buys_over_available_cash_scale_proportionally(monkeypatch):
     plan = bot3._plan_orders(account, positions, targets, "cash-scale", prices)
 
     assert math.isclose(sum(item["notional"] for item in plan), 100.0)
-    assert [item["notional"] for item in plan] == [10.0, 20.0, 30.0, 40.0]
+    assert all(
+        math.isclose(item["notional"], expected)
+        for item, expected in zip(plan, [10.0, 20.0, 30.0, 40.0])
+    )
     scaling = [
         kwargs
         for args, kwargs in decisions

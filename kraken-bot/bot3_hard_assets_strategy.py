@@ -75,6 +75,15 @@ PRICE_TABLES = {
     "GLD": ("bot3_inflation_hedge_prices", "GLD"),
     "SLV": ("bot3_inflation_hedge_prices", "SLV"),
 }
+# Crypto trades daily, so 3 days covers an outage; metals trade NYSE sessions,
+# so 6 days covers a long weekend plus a holiday. These are operational
+# freshness limits chosen for safety, not strategy parameters from the research ledger.
+MAX_PRICE_AGE_DAYS = {
+    "BTC/USD": 3,
+    "ETH/USD": 3,
+    "GLD": 6,
+    "SLV": 6,
+}
 
 CREATE_BOT3_TABLES_SQL = """
 CREATE TABLE IF NOT EXISTS bot3_positions (
@@ -198,15 +207,34 @@ def _load_recent_closes() -> dict[str, list[float]]:
             for symbol, (table, db_symbol) in PRICE_TABLES.items():
                 cur.execute(
                     f"""
-                    SELECT close FROM {table}
+                    SELECT close, MAX(date) OVER () AS newest_date
+                    FROM {table}
                     WHERE symbol=%s AND source='yahoo'
                     ORDER BY date DESC LIMIT %s
                     """,
                     (db_symbol, VOL_LOOKBACK + 1),
                 )
-                values = [float(row[0]) for row in reversed(cur.fetchall())]
-                if not values:
-                    raise RuntimeError(f"Bot 3 missing historical closes for {symbol}")
+                rows = cur.fetchall()
+                count = len(rows)
+                if count < VOL_LOOKBACK + 1:
+                    raise RuntimeError(
+                        f"Bot 3 insufficient historical closes for {symbol}: "
+                        f"got {count}, need {VOL_LOOKBACK + 1}"
+                    )
+                values = [float(row[0]) for row in reversed(rows)]
+                newest_date = rows[0][1]
+                if isinstance(newest_date, datetime):
+                    newest_date = newest_date.date()
+                elif not isinstance(newest_date, date):
+                    newest_date = date.fromisoformat(str(newest_date))
+                age_days = (datetime.now(timezone.utc).date() - newest_date).days
+                threshold = MAX_PRICE_AGE_DAYS[symbol]
+                if age_days > threshold:
+                    raise RuntimeError(
+                        f"Bot 3 stale historical closes for {symbol}: "
+                        f"newest date {newest_date.isoformat()}, age {age_days} days, "
+                        f"threshold {threshold} days"
+                    )
                 closes[symbol] = values
     return closes
 
@@ -219,9 +247,9 @@ def inverse_vol_targets(
     for symbol in ASSETS:
         values = closes.get(symbol, [])
         if len(values) < VOL_LOOKBACK + 1:
-            return (
-                {symbol_name: TARGET_WEIGHT for symbol_name in ASSETS},
-                {symbol_name: 0.0 for symbol_name in ASSETS},
+            raise RuntimeError(
+                f"Bot 3 insufficient historical closes for {symbol}: "
+                f"got {len(values)}, need {VOL_LOOKBACK + 1}"
             )
         returns = [values[i] / values[i - 1] - 1 for i in range(1, len(values))]
         vol[symbol] = stdev(returns) * math.sqrt(252)

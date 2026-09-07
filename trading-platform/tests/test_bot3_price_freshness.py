@@ -27,6 +27,12 @@ class _FakeCursor:
         self.rows_by_db_symbol = rows_by_db_symbol
         self.rows: list[tuple[float, date]] = []
 
+    def __enter__(self) -> "_FakeCursor":
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        return None
+
     def execute(self, query: str, params: tuple[str, int]) -> None:
         self.rows = self.rows_by_db_symbol[params[0]]
 

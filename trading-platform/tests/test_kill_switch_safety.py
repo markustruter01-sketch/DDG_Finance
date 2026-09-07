@@ -24,6 +24,7 @@ def account(**overrides):
         "long_market_value": 50.0,
         "positions": [],
         "orders": [],
+        "vault_symbols": set(),
     }
     value.update(overrides)
     return value

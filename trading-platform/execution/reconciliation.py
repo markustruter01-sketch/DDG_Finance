@@ -8,7 +8,13 @@ from typing import Any
 
 from loguru import logger
 
-from core.kill_switch import ACCOUNT_ENV, ACTIVE_BOTS, DUST_QTY, MAX_DEPLOYMENT
+from core.kill_switch import (
+    ACCOUNT_ENV,
+    ACTIVE_BOTS,
+    DUST_QTY,
+    MAX_DEPLOYMENT,
+    _vault_symbols,
+)
 from config.settings import settings
 from core.bot_registry import resolve_bot_id
 from core.symbols import canonical_symbol
@@ -609,6 +615,17 @@ def collect_live_snapshot() -> dict[str, Any]:
     account_findings = []
     for bot_id in ACTIVE_BOTS:
         try:
+            vault_symbols = _vault_symbols(bot_id)
+        except Exception as exc:
+            logger.critical(
+                "Reconciliation | vault holdings unavailable for "
+                f"{bot_id}; refusing to return a safety snapshot: {exc}"
+            )
+            raise RuntimeError(
+                f"Reconciliation | refusing to return a safety snapshot "
+                f"without vault holdings for {bot_id}"
+            ) from exc
+        try:
             client = _client_for(bot_id)
         except Exception as exc:
             logger.critical(f"Reconciliation | account unavailable for {bot_id}: {exc}")
@@ -636,6 +653,7 @@ def collect_live_snapshot() -> dict[str, Any]:
             "bot_id": bot_id, "equity": equity, "cash": float(acct.cash),
             "long_market_value": lmv, "max_deployment": MAX_DEPLOYMENT[bot_id],
             "positions": positions, "orders": orders, "ledger_positions": ledger,
+            "vault_symbols": vault_symbols,
             "_client": client,
         })
         mismatches.extend(_mismatches(bot_id, positions, ledger))

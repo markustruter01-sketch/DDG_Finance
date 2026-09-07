@@ -109,7 +109,10 @@ def evaluate_account(account: dict[str, Any], now: float | None = None) -> list[
             "detail": f"deployed={deployed_pct:.4f} max={max_deployment:.4f} tolerance=0.05",
         })
 
-    vault_symbols = _vault_symbols(bot_id)
+    vault_symbols = {
+        canonical_symbol(symbol)
+        for symbol in account["vault_symbols"]
+    }
     for position in account.get("positions", []):
         qty = abs(float(position.get("qty") or 0))
         if qty < DUST_QTY:

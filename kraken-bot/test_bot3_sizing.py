@@ -40,7 +40,7 @@ def test_plan_subtracts_vault_market_value_from_investable_base(monkeypatch) -> 
     monkeypatch.setattr(bot3, "_log_decision", lambda *args, **kwargs: None)
 
     plan = bot3._plan_orders(
-        {"equity": 100_000.0},
+        {"equity": 100_000.0, "cash": 100_000.0},
         [{"symbol": "VOO", "market_value": 5_000.0}],
         _targets(),
         "test-cycle",
@@ -56,7 +56,7 @@ def test_plan_scales_target_base_to_configured_deployment_ceiling(monkeypatch) -
     monkeypatch.setattr(bot3, "_log_decision", lambda *args, **kwargs: None)
 
     plan = bot3._plan_orders(
-        {"equity": 100_000.0},
+        {"equity": 100_000.0, "cash": 100_000.0},
         [{"symbol": "BIL", "market_value": 5_000.0}],
         _targets(),
         "test-cycle",
@@ -107,7 +107,7 @@ def test_plan_sells_before_buys(monkeypatch) -> None:
     monkeypatch.setattr(bot3, "_log_decision", lambda *args, **kwargs: None)
 
     plan = bot3._plan_orders(
-        {"equity": 100_000.0},
+        {"equity": 100_000.0, "cash": 100_000.0},
         [{
             "symbol": "BTC/USD",
             "market_value": 40_000.0,

@@ -57,6 +57,82 @@ from routes.reports import router as reports_router
 from routes.strategy_bench import router as strategy_bench_router
 
 
+def _record_yahoo_refresh_failure(error_type: str, message: str, exc: Exception) -> None:
+    try:
+        from core.degradation_tracker import record_degradation
+
+        record_degradation(
+            component="data_pipeline",
+            severity="error",
+            error_type=error_type,
+            message=message[:480],
+            detail=repr(exc),
+        )
+    except Exception as _degradation_error:
+        logger.error(
+            f"Yahoo refresh | Failed to record degradation for {error_type}: "
+            f"{_degradation_error}"
+        )
+
+
+def _refresh_crypto_yahoo_history() -> None:
+    try:
+        from analysis import crypto_data_pipeline
+
+        counts = crypto_data_pipeline.ingest_yahoo_history()
+        for symbol, count in counts.items():
+            logger.info(f"Yahoo refresh | crypto | {symbol}: {count} bars stored")
+    except Exception as _exc:
+        logger.error(f"Yahoo refresh | crypto history failed: {_exc}")
+        _record_yahoo_refresh_failure(
+            "crypto_yahoo_history_refresh_failed",
+            f"Crypto Yahoo history refresh failed: {_exc!s}",
+            _exc,
+        )
+
+
+def _refresh_bot3_metals_history() -> None:
+    try:
+        from analysis import bot3_data_pipeline
+
+        counts = bot3_data_pipeline.ingest_metals()
+        for symbol, count in counts.items():
+            logger.info(f"Yahoo refresh | Bot 3 metals | {symbol}: {count} bars stored")
+    except Exception as _exc:
+        logger.error(f"Yahoo refresh | Bot 3 metals history failed: {_exc}")
+        _record_yahoo_refresh_failure(
+            "bot3_metals_history_refresh_failed",
+            f"Bot 3 metals Yahoo history refresh failed: {_exc!s}",
+            _exc,
+        )
+
+
+def _register_yahoo_refresh_jobs(scheduler) -> None:
+    """Run both Yahoo refreshes once, then keep them current every six hours."""
+    _refresh_crypto_yahoo_history()
+    _refresh_bot3_metals_history()
+
+    from apscheduler.triggers.interval import IntervalTrigger
+
+    scheduler.add_job(
+        func=_refresh_crypto_yahoo_history,
+        trigger=IntervalTrigger(hours=6),
+        id="crypto_yahoo_history_refresh",
+        name="Crypto Yahoo History Refresh",
+        replace_existing=True,
+        misfire_grace_time=300,
+    )
+    scheduler.add_job(
+        func=_refresh_bot3_metals_history,
+        trigger=IntervalTrigger(hours=6),
+        id="bot3_metals_history_refresh",
+        name="Bot 3 Metals Yahoo History Refresh",
+        replace_existing=True,
+        misfire_grace_time=300,
+    )
+    logger.info("Yahoo refresh | crypto and Bot 3 metals jobs registered (6-hour interval)")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.add(
@@ -150,6 +226,8 @@ async def lifespan(app: FastAPI):
         misfire_grace_time=600,
     )
     logger.info("Hourly equity snapshot job registered (active bots, every 1 hour)")
+
+    _register_yahoo_refresh_jobs(scheduler)
 
     from apscheduler.triggers.cron import CronTrigger as _CronTrigger
     logger.info("Apex Predator options engine removed — Bot #5 now runs as crypto momentum scalper via Kraken pool")

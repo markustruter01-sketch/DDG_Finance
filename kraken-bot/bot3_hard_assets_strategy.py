@@ -57,6 +57,8 @@ TARGET_WEIGHT = 0.25
 VOL_LOOKBACK = 60
 WEIGHT_FLOOR = 0.10
 WEIGHT_CAP = 0.40
+# Source: research_ledger experiment 20.
+CRYPTO_FLEET_CAP_PCT = 0.05
 DRIFT_BAND = 0.05
 CRYPTO_STOP_PCT = 0.25
 METAL_STOP_PCT = 0.10
@@ -248,6 +250,111 @@ def inverse_vol_targets(
     for symbol in free:
         fixed[symbol] = remaining * weights[symbol] / free_total
     return fixed, vol
+
+
+def apply_crypto_fleet_cap(
+    target_weights: dict[str, float],
+    target_base: float,
+    fleet_equity: float,
+) -> dict[str, float]:
+    """Cap combined crypto target dollars and reallocate the difference."""
+    try:
+        target_base = float(target_base)
+        fleet_equity = float(fleet_equity)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("target_base and fleet_equity must be numbers") from exc
+    if (
+        not math.isfinite(target_base)
+        or target_base <= 0
+        or not math.isfinite(fleet_equity)
+        or fleet_equity <= 0
+    ):
+        raise ValueError("target_base and fleet_equity must be finite and positive")
+
+    adjusted = {symbol: float(target_weights[symbol]) for symbol in ASSETS}
+    if not math.isclose(sum(adjusted.values()), 1.0, rel_tol=0.0, abs_tol=1e-12):
+        raise ValueError("target weights must sum to 1.0")
+
+    crypto_weight = sum(adjusted[symbol] for symbol in CRYPTO)
+    metal_weight = sum(adjusted[symbol] for symbol in METALS)
+    crypto_dollars = crypto_weight * target_base
+    crypto_ceiling = CRYPTO_FLEET_CAP_PCT * fleet_equity
+    if crypto_dollars <= crypto_ceiling:
+        return adjusted
+
+    if metal_weight <= 0:
+        raise ValueError("metal target weights must have a positive total")
+
+    capped_crypto_weight = crypto_ceiling / target_base
+    crypto_scale = capped_crypto_weight / crypto_weight
+    freed_weight = crypto_weight - capped_crypto_weight
+    for symbol in CRYPTO:
+        adjusted[symbol] *= crypto_scale
+    # The fleet cap deliberately overrides WEIGHT_FLOOR for crypto because it
+    # is the stricter constraint.
+    for symbol in METALS:
+        adjusted[symbol] += freed_weight * adjusted[symbol] / (
+            metal_weight + 0.0
+        )
+    adjusted["SLV"] = 1.0 - sum(adjusted[symbol] for symbol in ("BTC/USD", "ETH/USD", "GLD"))
+    if not math.isclose(sum(adjusted.values()), 1.0, rel_tol=0.0, abs_tol=1e-12):
+        raise RuntimeError("capped target weights do not sum to 1.0")
+    return adjusted
+
+
+def _apply_live_crypto_cap(
+    cycle_id: str,
+    target_weights: dict[str, float],
+    target_base: float,
+) -> tuple[dict[str, float], float, dict[str, float], float, float]:
+    from core.fleet_equity import get_fleet_equity
+
+    try:
+        fleet_equity, fleet_breakdown = get_fleet_equity()
+    except Exception as exc:
+        logger.critical(f"Bot 3 | crypto fleet cap unavailable: {exc}")
+        _log_decision(
+            cycle_id,
+            "CRYPTO_CAP_UNAVAILABLE",
+            reason=str(exc),
+            outcome="FAILED",
+            context={"error": str(exc)},
+        )
+        raise
+
+    pre_cap_crypto_dollars = sum(
+        target_weights[symbol] for symbol in CRYPTO
+    ) * target_base
+    crypto_ceiling = CRYPTO_FLEET_CAP_PCT * fleet_equity
+    adjusted_weights = apply_crypto_fleet_cap(
+        target_weights,
+        target_base,
+        fleet_equity,
+    )
+    _log_decision(
+        cycle_id,
+        "CRYPTO_CAP_EVALUATED",
+        reason="research_ledger experiment 20 fleet crypto cap",
+        outcome=(
+            "CAPPED"
+            if pre_cap_crypto_dollars > crypto_ceiling
+            else "UNCHANGED"
+        ),
+        context={
+            "fleet_equity": fleet_equity,
+            "fleet_equity_by_bot": fleet_breakdown,
+            "crypto_ceiling_usd": crypto_ceiling,
+            "pre_cap_crypto_dollars": pre_cap_crypto_dollars,
+            "post_cap_weights": adjusted_weights,
+        },
+    )
+    return (
+        adjusted_weights,
+        fleet_equity,
+        fleet_breakdown,
+        crypto_ceiling,
+        pre_cap_crypto_dollars,
+    )
 
 
 class AlpacaBot3:
@@ -894,6 +1001,16 @@ def run_bot3_cycle(
         return {"status": "deferred", "orders": 0, "reason": "US_equity_market_closed"}
     closes = _load_recent_closes()
     targets, volatility = inverse_vol_targets(closes)
+    _, _, target_base = _allocation_bases(
+        account,
+        raw_positions,
+        max_deployment,
+    )
+    targets, _, _, _, _ = _apply_live_crypto_cap(
+        cycle_id,
+        targets,
+        target_base,
+    )
     plan = _plan_orders(
         account,
         raw_positions,

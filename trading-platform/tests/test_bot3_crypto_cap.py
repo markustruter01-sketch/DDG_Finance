@@ -35,6 +35,39 @@ def _weights(
     }
 
 
+def _position(symbol: str, market_value: float, price: float = 100.0) -> dict:
+    return {
+        "symbol": symbol,
+        "market_value": market_value,
+        "current_price": price,
+        "qty": market_value / price,
+        "direction": "long",
+    }
+
+
+def _planner_inputs(crypto_over_ceiling: bool):
+    if crypto_over_ceiling:
+        positions = [
+            _position("BTC/USD", 6_000.0),
+            _position("ETH/USD", 5_000.0),
+            _position("GLD", 46_000.0),
+            _position("SLV", 43_000.0),
+        ]
+    else:
+        positions = [
+            _position("BTC/USD", 2_500.0),
+            _position("ETH/USD", 2_500.0),
+            _position("GLD", 47_500.0),
+            _position("SLV", 47_500.0),
+        ]
+    return (
+        {"equity": 100_000.0, "cash": 100_000.0, "buying_power": 100_000.0},
+        positions,
+        _weights(0.03, 0.02, 0.475, 0.475),
+        {"BTC/USD": 100.0, "ETH/USD": 100.0, "GLD": 100.0, "SLV": 100.0},
+    )
+
+
 def test_crypto_under_ceiling_keeps_weights_unchanged():
     weights = _weights(0.10, 0.10, 0.40, 0.40)
 
@@ -127,3 +160,139 @@ def test_live_fleet_equity_failure_raises_before_order_planning(monkeypatch):
 
     assert planned == []
     assert decision_calls[0][0] == ("DRYRUN", "CRYPTO_CAP_UNAVAILABLE")
+
+
+def test_crypto_over_ceiling_inside_band_is_trimmed_to_ceiling(monkeypatch):
+    account, positions, targets, prices = _planner_inputs(crypto_over_ceiling=True)
+    decisions = []
+    monkeypatch.setattr(
+        bot3,
+        "_log_decision",
+        lambda *args, **kwargs: decisions.append((args, kwargs)),
+    )
+
+    plan = bot3._plan_orders(
+        account,
+        positions,
+        targets,
+        "crypto-over-ceiling",
+        prices,
+        crypto_ceiling_usd=5_000.0,
+    )
+
+    crypto_sells = [item for item in plan if item["symbol"] in bot3.CRYPTO]
+    assert {item["symbol"] for item in crypto_sells} == {"BTC/USD", "ETH/USD"}
+    post_plan_crypto_value = 11_000.0 - sum(
+        item["notional"] for item in crypto_sells
+    )
+    assert post_plan_crypto_value <= 5_000.0
+
+    trim_decisions = [
+        (args, kwargs)
+        for args, kwargs in decisions
+        if args[1] == "CRYPTO_OVER_CEILING_TRIM"
+    ]
+    assert {kwargs["symbol"] for _, kwargs in trim_decisions} == {"BTC/USD", "ETH/USD"}
+    assert all(
+        kwargs["context"]["crypto_ceiling_usd"] == 5_000.0
+        and kwargs["context"]["pre_trim_combined_crypto_value"] == 11_000.0
+        for _, kwargs in trim_decisions
+    )
+
+
+def test_crypto_below_ceiling_inside_band_still_holds(monkeypatch):
+    account, positions, targets, prices = _planner_inputs(crypto_over_ceiling=False)
+    decisions = []
+    monkeypatch.setattr(
+        bot3,
+        "_log_decision",
+        lambda *args, **kwargs: decisions.append((args, kwargs)),
+    )
+
+    plan = bot3._plan_orders(
+        account,
+        positions,
+        targets,
+        "crypto-under-ceiling",
+        prices,
+        crypto_ceiling_usd=5_000.0,
+    )
+
+    assert not [item for item in plan if item["symbol"] in bot3.CRYPTO]
+    assert {
+        kwargs["symbol"]: args[1]
+        for args, kwargs in decisions
+        if kwargs["symbol"] in bot3.CRYPTO
+    } == {
+        "BTC/USD": "HOLD_WITHIN_DRIFT_BAND",
+        "ETH/USD": "HOLD_WITHIN_DRIFT_BAND",
+    }
+
+
+def test_metals_still_hold_when_crypto_is_over_ceiling(monkeypatch):
+    account, positions, targets, prices = _planner_inputs(crypto_over_ceiling=True)
+    decisions = []
+    monkeypatch.setattr(
+        bot3,
+        "_log_decision",
+        lambda *args, **kwargs: decisions.append((args, kwargs)),
+    )
+
+    bot3._plan_orders(
+        account,
+        positions,
+        targets,
+        "metals-still-hold",
+        prices,
+        crypto_ceiling_usd=5_000.0,
+    )
+
+    assert {
+        kwargs["symbol"]: args[1]
+        for args, kwargs in decisions
+        if kwargs["symbol"] in bot3.METALS
+    } == {
+        "GLD": "HOLD_WITHIN_DRIFT_BAND",
+        "SLV": "HOLD_WITHIN_DRIFT_BAND",
+    }
+
+
+def test_none_ceiling_preserves_existing_plan(monkeypatch):
+    account, positions, targets, prices = _planner_inputs(crypto_over_ceiling=True)
+    decisions_without_ceiling = []
+    monkeypatch.setattr(
+        bot3,
+        "_log_decision",
+        lambda *args, **kwargs: decisions_without_ceiling.append((args, kwargs)),
+    )
+    plan_without_ceiling = bot3._plan_orders(
+        account,
+        positions,
+        targets,
+        "no-ceiling-default",
+        prices,
+    )
+
+    decisions_with_none = []
+    monkeypatch.setattr(
+        bot3,
+        "_log_decision",
+        lambda *args, **kwargs: decisions_with_none.append((args, kwargs)),
+    )
+    plan_with_none = bot3._plan_orders(
+        account,
+        positions,
+        targets,
+        "no-ceiling-explicit",
+        prices,
+        crypto_ceiling_usd=None,
+    )
+
+    assert plan_with_none == plan_without_ceiling
+    assert [
+        (args[1], kwargs["symbol"], kwargs["context"])
+        for args, kwargs in decisions_with_none
+    ] == [
+        (args[1], kwargs["symbol"], kwargs["context"])
+        for args, kwargs in decisions_without_ceiling
+    ]

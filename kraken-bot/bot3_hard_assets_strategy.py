@@ -863,6 +863,8 @@ def _plan_orders(
     cycle_id: str,
     current_prices: dict[str, float],
     max_deployment: float = DEFAULT_MAX_DEPLOYMENT,
+    *,
+    crypto_ceiling_usd: float | None = None,
 ) -> list[dict[str, Any]]:
     equity, investable_base, target_base = _allocation_bases(
         account, positions, max_deployment
@@ -871,6 +873,11 @@ def _plan_orders(
         _canonical_symbol(position["symbol"]): position for position in positions
         if _canonical_symbol(position.get("symbol")) in ASSETS
     }
+    current_crypto_market_value = sum(
+        _position_market_value(position)
+        for position in positions
+        if _canonical_symbol(position.get("symbol")) in CRYPTO
+    )
     plan = []
     for symbol in ASSETS:
         position = position_by_symbol.get(symbol)
@@ -879,7 +886,16 @@ def _plan_orders(
         target_weight = float(targets[symbol])
         target_value = target_base * target_weight
         delta = target_value - current_value
-        if abs(current_weight - target_weight) <= DRIFT_BAND and position:
+        crypto_over_ceiling = (
+            symbol in CRYPTO
+            and crypto_ceiling_usd is not None
+            and current_crypto_market_value > crypto_ceiling_usd
+        )
+        if (
+            abs(current_weight - target_weight) <= DRIFT_BAND
+            and position
+            and not crypto_over_ceiling
+        ):
             decision = "HOLD_WITHIN_DRIFT_BAND"
         elif delta > 0:
             price = position["current_price"] if position else current_prices[symbol]
@@ -895,7 +911,11 @@ def _plan_orders(
         else:
             price = position["current_price"] if position else current_prices[symbol]
             qty = min(position["qty"], abs(delta) / price) if position and price > 0 else 0.0
-            decision = "SELL_TO_TARGET"
+            decision = (
+                "CRYPTO_OVER_CEILING_TRIM"
+                if crypto_over_ceiling
+                else "SELL_TO_TARGET"
+            )
             if qty > 0:
                 plan.append({
                     "symbol": symbol,
@@ -904,18 +924,31 @@ def _plan_orders(
                     "price": price,
                     "notional": qty * price,
                 })
+        decision_context = {
+            "equity": equity,
+            "investable_base": investable_base,
+            "target_base": target_base,
+            "max_deployment": max_deployment,
+        }
+        if crypto_over_ceiling:
+            decision_context.update({
+                "crypto_ceiling_usd": crypto_ceiling_usd,
+                "pre_trim_combined_crypto_value": current_crypto_market_value,
+            })
         _log_decision(
-            cycle_id, decision, symbol=symbol, current_weight=current_weight,
+            cycle_id,
+            decision,
+            symbol=symbol,
+            current_weight=current_weight,
             target_weight=target_weight,
             current_price=position["current_price"] if position else None,
             planned_qty=plan[-1]["qty"] if plan and plan[-1]["symbol"] == symbol else None,
-            reason="quarterly target comparison",
-            context={
-                "equity": equity,
-                "investable_base": investable_base,
-                "target_base": target_base,
-                "max_deployment": max_deployment,
-            },
+            reason=(
+                "crypto market value above fleet ceiling"
+                if crypto_over_ceiling
+                else "quarterly target comparison"
+            ),
+            context=decision_context,
         )
     # Always liquidate reductions before submitting increases. If a sell has
     # not settled yet, the fresh buy guard below will refuse the buy safely.
@@ -1004,7 +1037,7 @@ def run_bot3_cycle(
         raw_positions,
         max_deployment,
     )
-    targets, _, _, _, _ = _apply_live_crypto_cap(
+    targets, _, _, crypto_ceiling_usd, _ = _apply_live_crypto_cap(
         cycle_id,
         targets,
         target_base,
@@ -1016,6 +1049,7 @@ def run_bot3_cycle(
         cycle_id,
         client.latest_prices(),
         max_deployment=max_deployment,
+        crypto_ceiling_usd=crypto_ceiling_usd,
     )
     orders = 0
     for item in plan:

@@ -296,3 +296,152 @@ def test_none_ceiling_preserves_existing_plan(monkeypatch):
         (args[1], kwargs["symbol"], kwargs["context"])
         for args, kwargs in decisions_without_ceiling
     ]
+
+
+def _cash_plan_inputs(
+    cash: float,
+    buying_power: float = 0.0,
+    targets: dict[str, float] | None = None,
+    positions: list[dict] | None = None,
+):
+    return (
+        {
+            "equity": 1_000.0,
+            "cash": cash,
+            "buying_power": buying_power,
+        },
+        positions or [],
+        targets or _weights(0.10, 0.20, 0.30, 0.40),
+        {"BTC/USD": 100.0, "ETH/USD": 100.0, "GLD": 100.0, "SLV": 100.0},
+    )
+
+
+def test_buys_within_available_funds_are_unchanged(monkeypatch):
+    account, positions, targets, prices = _cash_plan_inputs(cash=1_000.0)
+    decisions = []
+    monkeypatch.setattr(
+        bot3,
+        "_log_decision",
+        lambda *args, **kwargs: decisions.append((args, kwargs)),
+    )
+
+    plan = bot3._plan_orders(account, positions, targets, "cash-within", prices)
+
+    assert [item["notional"] for item in plan] == [100.0, 200.0, 300.0, 400.0]
+    assert "BUYS_SCALED_TO_AVAILABLE_CASH" not in {
+        args[1] for args, _ in decisions
+    }
+
+
+def test_buys_over_available_cash_scale_proportionally(monkeypatch):
+    account, positions, targets, prices = _cash_plan_inputs(cash=100.0)
+    decisions = []
+    monkeypatch.setattr(
+        bot3,
+        "_log_decision",
+        lambda *args, **kwargs: decisions.append((args, kwargs)),
+    )
+
+    plan = bot3._plan_orders(account, positions, targets, "cash-scale", prices)
+
+    assert math.isclose(sum(item["notional"] for item in plan), 100.0)
+    assert [item["notional"] for item in plan] == [10.0, 20.0, 30.0, 40.0]
+    scaling = [
+        kwargs
+        for args, kwargs in decisions
+        if args[1] == "BUYS_SCALED_TO_AVAILABLE_CASH"
+    ]
+    assert len(scaling) == 1
+    assert scaling[0]["context"] == {
+        "cash": 100.0,
+        "sell_proceeds": 0.0,
+        "available": 100.0,
+        "pre_scale_buy_total": 1_000.0,
+        "scale_factor": 0.1,
+    }
+
+
+def test_sell_proceeds_count_toward_available_funds(monkeypatch):
+    account, positions, targets, prices = _cash_plan_inputs(
+        cash=100.0,
+        targets=_weights(0.20, 0.40, 0.20, 0.20),
+        positions=[
+            _position("BTC/USD", 600.0),
+            _position("GLD", 200.0),
+            _position("SLV", 200.0),
+        ],
+    )
+    decisions = []
+    monkeypatch.setattr(
+        bot3,
+        "_log_decision",
+        lambda *args, **kwargs: decisions.append((args, kwargs)),
+    )
+
+    plan = bot3._plan_orders(account, positions, targets, "cash-sales", prices)
+
+    assert [(item["symbol"], item["side"], item["notional"]) for item in plan] == [
+        ("BTC/USD", "sell", 400.0),
+        ("ETH/USD", "buy", 400.0),
+    ]
+    assert "BUYS_SCALED_TO_AVAILABLE_CASH" not in {
+        args[1] for args, _ in decisions
+    }
+
+
+def test_negative_cash_raises_runtime_error(monkeypatch):
+    account, positions, targets, prices = _cash_plan_inputs(cash=-1.0)
+    monkeypatch.setattr(bot3, "_log_decision", lambda *args, **kwargs: None)
+
+    with pytest.raises(RuntimeError, match="available funds are negative"):
+        bot3._plan_orders(account, positions, targets, "cash-negative", prices)
+
+
+def test_scaled_zero_quantity_buy_is_dropped(monkeypatch):
+    account, positions, targets, prices = _cash_plan_inputs(cash=0.0)
+    decisions = []
+    monkeypatch.setattr(
+        bot3,
+        "_log_decision",
+        lambda *args, **kwargs: decisions.append((args, kwargs)),
+    )
+
+    plan = bot3._plan_orders(account, positions, targets, "cash-zero", prices)
+
+    assert plan == []
+    scaling = [
+        kwargs
+        for args, kwargs in decisions
+        if args[1] == "BUYS_SCALED_TO_AVAILABLE_CASH"
+    ]
+    assert scaling[0]["context"]["scale_factor"] == 0.0
+
+
+def test_buying_power_is_never_used_by_cash_guard(monkeypatch):
+    account_low_bp, positions, targets, prices = _cash_plan_inputs(
+        cash=100.0,
+        buying_power=0.0,
+    )
+    account_high_bp, _, _, _ = _cash_plan_inputs(
+        cash=100.0,
+        buying_power=1_000_000.0,
+    )
+    monkeypatch.setattr(bot3, "_log_decision", lambda *args, **kwargs: None)
+
+    plan_low_bp = bot3._plan_orders(
+        account_low_bp,
+        positions,
+        targets,
+        "cash-low-buying-power",
+        prices,
+    )
+    plan_high_bp = bot3._plan_orders(
+        account_high_bp,
+        positions,
+        targets,
+        "cash-high-buying-power",
+        prices,
+    )
+
+    assert plan_high_bp == plan_low_bp
+    assert math.isclose(sum(item["notional"] for item in plan_high_bp), 100.0)

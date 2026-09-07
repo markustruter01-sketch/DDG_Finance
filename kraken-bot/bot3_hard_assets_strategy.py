@@ -950,6 +950,46 @@ def _plan_orders(
             ),
             context=decision_context,
         )
+    try:
+        cash = float(account.get("cash"))
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError(
+            f"available funds cannot be established from cash={account.get('cash')!r}"
+        ) from exc
+    sell_proceeds = sum(
+        item["notional"] for item in plan if item["side"] == "sell"
+    )
+    available = cash + sell_proceeds
+    if not math.isfinite(available):
+        raise RuntimeError(f"available funds are not finite: {available!r}")
+    if available < 0:
+        raise RuntimeError(f"available funds are negative: {available:.2f}")
+
+    buy_items = [item for item in plan if item["side"] == "buy"]
+    pre_scale_buy_total = sum(item["notional"] for item in buy_items)
+    if pre_scale_buy_total > available:
+        scale_factor = available / pre_scale_buy_total
+        for item in buy_items:
+            item["qty"] *= scale_factor
+            item["notional"] = item["qty"] * item["price"]
+        plan = [
+            item
+            for item in plan
+            if item["side"] != "buy" or item["qty"] > 0
+        ]
+        _log_decision(
+            cycle_id,
+            "BUYS_SCALED_TO_AVAILABLE_CASH",
+            reason="planned buys exceeded cash plus planned sell proceeds",
+            outcome="SCALED",
+            context={
+                "cash": cash,
+                "sell_proceeds": sell_proceeds,
+                "available": available,
+                "pre_scale_buy_total": pre_scale_buy_total,
+                "scale_factor": scale_factor,
+            },
+        )
     # Always liquidate reductions before submitting increases. If a sell has
     # not settled yet, the fresh buy guard below will refuse the buy safely.
     return sorted(plan, key=lambda item: 0 if item["side"] == "sell" else 1)

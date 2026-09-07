@@ -18,11 +18,10 @@ Rule
 
 Fail-safe direction
 -------------------
-    Missing / insufficient history for a given pair → treat as ρ=0 (allow).
-    We do NOT block entries because of sparse data — the vol_targeting and
-    regional_regime modules provide the fail-CLOSED gates.  Blocking on
-    insufficient correlation data would cause entries to be wrongly suppressed
-    during early-position warm-up.
+    Missing candidate history blocks the entry because the cap cannot evaluate
+    the candidate. Missing / insufficient history for an individual held ticker
+    remains ρ=0 (allow), preserving the existing per-held-ticker warm-up
+    behavior.
 
 Helper
 ------
@@ -153,20 +152,20 @@ def corr_cap_check(
 
     Fail-safe
     ---------
-    Any pair where ρ cannot be computed (insufficient overlap) is treated as
-    ρ=0 (allowed).  This is intentionally permissive on data gaps so that
-    early-position warm-up doesn't incorrectly suppress entries.
+    Missing candidate history blocks the entry. Any held ticker where ρ cannot
+    be computed (insufficient overlap) is treated as ρ=0 (allowed), preserving
+    early-position warm-up for individual held positions.
     """
     if not held_etfs:
         return True, None
 
     cand_closes = price_history.get(candidate_etf, [])
     if len(cand_closes) < 2:
-        logger.debug(
-            f"CorrCap | {candidate_etf}: no price history in price_history dict — "
-            f"treating ρ=0, allowing entry"
+        logger.warning(
+            f"CorrCap | {candidate_etf}: no candidate price history in "
+            f"price_history dict — blocking entry"
         )
-        return True, None
+        return False, "corr_cap_no_candidate_history"
 
     cand_rets = _daily_returns(cand_closes)
     correlated_partners: list[tuple[str, float]] = []   # (ticker, rho)

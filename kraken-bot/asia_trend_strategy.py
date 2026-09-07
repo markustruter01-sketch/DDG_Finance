@@ -168,11 +168,17 @@ def _corr_cap_check(candidate: str, held_etfs: list[str]) -> tuple[bool, str]:
     This enforces the semiconductor redundancy rule (EWY/EWT cannot coexist)
     while still allowing distinct-factor pairs like EWJ + EWM.
 
-    Missing data → ρ=0 → allowed (fail-open on data gaps; an allow mistake is
-    less harmful than blocking a valid entry).
+    An unavailable correlation-cap module blocks entries. Missing candidate
+    history also blocks entries in the shared checker; missing history for an
+    individual held ticker remains ρ=0 → allowed.
     """
-    if not _CORR_CAP_OK or not held_etfs:
+    if not held_etfs:
         return True, "no_held_etfs"
+    if not _CORR_CAP_OK:
+        logger.critical(
+            "Asia | correlation_cap unavailable — blocking entry"
+        )
+        return False, "corr_cap_unavailable"
     try:
         all_tickers   = [candidate] + held_etfs
         price_history = _fetch_price_history(all_tickers, days=90)

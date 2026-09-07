@@ -718,8 +718,19 @@ def run_asia_cycle(profile: dict, db_id: int) -> None:
         fresh_account = engine.get_account()
         fresh_equity = float(fresh_account["equity"])
         fresh_cash = float(fresh_account["cash"])
-        fresh_long_market_value = float(
-            fresh_account.get("long_market_value", 0.0)
+        fresh_long_market_value = fresh_account.get("long_market_value")
+        long_market_value_source = "account"
+        if fresh_long_market_value is None:
+            fresh_long_market_value = sum(
+                float(position.get("market_value", 0) or 0)
+                for position in engine.get_positions()
+            )
+            long_market_value_source = "positions_snapshot"
+        else:
+            fresh_long_market_value = float(fresh_long_market_value)
+        logger.info(
+            "Asia | fresh long market value="
+            f"${fresh_long_market_value:,.2f} source={long_market_value_source}"
         )
         projected_long_market_value = fresh_long_market_value + notional
         projected_cash = fresh_cash - notional
@@ -801,6 +812,10 @@ def run_asia_cycle(profile: dict, db_id: int) -> None:
                         tp2_price=filled_price * (1 + TP2_PCT),
                         min_hold_days=MIN_HOLD_DAYS,
                     )
+                    engine.arm_protective_stop_after_fill(
+                        BOT_ID, symbol, filled_price * (1 - TRAIL_STOP_PCT),
+                        order["order_id"]
+                    )
                     engine.record_scan_outcome(
                         scan_id, order_id=order["order_id"], order_outcome="PARTIAL"
                     )
@@ -812,10 +827,6 @@ def run_asia_cycle(profile: dict, db_id: int) -> None:
                         raise RuntimeError(
                             f"{symbol}: partial-fill DB record failed; manual reconciliation required"
                         )
-                    engine.arm_protective_stop_after_fill(
-                        BOT_ID, symbol, filled_price * (1 - TRAIL_STOP_PCT),
-                        order["order_id"]
-                    )
                     current_count += 1
                     currently_held.add(symbol)
                     deployed_pct += actual_notional / equity

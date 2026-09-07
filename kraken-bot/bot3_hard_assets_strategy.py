@@ -36,6 +36,7 @@ if _TRADING_PLATFORM in sys.path:
     sys.path.remove(_TRADING_PLATFORM)
 sys.path.insert(0, _TRADING_PLATFORM)
 from db.postgres import get_conn as _platform_get_conn
+from core.kill_switch import _covers
 
 @contextmanager
 def get_conn():
@@ -603,12 +604,9 @@ def _maintain_protective_stops(
 ) -> None:
     """Re-arm a missing protective stop before checking the software backstop."""
     open_orders = client.open_orders()
-    open_sell_symbols = {
-        order.get("symbol") for order in open_orders if order.get("side") == "sell"
-    }
     for position in positions:
         symbol = position["symbol"]
-        if symbol in open_sell_symbols:
+        if any(_covers(position, order) for order in open_orders):
             continue
         raw_response = None
         try:
@@ -657,10 +655,11 @@ def _software_backstop(
 ) -> None:
     """Submit a market sell if a protective stop is breached but not filled."""
     open_orders = client.open_orders()
-    open_symbols = {order.get("symbol") for order in open_orders if order.get("side") == "sell"}
     for position in positions:
         symbol = position["symbol"]
-        if symbol in VAULT_SYMBOLS or symbol in open_symbols:
+        if symbol in VAULT_SYMBOLS or any(
+            _covers(position, order) for order in open_orders
+        ):
             continue
         if position["current_price"] > position["stop_price"]:
             continue

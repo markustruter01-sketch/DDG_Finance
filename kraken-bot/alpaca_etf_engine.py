@@ -272,11 +272,14 @@ class AlpacaEtfEngine:
 
     def get_account(self) -> dict:
         acc = self.api.get_account()
-        return {
+        account = {
             "equity":       float(acc.equity),
             "cash":         float(acc.cash),
             "buying_power": float(acc.buying_power),
         }
+        if getattr(acc, "long_market_value", None) is not None:
+            account["long_market_value"] = float(acc.long_market_value)
+        return account
 
     # ── Positions ─────────────────────────────────────────────────────────────
 

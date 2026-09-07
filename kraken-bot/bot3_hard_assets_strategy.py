@@ -293,9 +293,7 @@ def apply_crypto_fleet_cap(
     # The fleet cap deliberately overrides WEIGHT_FLOOR for crypto because it
     # is the stricter constraint.
     for symbol in METALS:
-        adjusted[symbol] += freed_weight * adjusted[symbol] / (
-            metal_weight + 0.0
-        )
+        adjusted[symbol] += freed_weight * target_weights[symbol] / metal_weight
     adjusted["SLV"] = 1.0 - sum(adjusted[symbol] for symbol in ("BTC/USD", "ETH/USD", "GLD"))
     if not math.isclose(sum(adjusted.values()), 1.0, rel_tol=0.0, abs_tol=1e-12):
         raise RuntimeError("capped target weights do not sum to 1.0")

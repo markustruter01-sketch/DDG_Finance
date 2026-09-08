@@ -176,6 +176,29 @@ def test_stale_portfolio_writes_null_return_and_records_degradation(monkeypatch)
     }
 
 
+def test_portfolio_51_minutes_old_is_fresh_and_gets_return(monkeypatch):
+    last_updated = datetime.now(timezone.utc) - timedelta(minutes=51)
+    cursor = _SnapshotCursor(
+        _portfolio_rows(last_updated=last_updated),
+        {
+            "oracle": 99_000.0,
+            "spy_qqq_trend": 100_000.0,
+            "jerome_macro": 101_000.0,
+        },
+    )
+    degradation_calls = []
+
+    result = _run_snapshot(monkeypatch, cursor, degradation_calls)
+    oracle = _insert_for(cursor, "oracle")
+
+    assert result["stale_count"] == 0
+    assert result["skipped_count"] == 0
+    assert oracle[4] == pytest.approx(100_000 / 99_000 - 1)
+    assert oracle[12] == "bot_portfolio_fresh"
+    assert oracle[13] == "equity_pct_change"
+    assert degradation_calls == []
+
+
 def test_fresh_unchanged_equity_remains_real_zero(monkeypatch):
     cursor = _SnapshotCursor(
         _portfolio_rows(),

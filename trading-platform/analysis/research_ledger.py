@@ -11,7 +11,13 @@ from typing import Any
 from loguru import logger
 
 EXPECTED_BOTS = ("oracle", "spy_qqq_trend", "jerome_macro")
-STALE_AFTER_SECONDS = 25 * 60
+# The runner writes bot_portfolio once per cycle. All three bots use
+# LOOP_SLEEP_SECONDS = 3600 (kraken-bot/config.py lines 34, 70, 109), so a
+# healthy bot's row is routinely up to an hour old. Two missed cycles means
+# the runner has stopped, not that it is between beats. The runner itself
+# uses three intervals for lease loss (kraken-bot/runner.py:357); this is
+# deliberately tighter so the return series notices a dead runner first.
+STALE_AFTER_SECONDS = 2 * 60 * 60
 
 RESEARCH_LEDGER_DDL = """
 CREATE TABLE IF NOT EXISTS research_ledger (

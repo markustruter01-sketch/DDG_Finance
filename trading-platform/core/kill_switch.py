@@ -21,6 +21,11 @@ from core.symbols import canonical_symbol, same_symbol
 from core.bot_config import load_bot_profiles
 
 DUST_QTY = 1e-6
+# Alpaca only accepts whole-share GTC stops on equities
+# (kraken-bot/alpaca_etf_engine.py:631). A fractional remainder below one
+# share therefore cannot be covered and is not a naked position. Crypto
+# accepts fractional stops, so its tolerance stays at DUST_QTY.
+EQUITY_STOP_SHORTFALL_TOLERANCE = 1.0
 MISSING_STOP_SECONDS = 60.0
 MISMATCH_REQUIRED_CHECKS = 2
 RESET_CONFIRMATION_ENV_VAR = "KILL_SWITCH_RESET_CONFIRMATION"
@@ -65,7 +70,15 @@ def _covers(position: dict[str, Any], order: dict[str, Any]) -> bool:
     position_side = str(position.get("side", "long")).lower()
     order_side = str(order.get("side", "")).lower()
     expected = "sell" if position_side != "short" else "buy"
-    return order_side == expected and float(order.get("qty") or 0) + DUST_QTY >= abs(float(position.get("qty") or 0))
+    asset_class = str(position.get("asset_class") or "").lower()
+    tolerance = DUST_QTY if "crypto" in asset_class else EQUITY_STOP_SHORTFALL_TOLERANCE
+    if order_side != expected:
+        return False
+    position_qty = abs(float(position.get("qty") or 0))
+    order_qty = float(order.get("qty") or 0)
+    if "crypto" in asset_class:
+        return order_qty + tolerance >= position_qty
+    return order_qty + tolerance > position_qty
 
 
 def _vault_symbols(bot_id: str) -> set[str]:

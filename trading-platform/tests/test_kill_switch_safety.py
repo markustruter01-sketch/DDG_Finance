@@ -73,6 +73,42 @@ def test_protective_stop_covers_position():
     assert ks.evaluate_account(account(positions=[position], orders=[stop]), now=100) == []
 
 
+def test_equity_fractional_remainder_above_whole_share_stop_is_covered():
+    position = {"symbol": "EWY", "qty": 43.355, "side": "long", "asset_class": "us_equity"}
+    stop = {"symbol": "EWY", "qty": 43, "side": "sell", "type": "stop"}
+    assert ks._covers(position, stop) is True
+
+
+def test_equity_whole_share_shortfall_is_uncovered():
+    position = {"symbol": "EWY", "qty": 44.355, "side": "long", "asset_class": "us_equity"}
+    stop = {"symbol": "EWY", "qty": 43, "side": "sell", "type": "stop"}
+    assert ks._covers(position, stop) is False
+
+
+def test_equity_exact_whole_share_shortfall_is_uncovered():
+    position = {"symbol": "EWY", "qty": 43.0, "side": "long", "asset_class": "us_equity"}
+    stop = {"symbol": "EWY", "qty": 42, "side": "sell", "type": "stop"}
+    assert ks._covers(position, stop) is False
+
+
+def test_crypto_fractional_stop_remains_covered():
+    position = {"symbol": "BTCUSD", "qty": 0.115235221, "side": "long", "asset_class": "crypto"}
+    stop = {"symbol": "BTCUSD", "qty": 0.115235221, "side": "sell", "type": "stop_limit"}
+    assert ks._covers(position, stop) is True
+
+
+def test_crypto_fractional_shortfall_remains_uncovered():
+    position = {"symbol": "BTCUSD", "qty": 0.115235221, "side": "long", "asset_class": "crypto"}
+    stop = {"symbol": "BTCUSD", "qty": 0.11, "side": "sell", "type": "stop_limit"}
+    assert ks._covers(position, stop) is False
+
+
+def test_missing_asset_class_uses_equity_tolerance():
+    position = {"symbol": "EWY", "qty": 43.355, "side": "long"}
+    stop = {"symbol": "EWY", "qty": 43, "side": "sell", "type": "stop"}
+    assert ks._covers(position, stop) is True
+
+
 def test_crypto_symbol_forms_match_for_stop_coverage():
     position = {"symbol": "BTCUSD", "qty": 0.3, "side": "long"}
     stop = {"symbol": "BTC/USD", "qty": 0.3, "side": "sell", "type": "stop_limit"}

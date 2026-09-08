@@ -62,19 +62,26 @@ def _orders(client) -> list[dict[str, Any]]:
     from alpaca.trading.requests import GetOrdersRequest
     result = []
     for order in client.get_orders(filter=GetOrdersRequest(status=QueryOrderStatus.OPEN, nested=True, limit=500)):
+        asset_class = getattr(order, "asset_class", None)
         result.append({
             "id": str(order.id), "symbol": str(order.symbol), "side": getattr(order.side, "value", order.side),
             "type": getattr(order.type, "value", order.type), "qty": float(order.qty or 0),
             "status": getattr(order.status, "value", order.status),
+            "asset_class": getattr(asset_class, "value", asset_class),
         })
     return result
 
 
 def _positions(client) -> list[dict[str, Any]]:
-    return [{
-        "symbol": str(p.symbol), "qty": float(p.qty), "side": getattr(p.side, "value", "long"),
-        "market_value": float(p.market_value or 0),
-    } for p in client.get_all_positions()]
+    result = []
+    for p in client.get_all_positions():
+        asset_class = getattr(p, "asset_class", None)
+        result.append({
+            "symbol": str(p.symbol), "qty": float(p.qty), "side": getattr(p.side, "value", "long"),
+            "market_value": float(p.market_value or 0),
+            "asset_class": getattr(asset_class, "value", asset_class),
+        })
+    return result
 
 
 def _ledger_positions(bot_id: str) -> list[dict[str, Any]]:

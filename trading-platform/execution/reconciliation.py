@@ -614,17 +614,17 @@ def collect_live_snapshot() -> dict[str, Any]:
     mismatches = []
     account_findings = []
     for bot_id in ACTIVE_BOTS:
+        vault_symbols: set[str] | None
         try:
             vault_symbols = _vault_symbols(bot_id)
         except Exception as exc:
             logger.critical(
-                "Reconciliation | vault holdings unavailable for "
-                f"{bot_id}; refusing to return a safety snapshot: {exc}"
+                f"Reconciliation | vault holdings read failed for {bot_id}: {exc}"
             )
-            raise RuntimeError(
-                f"Reconciliation | refusing to return a safety snapshot "
-                f"without vault holdings for {bot_id}"
-            ) from exc
+            mismatches.append(
+                _reconciliation_check_failed("vault_symbols_read", exc, bot_id)
+            )
+            vault_symbols = None
         try:
             client = _client_for(bot_id)
         except Exception as exc:

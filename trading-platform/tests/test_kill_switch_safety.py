@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import os
+from types import SimpleNamespace
 
 import pytest
 
 from core import kill_switch as ks
 from core import bot_state
 from core.bot_registry import normalise_bot_id
+from execution import reconciliation
 
 
 def setup_function():
@@ -75,6 +77,112 @@ def test_crypto_symbol_forms_match_for_stop_coverage():
     position = {"symbol": "BTCUSD", "qty": 0.3, "side": "long"}
     stop = {"symbol": "BTC/USD", "qty": 0.3, "side": "sell", "type": "stop_limit"}
     assert ks.evaluate_account(account(positions=[position], orders=[stop]), now=100) == []
+
+
+def test_unknown_vault_symbols_skip_stop_coverage_for_that_bot():
+    position = {"symbol": "ECH", "qty": 10, "side": "long"}
+
+    flags = ks.evaluate_account(
+        account(positions=[position], vault_symbols=None),
+        now=160.1,
+    )
+    trigger_names = {flag["trigger"] for flag in flags}
+
+    assert "vault_symbols_unknown" in trigger_names
+    assert "missing_protective_stop" not in trigger_names
+
+
+def test_missing_vault_symbols_skip_stop_coverage_for_that_bot():
+    position = {"symbol": "ECH", "qty": 10, "side": "long"}
+    value = account(positions=[position])
+    value.pop("vault_symbols")
+
+    flags = ks.evaluate_account(value, now=160.1)
+    trigger_names = {flag["trigger"] for flag in flags}
+
+    assert "vault_symbols_unknown" in trigger_names
+    assert "missing_protective_stop" not in trigger_names
+
+
+def test_valid_vault_symbols_still_exclude_vault_positions():
+    position = {"symbol": "ECH", "qty": 10, "side": "long"}
+
+    flags = ks.evaluate_account(
+        account(positions=[position], vault_symbols={"ECH"}),
+        now=160.1,
+    )
+
+    assert flags == []
+
+
+def test_one_bot_vault_failure_does_not_suppress_another_bots_triggers():
+    position = {"symbol": "ECH", "qty": 10, "side": "long"}
+    snapshot = {
+        "accounts": [
+            account(positions=[position], vault_symbols=None),
+            account(bot_id="jerome_macro", positions=[position]),
+        ],
+        "fleet_equity": 100,
+        "fleet_hwm": 100,
+    }
+
+    ks.evaluate_snapshot(snapshot, now=100)
+    flags = ks.evaluate_snapshot(snapshot, now=161)
+    trigger_names = {flag["trigger"] for flag in flags}
+
+    assert "vault_symbols_unknown" in trigger_names
+    assert "missing_protective_stop" in trigger_names
+
+
+def test_collect_live_snapshot_keeps_other_bots_when_vault_read_fails(monkeypatch):
+    class _Client:
+        def get_account(self):
+            return SimpleNamespace(equity="100", cash="50")
+
+    def fake_vault_symbols(bot_id):
+        if bot_id == "oracle":
+            raise RuntimeError("vault database unavailable")
+        return set()
+
+    monkeypatch.setattr(reconciliation, "_vault_symbols", fake_vault_symbols)
+    monkeypatch.setattr(reconciliation, "_client_for", lambda _bot_id: _Client())
+    monkeypatch.setattr(reconciliation, "_positions", lambda _client: [])
+    monkeypatch.setattr(reconciliation, "_orders", lambda _client: [])
+    monkeypatch.setattr(reconciliation, "_ledger_positions", lambda _bot_id: [])
+    monkeypatch.setattr(reconciliation, "_mismatches", lambda *_args: [])
+    monkeypatch.setattr(
+        reconciliation,
+        "_authoritative_quantity_mismatches",
+        lambda *_args: [],
+    )
+    monkeypatch.setattr(reconciliation, "_order_mismatches", lambda *_args: [])
+    monkeypatch.setattr(reconciliation, "_stale_portfolio", lambda _bot_id: [])
+    monkeypatch.setattr(
+        reconciliation,
+        "_ledger_orphan_findings",
+        lambda _positions: [],
+    )
+    monkeypatch.setattr(reconciliation, "_pause_state_disagreements", lambda: [])
+    monkeypatch.setattr(
+        "core.fleet_equity.get_fleet_equity",
+        lambda: (None, None),
+    )
+    monkeypatch.setattr("core.bot_liveness.evaluate_liveness", lambda: [])
+
+    snapshot = reconciliation.collect_live_snapshot()
+    accounts = {
+        account["bot_id"]: account
+        for account in snapshot["accounts"]
+    }
+
+    assert accounts["oracle"]["vault_symbols"] is None
+    assert accounts["jerome_macro"]["vault_symbols"] == set()
+    assert {
+        "kind": "reconciliation_check_failed",
+        "check": "vault_symbols_read",
+        "error": "vault database unavailable",
+        "bot_id": "oracle",
+    } in snapshot["mismatches"]
 
 
 def test_mismatch_must_persist_for_two_checks():

@@ -109,9 +109,17 @@ def evaluate_account(account: dict[str, Any], now: float | None = None) -> list[
             "detail": f"deployed={deployed_pct:.4f} max={max_deployment:.4f} tolerance=0.05",
         })
 
+    raw_vault_symbols = account.get("vault_symbols")
+    if raw_vault_symbols is None:
+        triggers.append({
+            "trigger": "vault_symbols_unknown",
+            "detail": f"{bot_id}: vault symbols unavailable; skipping stop coverage",
+        })
+        return triggers
+
     vault_symbols = {
         canonical_symbol(symbol)
-        for symbol in account["vault_symbols"]
+        for symbol in raw_vault_symbols
     }
     for position in account.get("positions", []):
         qty = abs(float(position.get("qty") or 0))

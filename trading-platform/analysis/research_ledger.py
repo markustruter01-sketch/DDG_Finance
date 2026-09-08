@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from datetime import date, datetime, timezone
 from typing import Any
 
@@ -174,8 +175,39 @@ CREATE TABLE IF NOT EXISTS bot_daily_returns (
     positions_held    INT,
     deployed_pct      NUMERIC,
     benchmark_return  NUMERIC,
+    equity_start      NUMERIC,
+    equity_end        NUMERIC,
+    trading_capital_base NUMERIC,
+    source            TEXT,
+    calculation_method TEXT,
+    source_timestamp  TIMESTAMPTZ,
+    vault_excluded_value NUMERIC,
+    backfilled        BOOLEAN NOT NULL DEFAULT FALSE,
+    computed_at       TIMESTAMPTZ,
+    is_canonical      BOOLEAN NOT NULL DEFAULT FALSE,
     UNIQUE (date, bot_id)
 );
+
+ALTER TABLE bot_daily_returns
+    ADD COLUMN IF NOT EXISTS equity_start NUMERIC;
+ALTER TABLE bot_daily_returns
+    ADD COLUMN IF NOT EXISTS equity_end NUMERIC;
+ALTER TABLE bot_daily_returns
+    ADD COLUMN IF NOT EXISTS trading_capital_base NUMERIC;
+ALTER TABLE bot_daily_returns
+    ADD COLUMN IF NOT EXISTS source TEXT;
+ALTER TABLE bot_daily_returns
+    ADD COLUMN IF NOT EXISTS calculation_method TEXT;
+ALTER TABLE bot_daily_returns
+    ADD COLUMN IF NOT EXISTS source_timestamp TIMESTAMPTZ;
+ALTER TABLE bot_daily_returns
+    ADD COLUMN IF NOT EXISTS vault_excluded_value NUMERIC;
+ALTER TABLE bot_daily_returns
+    ADD COLUMN IF NOT EXISTS backfilled BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE bot_daily_returns
+    ADD COLUMN IF NOT EXISTS computed_at TIMESTAMPTZ;
+ALTER TABLE bot_daily_returns
+    ADD COLUMN IF NOT EXISTS is_canonical BOOLEAN NOT NULL DEFAULT FALSE;
 """
 
 
@@ -284,6 +316,7 @@ def _positions_summary(positions: Any) -> tuple[int, float]:
 
 def snapshot_daily_returns(*, snapshot_date: date | None = None) -> dict[str, Any]:
     """Write all three bot rows atomically; never write a partial fleet."""
+    from core.degradation_tracker import record_degradation
     from db.postgres import get_conn
 
     snapshot_date = snapshot_date or datetime.now(timezone.utc).date()
@@ -327,17 +360,81 @@ def snapshot_daily_returns(*, snapshot_date: date | None = None) -> dict[str, An
                     float(benchmark_rows[0][1]) / float(benchmark_rows[1][1])
                 ) - 1
             output = []
+            outcomes = []
             for bot_id, equity, cash, positions, last_updated in rows:
                 stale = (
                     last_updated is None
                     or (now - last_updated.astimezone(timezone.utc)).total_seconds()
                     > STALE_AFTER_SECONDS
                 )
-                if stale:
-                    logger.warning(
-                        f"Research ledger | {bot_id} portfolio stale; "
-                        "using last-known equity and flagging in logs"
+                try:
+                    equity_close = float(equity)
+                except (TypeError, ValueError):
+                    equity_close = None
+                if (
+                    equity_close is None
+                    or not math.isfinite(equity_close)
+                    or equity_close <= 0
+                ):
+                    reason = (
+                        "equity_missing"
+                        if equity is None
+                        else "equity_non_numeric"
+                        if equity_close is None
+                        else "equity_non_finite"
+                        if not math.isfinite(equity_close)
+                        else "equity_non_positive"
                     )
+                    message = (
+                        f"{bot_id} portfolio has unusable equity; "
+                        f"skipping daily-return row ({reason})"
+                    )
+                    logger.error(f"Research ledger | {message}")
+                    record_degradation(
+                        component="data_pipeline",
+                        severity="error",
+                        error_type="daily_return_invalid_equity",
+                        message=message,
+                        detail=f"equity={equity!r}",
+                        bot_id=bot_id,
+                    )
+                    outcomes.append(
+                        {
+                            "bot_id": bot_id,
+                            "status": "skipped",
+                            "reason": reason,
+                        }
+                    )
+                    continue
+
+                if stale:
+                    stale_reason = (
+                        "last_updated_missing"
+                        if last_updated is None
+                        else "last_updated_exceeded_threshold"
+                    )
+                    source = f"bot_portfolio_stale:{stale_reason}"
+                    calculation_method = "equity_pct_change_stale_last_known"
+                    message = (
+                        f"{bot_id} portfolio stale; writing NULL daily_return "
+                        f"and preserving last-known equity ({stale_reason})"
+                    )
+                    logger.error(f"Research ledger | {message}")
+                    record_degradation(
+                        component="data_pipeline",
+                        severity="error",
+                        error_type="daily_return_portfolio_stale",
+                        message=message,
+                        detail=(
+                            f"last_updated={last_updated!r}; "
+                            f"threshold_seconds={STALE_AFTER_SECONDS}"
+                        ),
+                        bot_id=bot_id,
+                    )
+                else:
+                    source = "bot_portfolio_fresh"
+                    calculation_method = "equity_pct_change"
+
                 held, deployed = _positions_summary(positions)
                 cur.execute(
                     """
@@ -348,11 +445,10 @@ def snapshot_daily_returns(*, snapshot_date: date | None = None) -> dict[str, An
                     (bot_id, snapshot_date),
                 )
                 previous = cur.fetchone()
-                equity_close = float(equity or 0)
                 equity_open = float(previous[0]) if previous else None
                 daily_return = (
                     (equity_close / equity_open) - 1
-                    if equity_open not in (None, 0)
+                    if not stale and equity_open not in (None, 0)
                     else None
                 )
                 deployed_pct = deployed / equity_close if equity_close else None
@@ -360,8 +456,12 @@ def snapshot_daily_returns(*, snapshot_date: date | None = None) -> dict[str, An
                     """
                     INSERT INTO bot_daily_returns
                         (date, bot_id, equity_open, equity_close, daily_return,
-                         cash, positions_held, deployed_pct, benchmark_return)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                         cash, positions_held, deployed_pct, benchmark_return,
+                         equity_start, equity_end, trading_capital_base,
+                         source, calculation_method, source_timestamp,
+                         vault_excluded_value, backfilled, computed_at, is_canonical)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,
+                            %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                     ON CONFLICT (date, bot_id) DO UPDATE SET
                         equity_open=EXCLUDED.equity_open,
                         equity_close=EXCLUDED.equity_close,
@@ -369,13 +469,48 @@ def snapshot_daily_returns(*, snapshot_date: date | None = None) -> dict[str, An
                         cash=EXCLUDED.cash,
                         positions_held=EXCLUDED.positions_held,
                         deployed_pct=EXCLUDED.deployed_pct,
-                        benchmark_return=EXCLUDED.benchmark_return
+                        benchmark_return=EXCLUDED.benchmark_return,
+                        equity_start=EXCLUDED.equity_start,
+                        equity_end=EXCLUDED.equity_end,
+                        trading_capital_base=EXCLUDED.trading_capital_base,
+                        source=EXCLUDED.source,
+                        calculation_method=EXCLUDED.calculation_method,
+                        source_timestamp=EXCLUDED.source_timestamp,
+                        vault_excluded_value=EXCLUDED.vault_excluded_value,
+                        backfilled=EXCLUDED.backfilled,
+                        computed_at=EXCLUDED.computed_at,
+                        is_canonical=EXCLUDED.is_canonical
+                    WHERE bot_daily_returns.is_canonical IS NOT TRUE
                     """,
                     (
                         snapshot_date, bot_id, equity_open, equity_close,
                         daily_return, cash, held, deployed_pct, benchmark_return,
+                        None, None, None, source, calculation_method,
+                        last_updated, None, False, now, False,
                     ),
                 )
+                if cur.rowcount == 0:
+                    message = (
+                        f"{bot_id} daily-return row is canonical; "
+                        "snapshot path refused to overwrite it"
+                    )
+                    logger.error(f"Research ledger | {message}")
+                    record_degradation(
+                        component="data_pipeline",
+                        severity="error",
+                        error_type="daily_return_canonical_conflict",
+                        message=message,
+                        detail=f"date={snapshot_date.isoformat()}",
+                        bot_id=bot_id,
+                    )
+                    outcomes.append(
+                        {
+                            "bot_id": bot_id,
+                            "status": "skipped",
+                            "reason": "canonical_row_exists",
+                        }
+                    )
+                    continue
                 output.append(
                     {
                         "date": str(snapshot_date),
@@ -384,4 +519,22 @@ def snapshot_daily_returns(*, snapshot_date: date | None = None) -> dict[str, An
                         "stale": stale,
                     }
                 )
-            return {"status": "written", "rows": output}
+                outcomes.append(
+                    {
+                        "date": str(snapshot_date),
+                        "bot_id": bot_id,
+                        "equity_close": equity_close,
+                        "daily_return": daily_return,
+                        "stale": stale,
+                        "status": "stale" if stale else "written",
+                    }
+                )
+            stale_count = sum(item.get("status") == "stale" for item in outcomes)
+            skipped_count = sum(item.get("status") == "skipped" for item in outcomes)
+            return {
+                "status": "completed_with_skips" if skipped_count else "written",
+                "rows": output,
+                "outcomes": outcomes,
+                "stale_count": stale_count,
+                "skipped_count": skipped_count,
+            }

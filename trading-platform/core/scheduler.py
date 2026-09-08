@@ -1136,7 +1136,20 @@ async def _daily_bot_returns_snapshot() -> None:
         )
         await asyncio.to_thread(ensure_research_tables)
         result = await asyncio.to_thread(snapshot_daily_returns)
-        logger.info(f"Scheduler | daily_bot_returns_snapshot: {result.get('status')}")
+        stale_count = int(result.get("stale_count", 0))
+        skipped_count = int(result.get("skipped_count", 0))
+        if stale_count or skipped_count:
+            logger.error(
+                "Scheduler | daily_bot_returns_snapshot: "
+                f"status={result.get('status')} "
+                f"stale_count={stale_count} skipped_count={skipped_count}"
+            )
+        else:
+            logger.info(
+                "Scheduler | daily_bot_returns_snapshot: "
+                f"status={result.get('status')} "
+                f"stale_count={stale_count} skipped_count={skipped_count}"
+            )
     except Exception as exc:
         logger.error(f"Scheduler | daily_bot_returns_snapshot FAILED: {exc}")
 

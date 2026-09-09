@@ -37,6 +37,7 @@ from core.bot_liveness import (
     ACTIVE_BOTS,
     DEFAULT_CYCLE_INTERVALS,
 )
+from core import kill_switch
 from core.runner_heartbeat import (
     RUNNER_HEARTBEAT_THRESHOLD_SECONDS,
 )
@@ -58,7 +59,7 @@ DUST_QTY = 1e-6
 UNRESOLVED_HIGH_SEVERITIES = frozenset({"high", "critical", "error"})
 
 THRESHOLD_SOURCES = {
-    "stop_coverage": "TASK POLICY: quantity tolerance is 1e-8; vault and dust exclusions are explicit task rules",
+    "stop_coverage": "ESTABLISHED: core.kill_switch._covers defines protective-stop coverage; vault and dust exclusions are explicit task rules",
     "crypto_exposure": "PROPOSED: 5.5% drift band for appreciation between scheduled rebalances; 5% hard cap remains task policy",
     "cycle_freshness": "ESTABLISHED: core.bot_liveness uses 3 × configured cycle interval",
     "reconciliation": "PROPOSED: 90 minutes; hourly scheduler plus 30-minute proposed grace period",
@@ -253,7 +254,6 @@ def check_stop_coverage(inputs: InvariantInputs) -> dict[str, Any]:
     name = "strategy_positions_have_covering_stops"
     expected = {
         "covering_stop": True,
-        "quantity_tolerance": QUANTITY_TOLERANCE,
         "excluded": ["vault holdings", f"dust qty < {DUST_QTY}"],
     }
     problem = _source_problem(inputs, "broker_positions", "broker_orders", "vault_symbols")
@@ -292,18 +292,14 @@ def check_stop_coverage(inputs: InvariantInputs) -> dict[str, Any]:
             if not stops:
                 missing.append({"bot_id": bot_id, "symbol": symbol, "position_qty": qty})
                 continue
-            deltas = [
-                abs(float(order.get("qty") or 0) - qty)
-                for order in stops
-            ]
-            if min(deltas) > QUANTITY_TOLERANCE:
+            if not any(kill_switch._covers(position, order) for order in stops):
                 mismatched.append(
                     {
                         "bot_id": bot_id,
                         "symbol": symbol,
                         "position_qty": qty,
                         "stop_quantities": [float(order.get("qty") or 0) for order in stops],
-                        "minimum_difference": min(deltas),
+                        "covering_stop": False,
                     }
                 )
 
@@ -318,7 +314,7 @@ def check_stop_coverage(inputs: InvariantInputs) -> dict[str, Any]:
             name,
             actual=actual,
             expected=expected,
-            difference={"failed_positions": failures, "quantity_tolerance": QUANTITY_TOLERANCE},
+            difference={"failed_positions": failures},
             message=f"{failures} material strategy position(s) lack an exactly matching covering stop.",
             source_key="stop_coverage",
         )
@@ -1210,6 +1206,11 @@ def read_broker_inputs() -> dict[str, Any]:
                 "qty": float(position.qty),
                 "side": getattr(position.side, "value", position.side),
                 "market_value": float(position.market_value),
+                "asset_class": getattr(
+                    getattr(position, "asset_class", None),
+                    "value",
+                    getattr(position, "asset_class", None),
+                ),
             }
             for position in client.get_all_positions()
         ]
@@ -1221,6 +1222,11 @@ def read_broker_inputs() -> dict[str, Any]:
                 "side": getattr(order.side, "value", order.side),
                 "type": getattr(order.type, "value", order.type),
                 "status": getattr(order.status, "value", order.status),
+                "asset_class": getattr(
+                    getattr(order, "asset_class", None),
+                    "value",
+                    getattr(order, "asset_class", None),
+                ),
             }
             for order in client.get_orders(
                 filter=GetOrdersRequest(

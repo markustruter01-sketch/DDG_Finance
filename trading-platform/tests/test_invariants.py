@@ -284,6 +284,133 @@ def test_stop_coverage_unknown_when_input_is_unreadable(base_inputs):
     assert result["status"] == "UNKNOWN"
 
 
+def test_stop_coverage_accepts_fractional_equity_remainder(base_inputs):
+    inputs = _copy(base_inputs)
+    inputs.broker_positions["oracle"] = [
+        {
+            "symbol": "EWY",
+            "qty": 43.355,
+            "side": "long",
+            "asset_class": "us_equity",
+        }
+    ]
+    inputs.broker_orders["oracle"] = [
+        {"symbol": "EWY", "qty": 43.0, "side": "sell", "type": "stop"}
+    ]
+
+    result = check_stop_coverage(inputs)
+
+    assert result["status"] == "PASS"
+
+
+def test_stop_coverage_rejects_equity_shortfall_of_a_whole_share(base_inputs):
+    inputs = _copy(base_inputs)
+    inputs.broker_positions["oracle"] = [
+        {
+            "symbol": "EWY",
+            "qty": 44.355,
+            "side": "long",
+            "asset_class": "us_equity",
+        }
+    ]
+    inputs.broker_orders["oracle"] = [
+        {"symbol": "EWY", "qty": 43.0, "side": "sell", "type": "stop"}
+    ]
+
+    result = check_stop_coverage(inputs)
+
+    assert result["status"] == "FAIL"
+    assert result["actual"]["quantity_mismatches"][0] == {
+        "bot_id": "oracle",
+        "symbol": "EWY",
+        "position_qty": 44.355,
+        "stop_quantities": [43.0],
+        "covering_stop": False,
+    }
+
+
+def test_stop_coverage_accepts_exact_crypto_stop(base_inputs):
+    inputs = _copy(base_inputs)
+    inputs.broker_positions["oracle"] = [
+        {
+            "symbol": "BTCUSD",
+            "qty": 0.115235221,
+            "side": "long",
+            "asset_class": "crypto",
+        }
+    ]
+    inputs.broker_orders["oracle"] = [
+        {
+            "symbol": "BTCUSD",
+            "qty": 0.115235221,
+            "side": "sell",
+            "type": "stop",
+        }
+    ]
+
+    result = check_stop_coverage(inputs)
+
+    assert result["status"] == "PASS"
+
+
+def test_stop_coverage_rejects_crypto_shortfall(base_inputs):
+    inputs = _copy(base_inputs)
+    inputs.broker_positions["oracle"] = [
+        {
+            "symbol": "BTCUSD",
+            "qty": 0.115235221,
+            "side": "long",
+            "asset_class": "crypto",
+        }
+    ]
+    inputs.broker_orders["oracle"] = [
+        {"symbol": "BTCUSD", "qty": 0.11, "side": "sell", "type": "stop"}
+    ]
+
+    result = check_stop_coverage(inputs)
+
+    assert result["status"] == "FAIL"
+
+
+def test_stop_coverage_still_reports_position_with_no_stop(base_inputs):
+    inputs = _copy(base_inputs)
+    inputs.broker_positions["oracle"] = [
+        {
+            "symbol": "EWY",
+            "qty": 43.355,
+            "side": "long",
+            "asset_class": "us_equity",
+        }
+    ]
+    inputs.broker_orders["oracle"] = []
+
+    result = check_stop_coverage(inputs)
+
+    assert result["status"] == "FAIL"
+    assert result["actual"]["missing_stops"] == [
+        {"bot_id": "oracle", "symbol": "EWY", "position_qty": 43.355}
+    ]
+
+
+def test_stop_coverage_still_excludes_vault_symbol_without_stop(base_inputs):
+    inputs = _copy(base_inputs)
+    inputs.broker_positions["oracle"] = [
+        {
+            "symbol": "BIL",
+            "qty": 43.355,
+            "side": "long",
+            "asset_class": "us_equity",
+        }
+    ]
+    inputs.broker_orders["oracle"] = []
+
+    result = check_stop_coverage(inputs)
+
+    assert result["status"] == "PASS"
+    assert result["actual"]["checked_positions"] == 0
+    assert result["actual"]["missing_stops"] == []
+
+
 def _with_crypto_exposure(base_inputs, market_value: float) -> InvariantInputs:
     inputs = _copy(base_inputs)
     crypto_position = {

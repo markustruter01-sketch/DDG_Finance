@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from copy import deepcopy
+from unittest.mock import patch
 
 import pytest
 
@@ -20,6 +21,7 @@ from core.invariants import (
     check_reconciliation_health,
     check_runner_heartbeat_fresh,
     check_stop_coverage,
+    read_database_inputs,
     run_all_invariants,
 )
 
@@ -101,6 +103,53 @@ def _copy(inputs: InvariantInputs) -> InvariantInputs:
     return deepcopy(inputs)
 
 
+class _DatabaseCursor:
+    description = [
+        ("instance_token",),
+        ("pid",),
+        ("environment",),
+        ("execution_mode",),
+        ("started_at",),
+        ("last_beat_at",),
+        ("loop_count",),
+        ("bots_registered",),
+        ("status",),
+    ]
+
+    def __init__(self, heartbeat_row=None):
+        self.heartbeat_row = heartbeat_row
+        self.query = ""
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def execute(self, query, params=None):
+        self.query = query
+
+    def fetchall(self):
+        return []
+
+    def fetchone(self):
+        return self.heartbeat_row
+
+
+class _DatabaseConnection:
+    def __init__(self, heartbeat_row=None):
+        self.cursor_instance = _DatabaseCursor(heartbeat_row)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def cursor(self):
+        return self.cursor_instance
+
+
 def test_all_invariants_pass_with_clean_inputs(base_inputs):
     report = run_all_invariants(base_inputs)
     assert report["overall"] == "PASS"
@@ -110,6 +159,92 @@ def test_all_invariants_pass_with_clean_inputs(base_inputs):
         <= set(result)
         for result in report["results"]
     )
+
+
+def test_runner_heartbeat_invariant_passes_for_fresh_heartbeat():
+    result = check_runner_heartbeat_fresh(
+        InvariantInputs(
+            runner_heartbeat={
+                "verdict": "ALIVE",
+                "age_seconds": 4.0,
+                "threshold_seconds": 15.0,
+                "row": {"instance_token": "runner:v2:test"},
+            }
+        )
+    )
+
+    assert result["status"] == "PASS"
+
+
+def test_runner_heartbeat_invariant_fails_for_stale_heartbeat():
+    result = check_runner_heartbeat_fresh(
+        InvariantInputs(
+            runner_heartbeat={
+                "verdict": "STALE",
+                "age_seconds": 16.0,
+                "threshold_seconds": 15.0,
+                "row": {"instance_token": "runner:v2:test"},
+            }
+        )
+    )
+
+    assert result["status"] == "FAIL"
+    assert "16.00 seconds" in result["message"]
+
+
+def test_runner_heartbeat_invariant_fails_when_heartbeat_is_absent():
+    result = check_runner_heartbeat_fresh(
+        InvariantInputs(
+            runner_heartbeat={
+                "verdict": "ABSENT",
+                "age_seconds": None,
+                "threshold_seconds": 15.0,
+                "row": None,
+            }
+        )
+    )
+
+    assert result["status"] == "FAIL"
+    assert result["actual"]["verdict"] == "ABSENT"
+
+
+def test_runner_heartbeat_invariant_is_unknown_when_timestamp_is_unreadable():
+    result = check_runner_heartbeat_fresh(
+        InvariantInputs(
+            runner_heartbeat={
+                "verdict": "UNREADABLE",
+                "age_seconds": None,
+                "threshold_seconds": 15.0,
+                "row": {"instance_token": "runner:v2:test"},
+            }
+        )
+    )
+
+    assert result["status"] == "UNKNOWN"
+    assert result["difference"] == {"invalid_verdict": "UNREADABLE"}
+    assert "unreadable verdict" in result["message"]
+
+
+def test_read_database_inputs_with_now_none_does_not_raise(monkeypatch):
+    heartbeat_row = (
+        "runner:v2:test",
+        123,
+        "dev",
+        "read_only",
+        datetime(2026, 8, 31, 12, 0, tzinfo=timezone.utc),
+        datetime(2026, 8, 31, 12, 0, 4, tzinfo=timezone.utc),
+        4,
+        3,
+        "running",
+    )
+    connection = _DatabaseConnection(heartbeat_row)
+    monkeypatch.setenv("DATABASE_URL", "postgresql://fake")
+
+    with patch("psycopg2.connect", return_value=connection):
+        result = read_database_inputs(now=None)
+
+    assert result["runner_heartbeat"]["verdict"] == "ALIVE"
+    assert result["runner_heartbeat"]["age_seconds"] >= 0
 
 
 def test_stop_coverage_fires_when_stop_is_missing(base_inputs):

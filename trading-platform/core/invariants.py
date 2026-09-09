@@ -991,6 +991,7 @@ INVARIANT_FUNCTIONS: tuple[Callable[[InvariantInputs], dict[str, Any]], ...] = (
 
 def read_database_inputs(now: datetime | None = None) -> dict[str, Any]:
     """Read all database inputs using SELECT statements only."""
+    observation_time = now or datetime.now(timezone.utc)
     dsn = os.environ.get("INVARIANTS_DATABASE_URL") or os.environ.get("DATABASE_URL")
     if not dsn:
         raise RuntimeError("no database connection is configured")
@@ -1146,16 +1147,22 @@ def read_database_inputs(now: datetime | None = None) -> dict[str, Any]:
             heartbeat_row = dict(zip(columns, row))
             last_beat_at = _parse_datetime(heartbeat_row["last_beat_at"])
             age_seconds = (
-                max(0.0, (timestamp.astimezone(timezone.utc) - last_beat_at).total_seconds())
+                max(
+                    0.0,
+                    (observation_time.astimezone(timezone.utc) - last_beat_at).total_seconds(),
+                )
                 if last_beat_at is not None
                 else None
             )
             result["runner_heartbeat"] = {
                 "verdict": (
-                    "ALIVE"
-                    if age_seconds is not None
-                    and age_seconds <= RUNNER_HEARTBEAT_THRESHOLD_SECONDS
-                    else "STALE"
+                    "UNREADABLE"
+                    if age_seconds is None
+                    else (
+                        "ALIVE"
+                        if age_seconds <= RUNNER_HEARTBEAT_THRESHOLD_SECONDS
+                        else "STALE"
+                    )
                 ),
                 "age_seconds": age_seconds,
                 "threshold_seconds": RUNNER_HEARTBEAT_THRESHOLD_SECONDS,

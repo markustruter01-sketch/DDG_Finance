@@ -88,6 +88,7 @@ class InvariantInputs:
     fleet_equity: float | None = None
     cycle_rows: dict[str, dict[str, Any]] | None = None
     cycle_intervals: dict[str, float] | None = None
+    pause_states: dict[str, bool] | None = None
     reconciliation_rows: list[dict[str, Any]] | None = None
     unresolved_degradations: list[dict[str, Any]] | None = None
     kill_switch_runtime: bool | None = None
@@ -465,9 +466,13 @@ def check_cycle_freshness(inputs: InvariantInputs) -> dict[str, Any]:
         )
 
     actual_rows: list[dict[str, Any]] = []
+    paused: list[dict[str, Any]] = []
     stale: list[dict[str, Any]] = []
     unreadable: list[dict[str, Any]] = []
     for bot_id in ACTIVE_BOTS:
+        if inputs.pause_states is not None and inputs.pause_states.get(bot_id) is True:
+            paused.append({"bot_id": bot_id, "reason": "intentionally paused"})
+            continue
         row = inputs.cycle_rows.get(bot_id)
         success_at = _parse_datetime(row.get("last_success_at")) if row else None
         threshold = CYCLE_FRESHNESS_MULTIPLIER * intervals[bot_id]
@@ -485,7 +490,11 @@ def check_cycle_freshness(inputs: InvariantInputs) -> dict[str, Any]:
         if age > threshold:
             stale.append(item)
 
-    actual = {"bots": actual_rows, "missing_or_unreadable": unreadable}
+    actual = {
+        "bots": actual_rows,
+        "paused": paused,
+        "missing_or_unreadable": unreadable,
+    }
     if unreadable:
         return _unknown(
             name,
@@ -513,12 +522,24 @@ def check_cycle_freshness(inputs: InvariantInputs) -> dict[str, Any]:
             message=f"{len(stale)} bot cycle record(s) exceed 3 × their configured interval.",
             source_key="cycle_freshness",
         )
+    if len(paused) == len(ACTIVE_BOTS):
+        return _passed(
+            name,
+            actual=actual,
+            expected=expected,
+            difference={"stale_bots": 0},
+            message="No bot is expected to be cycling because all active bots are intentionally paused.",
+            source_key="cycle_freshness",
+        )
     return _passed(
         name,
         actual=actual,
         expected=expected,
         difference={"stale_bots": 0},
-        message=f"All {len(actual_rows)} bot cycle records are within the established threshold.",
+        message=(
+            f"All {len(actual_rows)} active bot cycle record(s) are within the "
+            f"established threshold; {len(paused)} bot(s) are intentionally paused."
+        ),
         source_key="cycle_freshness",
     )
 
@@ -1081,6 +1102,19 @@ def read_database_inputs(now: datetime | None = None) -> dict[str, Any]:
                     "cycle_count": cycle_count,
                     "status": status,
                 }
+
+            cur.execute(
+                """
+                SELECT bot_id, paused
+                FROM bots_state
+                WHERE bot_id = ANY(%s)
+                """,
+                (list(ACTIVE_BOTS),),
+            )
+            result["pause_states"] = {
+                bot_id: paused
+                for bot_id, paused in cur.fetchall()
+            }
 
             cur.execute(
                 """

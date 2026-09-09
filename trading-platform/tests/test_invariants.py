@@ -498,6 +498,110 @@ def test_cycle_freshness_unknown_when_records_are_unreadable(base_inputs):
     assert result["status"] == "UNKNOWN"
 
 
+def test_cycle_freshness_excludes_paused_bot_with_missing_success(base_inputs):
+    inputs = replace(
+        _copy(base_inputs),
+        pause_states={
+            "oracle": True,
+            "spy_qqq_trend": False,
+            "jerome_macro": False,
+        },
+    )
+    inputs.cycle_rows["oracle"]["last_success_at"] = None
+
+    result = check_cycle_freshness(inputs)
+
+    assert result["status"] == "PASS"
+    assert result["actual"]["paused"] == [
+        {"bot_id": "oracle", "reason": "intentionally paused"}
+    ]
+    assert result["actual"]["missing_or_unreadable"] == []
+
+
+def test_cycle_freshness_keeps_unpaused_missing_success_unknown(base_inputs):
+    inputs = _copy(base_inputs)
+    inputs.pause_states = {
+        "oracle": False,
+        "spy_qqq_trend": False,
+        "jerome_macro": False,
+    }
+    inputs.cycle_rows["oracle"]["last_success_at"] = None
+
+    result = check_cycle_freshness(inputs)
+
+    assert result["status"] == "UNKNOWN"
+    assert result["actual"]["missing_or_unreadable"] == [
+        {"bot_id": "oracle", "last_success_at": None}
+    ]
+
+
+def test_cycle_freshness_names_stale_unpaused_bot_while_paused_bot_is_excluded(
+    base_inputs,
+):
+    inputs = replace(
+        _copy(base_inputs),
+        pause_states={
+            "oracle": True,
+            "spy_qqq_trend": False,
+            "jerome_macro": False,
+        },
+    )
+    inputs.cycle_rows["oracle"]["last_success_at"] = None
+    inputs.cycle_rows["spy_qqq_trend"]["last_success_at"] = (
+        inputs.now - timedelta(seconds=10_801)
+    )
+
+    result = check_cycle_freshness(inputs)
+
+    assert result["status"] == "FAIL"
+    assert [row["bot_id"] for row in result["difference"]["stale_bots"]] == [
+        "spy_qqq_trend"
+    ]
+    assert result["actual"]["paused"] == [
+        {"bot_id": "oracle", "reason": "intentionally paused"}
+    ]
+
+
+def test_cycle_freshness_without_pause_states_matches_previous_behavior(base_inputs):
+    inputs = _copy(base_inputs)
+    inputs.cycle_rows["oracle"]["last_success_at"] = None
+
+    result = check_cycle_freshness(inputs)
+
+    assert result["status"] == "UNKNOWN"
+    assert result["actual"]["paused"] == []
+    assert result["actual"]["missing_or_unreadable"] == [
+        {"bot_id": "oracle", "last_success_at": None}
+    ]
+
+
+def test_cycle_freshness_passes_when_all_active_bots_are_paused(base_inputs):
+    inputs = replace(
+        _copy(base_inputs),
+        pause_states={
+            "oracle": True,
+            "spy_qqq_trend": True,
+            "jerome_macro": True,
+        },
+    )
+    for row in inputs.cycle_rows.values():
+        row["last_success_at"] = None
+
+    result = check_cycle_freshness(inputs)
+
+    assert result["status"] == "PASS"
+    assert [row["bot_id"] for row in result["actual"]["paused"]] == [
+        "oracle",
+        "spy_qqq_trend",
+        "jerome_macro",
+    ]
+    assert result["actual"]["missing_or_unreadable"] == []
+    assert (
+        result["message"]
+        == "No bot is expected to be cycling because all active bots are intentionally paused."
+    )
+
+
 def test_reconciliation_fires_when_latest_row_is_not_clean(base_inputs):
     inputs = _copy(base_inputs)
     inputs.reconciliation_rows[0]["clean"] = False

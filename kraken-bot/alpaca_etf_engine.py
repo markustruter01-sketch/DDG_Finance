@@ -51,7 +51,7 @@ def _ensure_tp() -> None:
 
 _ensure_tp()
 from core.order_ids import submit_with_unique_client_order_id
-from core.symbols import same_symbol
+from core.symbols import canonical_symbol, same_symbol
 
 
 # ── Yahoo Finance OHLCV fetcher ───────────────────────────────────────────────
@@ -201,6 +201,7 @@ class AlpacaEtfEngine:
                             symbol          TEXT          NOT NULL,
                             direction       TEXT          NOT NULL DEFAULT 'long',
                             qty             NUMERIC       NOT NULL,
+                            current_qty     NUMERIC,
                             entry_price     NUMERIC       NOT NULL,
                             entry_atr       NUMERIC,
                             notional_usd    NUMERIC       NOT NULL,
@@ -221,6 +222,8 @@ class AlpacaEtfEngine:
                             ON alpaca_etf_positions (bot_id, status, opened_at);
                         ALTER TABLE alpaca_etf_positions
                             ADD COLUMN IF NOT EXISTS stop_order_id TEXT;
+                        ALTER TABLE alpaca_etf_positions
+                            ADD COLUMN IF NOT EXISTS current_qty NUMERIC;
                         CREATE TABLE IF NOT EXISTS regional_scan_log (
                             id              BIGSERIAL PRIMARY KEY,
                             ts              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -267,6 +270,141 @@ class AlpacaEtfEngine:
                 logger.info(f"EtfEngine | TP backfill: updated {rows} row(s) with missing tp1/tp2 prices")
         except Exception as exc:
             logger.warning(f"EtfEngine | TP backfill failed (non-fatal): {exc}")
+
+        self._backfill_current_qty()
+
+    def _backfill_current_qty(self) -> None:
+        """Populate NULL current_qty values from closed state and broker state."""
+        _ensure_tp()
+        closed_updated = 0
+        open_updated = 0
+        open_unresolved = 0
+
+        try:
+            from db.postgres import get_conn, is_pg_available
+            if not is_pg_available():
+                return
+
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        SELECT id, bot_id, symbol, status
+                        FROM alpaca_etf_positions
+                        WHERE current_qty IS NULL
+                          AND status IN ('open', 'closed')
+                        ORDER BY id
+                        """
+                    )
+                    pending_rows = cur.fetchall()
+                    open_rows = [
+                        row for row in pending_rows
+                        if row[3] == "open"
+                    ]
+
+                    cur.execute(
+                        """
+                        UPDATE alpaca_etf_positions
+                        SET current_qty = 0
+                        WHERE current_qty IS NULL
+                          AND status = 'closed'
+                        """
+                    )
+                    closed_updated = cur.rowcount
+
+                    if open_rows:
+                        try:
+                            # self.api is the Alpaca REST client created at startup;
+                            # get_all_positions() performs a broker GET only.
+                            broker_positions = self.api.get_all_positions()
+                            broker_by_symbol = {
+                                canonical_symbol(position.symbol): str(position.qty)
+                                for position in broker_positions
+                                if canonical_symbol(getattr(position, "symbol", ""))
+                            }
+                        except Exception as exc:
+                            open_unresolved = len(open_rows)
+                            logger.error(
+                                f"EtfEngine | current_qty broker read failed; "
+                                f"left {open_unresolved} open row(s) NULL: {exc!r}"
+                            )
+                            self._record_current_qty_degradation(
+                                error_type="etf_current_qty_broker_read_failed",
+                                message=(
+                                    "ETF current_qty backfill broker read failed; "
+                                    f"left {open_unresolved} open row(s) NULL"
+                                ),
+                                detail=repr(exc),
+                            )
+                        else:
+                            for row_id, bot_id, symbol, _status in open_rows:
+                                broker_qty = broker_by_symbol.get(
+                                    canonical_symbol(symbol)
+                                )
+                                if broker_qty is None:
+                                    open_unresolved += 1
+                                    logger.error(
+                                        f"EtfEngine | current_qty broker position "
+                                        f"missing for {bot_id}/{symbol}; row {row_id} "
+                                        "left NULL"
+                                    )
+                                    self._record_current_qty_degradation(
+                                        error_type="etf_current_qty_broker_position_missing",
+                                        message=(
+                                            "ETF current_qty backfill broker position "
+                                            f"missing for {bot_id}/{symbol}; row {row_id} "
+                                            "left NULL"
+                                        ),
+                                        detail=f"row_id={row_id}; symbol={symbol}",
+                                        bot_id=bot_id,
+                                    )
+                                    continue
+
+                                cur.execute(
+                                    """
+                                    UPDATE alpaca_etf_positions
+                                    SET current_qty = %s
+                                    WHERE id = %s
+                                      AND current_qty IS NULL
+                                    """,
+                                    (broker_qty, row_id),
+                                )
+                                open_updated += cur.rowcount
+
+                conn.commit()
+
+            logger.info(
+                "EtfEngine | current_qty backfill: "
+                f"closed updated={closed_updated}, "
+                f"open updated={open_updated}, "
+                f"open unresolved={open_unresolved}"
+            )
+        except Exception as exc:
+            logger.error(f"EtfEngine | current_qty backfill failed (non-fatal): {exc!r}")
+
+    @staticmethod
+    def _record_current_qty_degradation(
+        *,
+        error_type: str,
+        message: str,
+        detail: str,
+        bot_id: Optional[str] = None,
+    ) -> None:
+        try:
+            from core.degradation_tracker import record_degradation
+
+            record_degradation(
+                component="alpaca",
+                severity="error",
+                error_type=error_type,
+                message=message,
+                detail=detail,
+                bot_id=bot_id,
+            )
+        except Exception as exc:
+            logger.error(
+                f"EtfEngine | failed to record current_qty degradation: {exc!r}"
+            )
 
     # ── Account ───────────────────────────────────────────────────────────────
 

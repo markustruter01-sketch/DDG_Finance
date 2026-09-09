@@ -315,7 +315,7 @@ def check_stop_coverage(inputs: InvariantInputs) -> dict[str, Any]:
             actual=actual,
             expected=expected,
             difference={"failed_positions": failures},
-            message=f"{failures} material strategy position(s) lack an exactly matching covering stop.",
+            message=f"{failures} material strategy position(s) lack a covering stop.",
             source_key="stop_coverage",
         )
     return _passed(

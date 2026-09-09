@@ -324,7 +324,10 @@ CREATE TABLE IF NOT EXISTS alpaca_etf_positions (
     bot_id          TEXT          NOT NULL,
     symbol          TEXT          NOT NULL,
     direction       TEXT          NOT NULL DEFAULT 'long',
+    -- qty is the ENTRY quantity used for scale-out sizing and must never be decremented.
+    -- current_qty is the live quantity used for broker reconciliation.
     qty             NUMERIC       NOT NULL,
+    current_qty     NUMERIC,
     entry_price     NUMERIC       NOT NULL,
     entry_atr       NUMERIC,
     notional_usd    NUMERIC       NOT NULL,
@@ -343,6 +346,7 @@ CREATE TABLE IF NOT EXISTS alpaca_etf_positions (
 );
 CREATE INDEX IF NOT EXISTS idx_etf_pos_status
     ON alpaca_etf_positions (bot_id, status, opened_at);
+ALTER TABLE alpaca_etf_positions ADD COLUMN IF NOT EXISTS current_qty NUMERIC;
 
 -- Equity snapshots (time-series portfolio value for equity curve chart)
 -- Per-bot fleet equity snapshots used for mark-to-market 24h P&L.

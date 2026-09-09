@@ -17,7 +17,7 @@ import subprocess as _subprocess
 import sys
 import time
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone as _tz
+from datetime import datetime, timedelta, timezone as _tz
 from typing import Any
 
 from fastapi import FastAPI, APIRouter
@@ -107,13 +107,15 @@ def _refresh_bot3_metals_history() -> None:
         )
 
 
+YAHOO_STARTUP_DELAY_SECONDS = 60
+
+
 def _register_yahoo_refresh_jobs(scheduler) -> None:
-    """Run both Yahoo refreshes once, then keep them current every six hours."""
-    _refresh_crypto_yahoo_history()
-    _refresh_bot3_metals_history()
+    """Register Yahoo refreshes with a delayed first run, then every six hours."""
 
     from apscheduler.triggers.interval import IntervalTrigger
 
+    first_run = datetime.now(_tz.utc) + timedelta(seconds=YAHOO_STARTUP_DELAY_SECONDS)
     scheduler.add_job(
         func=_refresh_crypto_yahoo_history,
         trigger=IntervalTrigger(hours=6),
@@ -121,6 +123,7 @@ def _register_yahoo_refresh_jobs(scheduler) -> None:
         name="Crypto Yahoo History Refresh",
         replace_existing=True,
         misfire_grace_time=300,
+        next_run_time=first_run,
     )
     scheduler.add_job(
         func=_refresh_bot3_metals_history,
@@ -129,6 +132,7 @@ def _register_yahoo_refresh_jobs(scheduler) -> None:
         name="Bot 3 Metals Yahoo History Refresh",
         replace_existing=True,
         misfire_grace_time=300,
+        next_run_time=first_run,
     )
     logger.info("Yahoo refresh | crypto and Bot 3 metals jobs registered (6-hour interval)")
 

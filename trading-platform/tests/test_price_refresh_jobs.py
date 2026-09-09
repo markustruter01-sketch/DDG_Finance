@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -30,7 +31,7 @@ def _fake_logger(monkeypatch):
     return records
 
 
-def test_yahoo_refresh_jobs_run_at_startup_and_register_distinct_six_hour_jobs(monkeypatch):
+def test_yahoo_refresh_jobs_schedule_delayed_first_run_and_six_hour_interval(monkeypatch):
     calls = []
     records = _fake_logger(monkeypatch)
     monkeypatch.setattr(
@@ -44,10 +45,11 @@ def test_yahoo_refresh_jobs_run_at_startup_and_register_distinct_six_hour_jobs(m
         lambda: calls.append("metals") or {"GLD": 12, "SLV": 13},
     )
     scheduler = _RecordingScheduler()
+    before_registration = datetime.now(timezone.utc)
 
     main._register_yahoo_refresh_jobs(scheduler)
 
-    assert calls == ["crypto", "metals"]
+    assert calls == []
     assert [job["id"] for job in scheduler.jobs] == [
         "crypto_yahoo_history_refresh",
         "bot3_metals_history_refresh",
@@ -55,8 +57,28 @@ def test_yahoo_refresh_jobs_run_at_startup_and_register_distinct_six_hour_jobs(m
     assert all(job["replace_existing"] is True for job in scheduler.jobs)
     assert all(job["misfire_grace_time"] == 300 for job in scheduler.jobs)
     assert all(job["trigger"].interval.total_seconds() == 6 * 60 * 60 for job in scheduler.jobs)
-    assert any("BTC/USD: 10" in message for message in records["info"])
-    assert any("SLV: 13" in message for message in records["info"])
+    assert all(job["next_run_time"] >= before_registration for job in scheduler.jobs)
+    assert all(
+        50 <= (job["next_run_time"] - before_registration).total_seconds() <= 70
+        for job in scheduler.jobs
+    )
+    assert any("6-hour interval" in message for message in records["info"])
+
+
+def test_yahoo_refresh_registration_makes_no_network_or_pipeline_call(monkeypatch):
+    def fail_if_called():
+        raise AssertionError("Yahoo refresh ran during job registration")
+
+    monkeypatch.setattr(main, "_refresh_crypto_yahoo_history", fail_if_called)
+    monkeypatch.setattr(main, "_refresh_bot3_metals_history", fail_if_called)
+    scheduler = _RecordingScheduler()
+
+    main._register_yahoo_refresh_jobs(scheduler)
+
+    assert [job["id"] for job in scheduler.jobs] == [
+        "crypto_yahoo_history_refresh",
+        "bot3_metals_history_refresh",
+    ]
 
 
 @pytest.mark.parametrize(

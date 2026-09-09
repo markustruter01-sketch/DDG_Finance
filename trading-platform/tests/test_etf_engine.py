@@ -92,10 +92,10 @@ class _FakeApi:
     def __init__(self, positions=None, error=None):
         self.positions = positions or []
         self.error = error
-        self.get_all_positions_calls = 0
+        self.list_positions_calls = 0
 
-    def get_all_positions(self):
-        self.get_all_positions_calls += 1
+    def list_positions(self):
+        self.list_positions_calls += 1
         if self.error is not None:
             raise self.error
         return self.positions
@@ -150,6 +150,16 @@ def test_current_qty_backfill_sets_open_rows_by_canonical_symbol(monkeypatch):
     assert rows[1]["current_qty"] == "43.355"
 
 
+def test_current_qty_backfill_uses_rest_list_positions_method(monkeypatch):
+    rows = _rows()
+    api = _FakeApi([SimpleNamespace(symbol="E/WY", qty="43.355")])
+    engine, _connection = _engine(monkeypatch, rows, api)
+
+    engine._backfill_current_qty()
+
+    assert api.list_positions_calls == 1
+
+
 def test_current_qty_backfill_leaves_cancelled_rows_untouched(monkeypatch):
     rows = _rows()
     engine, _connection = _engine(
@@ -175,7 +185,7 @@ def test_current_qty_backfill_leaves_populated_rows_untouched(monkeypatch):
     engine._backfill_current_qty()
 
     assert rows[3]["current_qty"] == 7
-    assert engine.api.get_all_positions_calls == 0
+    assert engine.api.list_positions_calls == 0
 
 
 def test_current_qty_backfill_broker_failure_updates_closed_and_records_degradation(
@@ -209,4 +219,4 @@ def test_current_qty_backfill_is_idempotent(monkeypatch):
     engine._backfill_current_qty()
 
     assert rows == after_first
-    assert api.get_all_positions_calls == 1
+    assert api.list_positions_calls == 1

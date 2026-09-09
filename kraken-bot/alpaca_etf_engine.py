@@ -315,8 +315,8 @@ class AlpacaEtfEngine:
                     if open_rows:
                         try:
                             # self.api is the Alpaca REST client created at startup;
-                            # get_all_positions() performs a broker GET only.
-                            broker_positions = self.api.get_all_positions()
+                            # list_positions() performs a broker GET only.
+                            broker_positions = self.api.list_positions()
                             broker_by_symbol = {
                                 canonical_symbol(position.symbol): str(position.qty)
                                 for position in broker_positions

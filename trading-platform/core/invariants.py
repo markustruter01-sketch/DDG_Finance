@@ -947,7 +947,10 @@ def check_runner_heartbeat_fresh(inputs: InvariantInputs) -> dict[str, Any]:
                 if actual["age_seconds"] is not None
                 else None
             },
-            message="The latest durable runner heartbeat is stale.",
+            message=(
+                "The latest durable runner heartbeat is "
+                f"{float(actual['age_seconds']):.2f} seconds old."
+            ),
             source_key="runner_heartbeat",
         )
     if verdict != "ALIVE":

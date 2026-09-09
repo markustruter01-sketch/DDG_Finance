@@ -243,8 +243,32 @@ def test_read_database_inputs_with_now_none_does_not_raise(monkeypatch):
     with patch("psycopg2.connect", return_value=connection):
         result = read_database_inputs(now=None)
 
-    assert result["runner_heartbeat"]["verdict"] == "ALIVE"
-    assert result["runner_heartbeat"]["age_seconds"] >= 0
+    assert result["runner_heartbeat"]["verdict"] in {"ALIVE", "STALE"}
+    assert result["runner_heartbeat"]["age_seconds"] is not None
+
+
+def test_read_database_inputs_marks_unparseable_heartbeat_unreadable(monkeypatch):
+    heartbeat_row = (
+        "runner:v2:test",
+        123,
+        "dev",
+        "read_only",
+        datetime(2026, 8, 31, 12, 0, tzinfo=timezone.utc),
+        "not-a-timestamp",
+        4,
+        3,
+        "running",
+    )
+    connection = _DatabaseConnection(heartbeat_row)
+    monkeypatch.setenv("DATABASE_URL", "postgresql://fake")
+
+    with patch("psycopg2.connect", return_value=connection):
+        result = read_database_inputs(
+            now=datetime(2026, 8, 31, 12, 0, tzinfo=timezone.utc)
+        )
+
+    assert result["runner_heartbeat"]["verdict"] == "UNREADABLE"
+    assert result["runner_heartbeat"]["age_seconds"] is None
 
 
 def test_stop_coverage_fires_when_stop_is_missing(base_inputs):

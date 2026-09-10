@@ -366,3 +366,17 @@ mtime_ms = 1788498873780
 storage_uri = "gcs://replit-rams-assets-worf/rams/assets/repl:479b9041-b193-4ed4-a556-02be48b883b3/aba1d40e-7e78-44c2-ba7d-989f0a74691b/2f191b7f-d82b-4b01-9166-93f36cac47ef"
 storage_version_token = "1788498890853677"
 content_type = "application/octet-stream"
+
+[[outputs]]
+id = "NXip_IQjmA5L3Fh6ex_Zt"
+uri = "file://quant-terminal-source.zip"
+type = "unspecified"
+title = "Quant Terminal source code"
+description = "Clean project source archive. Excludes Git history, dependencies, caches, backups, screenshots, attached uploads, existing archives, and environment files."
+logical_id = "43d5a70d-cce1-4c98-aa4c-ef49c219cd3d"
+content_hash = "sha256:0d4d32b19d3ed818475347092668b5c31121976f9210a7cd98655c468667ca3a"
+size = 54930160
+mtime_ms = 1789078271346
+storage_uri = "gcs://replit-rams-assets-worf/rams/assets/repl:479b9041-b193-4ed4-a556-02be48b883b3/43d5a70d-cce1-4c98-aa4c-ef49c219cd3d/1e811027-e841-4819-b1d1-5bd0efafc8d6"
+storage_version_token = "1789078278612076"
+content_type = "application/octet-stream"

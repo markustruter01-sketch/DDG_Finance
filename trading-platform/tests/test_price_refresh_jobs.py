@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import sys
+import importlib
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
@@ -115,8 +115,9 @@ def test_yahoo_refresh_failures_log_error_and_record_degradation(
         lambda: (_ for _ in ()).throw(RuntimeError(failure_text)),
     )
     degradation_records = []
+    degradation_tracker = importlib.import_module("core.degradation_tracker")
     monkeypatch.setattr(
-        sys.modules["core.degradation_tracker"],
+        degradation_tracker,
         "record_degradation",
         lambda **kwargs: degradation_records.append(kwargs),
     )

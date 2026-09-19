@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
+from core import degradation_tracker
 from core.invariants import (
     CRYPTO_EXPOSURE_LIMIT,
     PROPOSED_CRYPTO_DRIFT_BAND,
@@ -627,11 +628,200 @@ def test_degradations_fires_for_unresolved_high_severity_event(base_inputs):
     assert result["actual"]["unresolved_count"] == 1
 
 
+def test_degradations_ignores_only_its_own_unresolved_rows(base_inputs):
+    inputs = _copy(base_inputs)
+    inputs.unresolved_degradations = [
+        {
+            "id": 7,
+            "severity": "high",
+            "error_type": "zero_unresolved_high_severity_degradations",
+        }
+    ]
+
+    result = check_degradations(inputs)
+
+    assert result["status"] == "PASS"
+    assert result["actual"]["unresolved_count"] == 0
+    assert result["actual"]["excluded_self_count"] == 1
+
+
+def test_degradations_counts_other_rows_but_not_its_own(base_inputs):
+    inputs = _copy(base_inputs)
+    inputs.unresolved_degradations = [
+        {
+            "id": 7,
+            "severity": "critical",
+            "error_type": "zero_unresolved_high_severity_degradations",
+        },
+        {
+            "id": 8,
+            "severity": "high",
+            "error_type": "different_condition",
+        },
+    ]
+
+    result = check_degradations(inputs)
+
+    assert result["status"] == "FAIL"
+    assert result["actual"]["unresolved_count"] == 1
+    assert result["actual"]["excluded_self_count"] == 1
+    assert result["message"] == "1 unresolved high-severity degradation event(s) remain."
+
+
 def test_degradations_unknown_when_log_is_unreadable(base_inputs):
     result = check_degradations(
         replace(base_inputs, unresolved_degradations=None)
     )
     assert result["status"] == "UNKNOWN"
+
+
+class _FakeDegradationCursor:
+    def __init__(self, rows):
+        self.rows = rows
+        self.executions = []
+        self.rowcount = 0
+        self._fetchone = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return False
+
+    def execute(self, sql, params=()):
+        self.executions.append((sql, params))
+        normalized = " ".join(sql.split()).upper()
+        if normalized.startswith("SELECT COUNT"):
+            component, error_type = params
+            self._fetchone = (
+                sum(
+                    1
+                    for row in self.rows
+                    if not row["resolved"]
+                    and row["component"] == component
+                    and row["error_type"] == error_type
+                ),
+            )
+            return
+        if normalized.startswith("UPDATE"):
+            reason, *filters = params
+            if "ID = %S" in normalized:
+                event_id = filters[0]
+                matching = [
+                    row
+                    for row in self.rows
+                    if not row["resolved"] and row["id"] == event_id
+                ]
+            else:
+                component, error_type = filters
+                matching = [
+                    row
+                    for row in self.rows
+                    if not row["resolved"]
+                    and row["component"] == component
+                    and row["error_type"] == error_type
+                ]
+            for row in matching:
+                row["resolved"] = True
+                row["reason"] = reason
+            self.rowcount = len(matching)
+
+    def fetchone(self):
+        return self._fetchone
+
+
+class _FakeDegradationConnection:
+    def __init__(self, cursor):
+        self.cursor_value = cursor
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return False
+
+    def cursor(self):
+        return self.cursor_value
+
+
+def _patch_degradation_database(monkeypatch, cursor):
+    import db.postgres
+
+    monkeypatch.setattr(db.postgres, "is_pg_available", lambda: True)
+    monkeypatch.setattr(
+        db.postgres,
+        "get_conn",
+        lambda: _FakeDegradationConnection(cursor),
+    )
+
+
+def test_mark_resolved_with_event_id_resolves_exactly_that_row(monkeypatch):
+    cursor = _FakeDegradationCursor(
+        [
+            {"id": 7, "component": "oracle", "error_type": "stale", "resolved": False},
+            {"id": 8, "component": "oracle", "error_type": "stale", "resolved": False},
+        ]
+    )
+    _patch_degradation_database(monkeypatch, cursor)
+
+    assert degradation_tracker.mark_resolved(
+        "oracle",
+        "stale",
+        event_id=7,
+    ) == 1
+    assert cursor.rows[0]["resolved"] is True
+    assert cursor.rows[1]["resolved"] is False
+    assert len(cursor.executions) == 1
+
+
+def test_mark_resolved_without_event_id_resolves_all_five_matching_rows(monkeypatch):
+    cursor = _FakeDegradationCursor(
+        [
+            {"id": index, "component": "oracle", "error_type": "stale", "resolved": False}
+            for index in range(1, 6)
+        ]
+    )
+    _patch_degradation_database(monkeypatch, cursor)
+
+    assert degradation_tracker.mark_resolved("oracle", "stale") == 5
+    assert all(row["resolved"] for row in cursor.rows)
+    assert len(cursor.executions) == 2
+
+
+def test_mark_resolved_without_event_id_does_not_touch_different_error_type(monkeypatch):
+    cursor = _FakeDegradationCursor(
+        [
+            {"id": 1, "component": "oracle", "error_type": "stale", "resolved": False},
+            {"id": 2, "component": "oracle", "error_type": "other", "resolved": False},
+        ]
+    )
+    _patch_degradation_database(monkeypatch, cursor)
+
+    assert degradation_tracker.mark_resolved("oracle", "stale") == 1
+    assert cursor.rows[0]["resolved"] is True
+    assert cursor.rows[1]["resolved"] is False
+
+
+def test_mark_resolved_bulk_guard_resolves_nothing_above_limit(monkeypatch):
+    cursor = _FakeDegradationCursor(
+        [
+            {
+                "id": index,
+                "component": "oracle",
+                "error_type": "stale",
+                "resolved": False,
+            }
+            for index in range(degradation_tracker.MAX_BULK_RESOLVE_ROWS + 1)
+        ]
+    )
+    _patch_degradation_database(monkeypatch, cursor)
+
+    with patch.object(degradation_tracker.logger, "error") as log_error:
+        assert degradation_tracker.mark_resolved("oracle", "stale") == 0
+
+    assert all(not row["resolved"] for row in cursor.rows)
+    assert len(cursor.executions) == 1
+    log_error.assert_called_once()
 
 
 def test_kill_switch_parity_fires_when_runtime_disagrees(base_inputs):

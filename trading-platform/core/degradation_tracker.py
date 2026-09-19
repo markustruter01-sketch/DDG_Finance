@@ -38,6 +38,7 @@ _EVENT_TTL: dict[tuple[str, str], int] = {
 _DEFAULT_TTL             = 900   # 15 min for all other (component, error_type) pairs
 _CRITICAL_ALERT_CEILING  = 300   # cap for trading-critical events (base_ttl ≤ 300) — re-alert every 5 min max
 _BACKOFF_MAX_TTL         = 1800  # cap for non-critical events — allow exponential backoff up to 30 min
+MAX_BULK_RESOLVE_ROWS    = 1000  # safety guard for condition-wide resolution
 
 # key → last recorded timestamp
 _recent_keys: dict[str, float] = {}
@@ -193,53 +194,64 @@ def mark_resolved(
     bot_id: Optional[str] = None,
 ) -> int:
     """
-    Mark one unresolved event as resolved with an auditable reason.
+    Mark unresolved events as resolved with an auditable reason.
 
     ``event_id`` is preferred by the scheduled resolver because it prevents a
-    multi-bot/error-type batch from resolving the wrong row.  Without it, the
-    historical behavior of resolving only the newest matching row is retained.
+    multi-bot/error-type batch from resolving the wrong row.  Without it, every
+    open row for the component and error type is resolved, subject to the
+    bulk-resolution safety guard.
     Also clears the in-memory escalation state so the next fresh occurrence of
     the same signature starts with the base TTL rather than an elevated window.
     """
     resolved_count = 0
-    # DB update: mark the most recent open record as resolved.
     # Runs only when the database is available; escalation reset always runs.
     try:
         from db.postgres import get_conn, is_pg_available
         if is_pg_available():
             with get_conn() as conn:
                 with conn.cursor() as cur:
-                    cur.execute(
-                        """
-                        UPDATE system_degradations
-                        SET resolved_at = NOW(), resolved_reason = %s
-                        WHERE resolved_at IS NULL
-                          AND (
-                                id = %s
-                                OR (
-                                    %s IS NULL
-                                    AND component = %s
-                                    AND error_type = %s
-                                    AND ts = (
-                                        SELECT MAX(ts) FROM system_degradations
-                                        WHERE component = %s
-                                          AND error_type = %s
-                                          AND resolved_at IS NULL
-                                    )
-                                )
-                              )
-                        """,
-                        (
-                            reason[:500],
-                            event_id,
-                            event_id,
-                            component,
-                            error_type,
-                            component,
-                            error_type,
-                        ),
-                    )
-                    resolved_count = cur.rowcount
+                    if event_id is not None:
+                        # Keep event-specific resolution exact: the scheduled
+                        # resolver deliberately supplies this identifier.
+                        cur.execute(
+                            """
+                            UPDATE system_degradations
+                            SET resolved_at = NOW(), resolved_reason = %s
+                            WHERE resolved_at IS NULL AND id = %s
+                            """,
+                            (reason[:500], event_id),
+                        )
+                        resolved_count = cur.rowcount
+                    else:
+                        cur.execute(
+                            """
+                            SELECT COUNT(*)
+                            FROM system_degradations
+                            WHERE resolved_at IS NULL
+                              AND component = %s
+                              AND error_type = %s
+                            """,
+                            (component, error_type),
+                        )
+                        open_count = int((cur.fetchone() or (0,))[0] or 0)
+                        if open_count > MAX_BULK_RESOLVE_ROWS:
+                            logger.error(
+                                "[DEGRADATION] Refusing to resolve "
+                                f"{open_count} rows for {component}/{error_type}; "
+                                f"bulk limit is {MAX_BULK_RESOLVE_ROWS}"
+                            )
+                        else:
+                            cur.execute(
+                                """
+                                UPDATE system_degradations
+                                SET resolved_at = NOW(), resolved_reason = %s
+                                WHERE resolved_at IS NULL
+                                  AND component = %s
+                                  AND error_type = %s
+                                """,
+                                (reason[:500], component, error_type),
+                            )
+                            resolved_count = cur.rowcount
     except Exception as exc:
         logger.debug(f"[DEGRADATION] mark_resolved DB update failed: {exc}")
 

@@ -645,11 +645,24 @@ def check_degradations(inputs: InvariantInputs) -> dict[str, Any]:
         for event in inputs.unresolved_degradations
         if str(event.get("severity", "")).lower() in UNRESOLVED_HIGH_SEVERITIES
     ]
+    # A check that counts its own failures can never pass, so it can never
+    # clear its own rows. Keep those rows visible separately for audit output.
+    self_events = [
+        event
+        for event in events
+        if event.get("error_type") == name
+    ]
+    events = [
+        event
+        for event in events
+        if event.get("error_type") != name
+    ]
     # Keep operator output bounded while preserving the exact count and a
     # useful sample.  Dumping hundreds of historical rows makes the scheduled
     # log unreadable and does not improve the invariant decision.
     actual = {
         "unresolved_count": len(events),
+        "excluded_self_count": len(self_events),
         "events_sample": events[:10],
         "sample_truncated": len(events) > 10,
     }

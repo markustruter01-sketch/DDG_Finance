@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import time
 from datetime import datetime, timedelta, timezone
@@ -28,6 +29,11 @@ logger = logging.getLogger(__name__)
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 _ROOT = Path(__file__).parent.parent  # workspace root
+_ALPACA_ACCOUNT_ENV = {
+    "oracle": ("ALPACA_API_KEY", "ALPACA_SECRET_KEY"),
+    "spy_qqq_trend": ("ALPACA_BB_API_KEY", "ALPACA_BB_SECRET_KEY"),
+    "jerome_macro": ("ALPACA_JEROME_API_KEY", "ALPACA_JEROME_SECRET_KEY"),
+}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # DB Helpers
@@ -326,6 +332,34 @@ def _fetch_alpaca_closes(symbol: str, days: int = 70) -> Optional[list[float]]:
         return closes[-days:]
     except Exception as exc:
         logger.debug(f"[math_auditor] Alpaca bars {symbol}: {exc}")
+        return None
+
+
+def _fetch_alpaca_current_prices(bot_id: str) -> Optional[dict[str, float]]:
+    """Read current broker position prices without falling back to stale DB data."""
+    try:
+        from alpaca.trading.client import TradingClient  # type: ignore
+
+        key_name, secret_name = _ALPACA_ACCOUNT_ENV[bot_id]
+        key = os.environ.get(key_name, "")
+        secret = os.environ.get(secret_name, "")
+        if not key or not secret:
+            raise RuntimeError(f"credentials unavailable for {bot_id}")
+
+        client = TradingClient(key, secret, paper=True)
+        prices: dict[str, float] = {}
+        for position in client.get_all_positions():
+            raw_price = getattr(position, "current_price", None)
+            if raw_price is None:
+                continue
+            price = float(raw_price)
+            if math.isfinite(price) and price > 0:
+                prices[str(position.symbol)] = price
+        return prices
+    except Exception as exc:
+        logger.warning(
+            f"[math_auditor] Current Alpaca prices unavailable for {bot_id}: {exc}"
+        )
         return None
 
 
@@ -633,13 +667,11 @@ def audit_rsi_oracle(audit_mode: str = "full") -> int:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def audit_atr_open_positions(audit_mode: str = "quick") -> int:
-    """Module 3: For every open position with a stop, verify ATR and stop placement.
+    """Module 3: Verify that every open long has a live, valid protective stop.
 
-    Uses entry_atr (stored at trade open) when available so that ATR drift
-    between entry and audit time does not produce false-positive FAILs.
-    Falls back to current ATR with relaxed bounds when entry_atr is absent
-    (legacy positions written before the field was added), logging WARN
-    rather than FAIL so as not to pollute the audit log with unknowns.
+    A stop is valid when it exists, is positive, and is below the current broker
+    price.  Entry price is reported for context only: a ratcheted stop above
+    entry is a locked-in profit and is not an audit failure.
     """
     # Open positions are owned by the current Alpaca ETF ledger.  Do not use
     # the shared legacy state file: it can contain unrelated symbols and would
@@ -654,24 +686,68 @@ def audit_atr_open_positions(audit_mode: str = "quick") -> int:
         ORDER BY bot_id, symbol
         """
     )
+    prices_by_bot: dict[str, Optional[dict[str, float]]] = {}
+    for row in rows:
+        bot_id = str(row.get("bot_id"))
+        if bot_id not in prices_by_bot:
+            prices_by_bot[bot_id] = _fetch_alpaca_current_prices(bot_id)
+
     for row in rows:
         bot_id = str(row.get("bot_id"))
         symbol = str(row.get("symbol"))
         entry = float(row["entry_price"]) if row.get("entry_price") is not None else None
         stop = float(row["stop_price"]) if row.get("stop_price") is not None else None
         entry_atr = float(row["entry_atr"]) if row.get("entry_atr") is not None else None
-        valid = entry is not None and stop is not None and stop < entry
+        current = (prices_by_bot.get(bot_id) or {}).get(symbol)
+
+        if stop is None or not math.isfinite(stop) or stop <= 0:
+            status = "FAIL"
+            bot_output = 0.0
+            auditor_output = 0.0
+            notes = (
+                f"{symbol}: missing or invalid stop "
+                f"(entry={entry!r}, stop={stop!r}); "
+                "entry relation unavailable for a valid stop"
+            )
+        elif current is None:
+            status = "WARN"
+            bot_output = None
+            auditor_output = None
+            notes = (
+                f"{symbol}: current price unavailable; cannot verify that "
+                f"stop={stop:.5f} is below the market price "
+                f"(entry={entry!r}). Unreadable price is unknown, not a fault."
+            )
+        else:
+            status = "PASS" if stop < current else "FAIL"
+            bot_output = 1.0 if status == "PASS" else 0.0
+            auditor_output = bot_output
+            if entry is None:
+                entry_relation = "entry price unavailable"
+            elif stop > entry:
+                entry_relation = "stop is above entry — locked-in profit"
+            elif stop < entry:
+                entry_relation = "stop is below entry"
+            else:
+                entry_relation = "stop is at entry"
+            notes = (
+                f"{symbol}: stop={stop:.5f}, entry={entry!r}, current={current:.5f}; "
+                f"{entry_relation}; "
+                + (
+                    "stop is below current price"
+                    if status == "PASS"
+                    else "stop is at or above current price"
+                )
+            )
+
         _log_result(
             bot_id, "atr_stop_check",
             {"symbol": symbol, "entry": entry, "stop": stop, "entry_atr": entry_atr},
-            bot_output=1.0 if valid else 0.0,
-            auditor_output=1.0 if valid else 0.0,
-            notes=(
-                f"{symbol}: current Alpaca ETF stop is below entry"
-                if valid else f"{symbol}: missing or invalid long stop in current ETF ledger"
-            ),
+            bot_output=bot_output,
+            auditor_output=auditor_output,
+            notes=notes,
             audit_mode=audit_mode,
-            override_status="PASS" if valid else "FAIL",
+            override_status=status,
         )
         checks += 1
     return checks

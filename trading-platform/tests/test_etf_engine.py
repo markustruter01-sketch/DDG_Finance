@@ -445,7 +445,7 @@ def test_backfill_repairs_stale_closed_and_scaled_out_rows(monkeypatch):
         },
     ]
     api = _FakeApi([SimpleNamespace(symbol="EWY", qty="43.355")])
-    engine, _connection = _engine(
+    engine, connection = _engine(
         monkeypatch,
         rows,
         api,
@@ -455,6 +455,15 @@ def test_backfill_repairs_stale_closed_and_scaled_out_rows(monkeypatch):
 
     assert rows[0]["current_qty"] == 0
     assert rows[1]["current_qty"] == "43.355"
+    scaled_update = next(
+        (
+            (sql, params)
+            for sql, params in connection.cursor_obj.executed
+            if "current_qty = qty" in sql and "qty = %s" in sql
+        ),
+        None,
+    )
+    assert scaled_update is not None and len(scaled_update[1]) == 3
     after_first = [dict(row) for row in rows]
 
     engine._backfill_current_qty()

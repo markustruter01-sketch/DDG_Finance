@@ -417,6 +417,7 @@ class AlpacaEtfEngine:
                                     SET current_qty = %s
                                     WHERE id = %s
                                       AND status = 'open'
+                                      AND current_qty = qty
                                       AND qty = %s
                                     """,
                                     (broker_qty, row_id, entry_qty),

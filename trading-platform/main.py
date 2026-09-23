@@ -11,6 +11,7 @@ All endpoint handlers live in ``routes/`` sub-modules.  This file keeps only:
 """
 
 import asyncio
+import hashlib
 import hmac
 import os
 import subprocess as _subprocess
@@ -19,6 +20,7 @@ import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone as _tz
 from typing import Any
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, APIRouter
 from loguru import logger
@@ -55,6 +57,62 @@ from routes import ALL_ROUTERS
 from routes.bot_registry_route import router as bot_registry_router
 from routes.reports import router as reports_router
 from routes.strategy_bench import router as strategy_bench_router
+
+
+def _database_host_fingerprint(dsn: str | None) -> str:
+    if not dsn:
+        return "none"
+    try:
+        hostname = urlparse(dsn).hostname
+        if hostname is None:
+            return "none"
+        return hashlib.sha256(hostname.encode()).hexdigest()[:12]
+    except Exception:
+        return "unavailable"
+
+
+def _log_database_identity() -> None:
+    try:
+        from db.postgres import _get_dsn
+        from core import database_authority
+
+        try:
+            postgres_fingerprint = _database_host_fingerprint(_get_dsn())
+        except Exception:
+            postgres_fingerprint = "unavailable"
+
+        try:
+            invariants_dsn = (
+                os.environ.get("INVARIANTS_DATABASE_URL")
+                or os.environ.get("DATABASE_URL")
+            )
+            invariants_fingerprint = _database_host_fingerprint(invariants_dsn)
+        except Exception:
+            invariants_fingerprint = "unavailable"
+
+        try:
+            authoritative_fingerprint = _database_host_fingerprint(
+                database_authority.get_authoritative_dsn()
+            )
+        except Exception:
+            authoritative_fingerprint = "unavailable"
+
+        deployment = os.environ.get("REPLIT_DEPLOYMENT") or "unset"
+        logger.info(
+            "DB identity | "
+            f"postgres_dsn={postgres_fingerprint} "
+            f"invariants_dsn={invariants_fingerprint} "
+            f"authoritative_dsn={authoritative_fingerprint} "
+            f"deployment={deployment}"
+        )
+    except Exception:
+        logger.info(
+            "DB identity | "
+            "postgres_dsn=unavailable "
+            "invariants_dsn=unavailable "
+            "authoritative_dsn=unavailable "
+            f"deployment={os.environ.get('REPLIT_DEPLOYMENT') or 'unset'}"
+        )
 
 
 def _record_yahoo_refresh_failure(error_type: str, message: str, exc: Exception) -> None:
@@ -147,6 +205,7 @@ async def lifespan(app: FastAPI):
         compression="gz",
         enqueue=True,
     )
+    _log_database_identity()
     logger.info("=" * 60)
     logger.info("TRADING PLATFORM STARTING")
     logger.info("=" * 60)

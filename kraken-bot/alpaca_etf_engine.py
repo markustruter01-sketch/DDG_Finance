@@ -274,11 +274,13 @@ class AlpacaEtfEngine:
         self._backfill_current_qty()
 
     def _backfill_current_qty(self) -> None:
-        """Populate NULL current_qty values from closed state and broker state."""
+        """Repair safe current_qty mismatches from closed and scaled-out state."""
         _ensure_tp()
         closed_updated = 0
         open_updated = 0
         open_unresolved = 0
+        scaled_out_updated = 0
+        scaled_out_unresolved = 0
 
         try:
             from db.postgres import get_conn, is_pg_available
@@ -304,15 +306,27 @@ class AlpacaEtfEngine:
 
                     cur.execute(
                         """
+                        SELECT id, bot_id, symbol, qty, current_qty
+                        FROM alpaca_etf_positions
+                        WHERE status = 'open'
+                          AND (scaled_out_tp1 IS TRUE OR scaled_out_tp2 IS TRUE)
+                          AND current_qty = qty
+                        ORDER BY id
+                        """
+                    )
+                    scaled_out_rows = cur.fetchall()
+
+                    cur.execute(
+                        """
                         UPDATE alpaca_etf_positions
                         SET current_qty = 0
-                        WHERE current_qty IS NULL
-                          AND status = 'closed'
+                        WHERE status = 'closed'
+                          AND current_qty IS DISTINCT FROM 0
                         """
                     )
                     closed_updated = cur.rowcount
 
-                    if open_rows:
+                    if open_rows or scaled_out_rows:
                         try:
                             # self.api is the Alpaca REST client created at startup;
                             # list_positions() performs a broker GET only.
@@ -324,15 +338,18 @@ class AlpacaEtfEngine:
                             }
                         except Exception as exc:
                             open_unresolved = len(open_rows)
+                            scaled_out_unresolved = len(scaled_out_rows)
                             logger.error(
                                 f"EtfEngine | current_qty broker read failed; "
-                                f"left {open_unresolved} open row(s) NULL: {exc!r}"
+                                f"left {open_unresolved} NULL row(s) and "
+                                f"{scaled_out_unresolved} scaled-out row(s) unchanged: {exc!r}"
                             )
                             self._record_current_qty_degradation(
                                 error_type="etf_current_qty_broker_read_failed",
                                 message=(
                                     "ETF current_qty backfill broker read failed; "
-                                    f"left {open_unresolved} open row(s) NULL"
+                                    f"left {open_unresolved} NULL row(s) and "
+                                    f"{scaled_out_unresolved} scaled-out row(s) unchanged"
                                 ),
                                 detail=repr(exc),
                             )
@@ -371,16 +388,117 @@ class AlpacaEtfEngine:
                                 )
                                 open_updated += cur.rowcount
 
+                            for row_id, bot_id, symbol, entry_qty, _current_qty in scaled_out_rows:
+                                broker_qty = broker_by_symbol.get(
+                                    canonical_symbol(symbol)
+                                )
+                                if broker_qty is None:
+                                    scaled_out_unresolved += 1
+                                    logger.error(
+                                        f"EtfEngine | current_qty scaled-out repair "
+                                        f"broker position missing for {bot_id}/{symbol}; "
+                                        f"row {row_id} left unchanged"
+                                    )
+                                    self._record_current_qty_degradation(
+                                        error_type="etf_current_qty_broker_position_missing",
+                                        message=(
+                                            "ETF current_qty scaled-out repair broker "
+                                            f"position missing for {bot_id}/{symbol}; "
+                                            f"row {row_id} left unchanged"
+                                        ),
+                                        detail=f"row_id={row_id}; symbol={symbol}",
+                                        bot_id=bot_id,
+                                    )
+                                    continue
+
+                                cur.execute(
+                                    """
+                                    UPDATE alpaca_etf_positions
+                                    SET current_qty = %s
+                                    WHERE id = %s
+                                      AND status = 'open'
+                                      AND current_qty = qty
+                                    """,
+                                    (broker_qty, row_id, entry_qty),
+                                )
+                                scaled_out_updated += cur.rowcount
+
                 conn.commit()
 
             logger.info(
                 "EtfEngine | current_qty backfill: "
                 f"closed updated={closed_updated}, "
                 f"open updated={open_updated}, "
-                f"open unresolved={open_unresolved}"
+                f"scaled-out updated={scaled_out_updated}, "
+                f"open unresolved={open_unresolved}, "
+                f"scaled-out unresolved={scaled_out_unresolved}"
             )
         except Exception as exc:
             logger.error(f"EtfEngine | current_qty backfill failed (non-fatal): {exc!r}")
+
+    def _sync_current_qty_after_sale(self, bot_id: str, symbol: str) -> bool:
+        """Persist the broker residual after a confirmed partial/full sale."""
+        try:
+            broker_positions = self.api.list_positions()
+            broker_by_symbol = {
+                canonical_symbol(getattr(position, "symbol", "")): str(position.qty)
+                for position in broker_positions
+                if canonical_symbol(getattr(position, "symbol", ""))
+            }
+            broker_qty = broker_by_symbol.get(canonical_symbol(symbol), "0")
+
+            from db.postgres import get_conn, is_pg_available
+            if not is_pg_available():
+                raise RuntimeError("database unavailable for current_qty sale sync")
+
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        SELECT id, symbol
+                        FROM alpaca_etf_positions
+                        WHERE bot_id = %s AND status = 'open'
+                        ORDER BY id
+                        """,
+                        (bot_id,),
+                    )
+                    matching_ids = [
+                        row_id
+                        for row_id, db_symbol in cur.fetchall()
+                        if canonical_symbol(db_symbol) == canonical_symbol(symbol)
+                    ]
+                    for row_id in matching_ids:
+                        cur.execute(
+                            """
+                            UPDATE alpaca_etf_positions
+                            SET current_qty = %s
+                            WHERE id = %s
+                              AND bot_id = %s
+                              AND status = 'open'
+                            """,
+                            (broker_qty, row_id, bot_id),
+                        )
+                conn.commit()
+            logger.info(
+                f"EtfEngine | current_qty sale sync: "
+                f"{bot_id}/{symbol}={broker_qty}"
+            )
+            return True
+        except Exception as exc:
+            logger.error(
+                f"EtfEngine | current_qty sale sync failed for "
+                f"{bot_id}/{symbol}: {exc!r}"
+            )
+            self._record_current_qty_degradation(
+                error_type="etf_current_qty_sync_failed",
+                message=(
+                    f"ETF current_qty sale sync failed for {bot_id}/{symbol}; "
+                    "left current_qty unchanged"
+                ),
+                detail=repr(exc),
+                bot_id=bot_id,
+            )
+            return False
 
     @staticmethod
     def _record_current_qty_degradation(
@@ -1296,6 +1414,8 @@ class AlpacaEtfEngine:
                 filled_qty = float(getattr(refreshed, "filled_qty", 0) or 0)
                 status = str(refreshed.status).lower()
                 if status == "filled":
+                    if bot_id:
+                        self._sync_current_qty_after_sale(bot_id, symbol)
                     if bot_id and stop_price is not None:
                         self.ensure_protective_stop(bot_id, symbol, stop_price)
                     return True
@@ -1310,10 +1430,14 @@ class AlpacaEtfEngine:
                     f"EtfEngine | {symbol}: partial-exit order {order.id} still active; "
                     "refusing overlapping replacement stop"
                 )
+                if bot_id and filled_qty > 0:
+                    self._sync_current_qty_after_sale(bot_id, symbol)
                 return False
             if bot_id and stop_price is not None:
                 self.ensure_protective_stop(bot_id, symbol, stop_price)
             if filled_qty > 0:
+                if bot_id:
+                    self._sync_current_qty_after_sale(bot_id, symbol)
                 logger.warning(
                     f"EtfEngine | Partial close {symbol} filled {filled_qty} before timeout; "
                     f"residual reprotected"
@@ -1455,13 +1579,13 @@ class AlpacaEtfEngine:
                 with conn.cursor() as cur:
                     cur.execute("""
                         INSERT INTO alpaca_etf_positions
-                            (bot_id, symbol, direction, qty,
+                            (bot_id, symbol, direction, qty, current_qty,
                              entry_price, entry_atr, notional_usd,
                              stop_price, tp1_price, tp2_price,
                              min_hold_until, status, opened_at)
-                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'open',NOW())
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'open',NOW())
                     """, (
-                        bot_id, symbol, direction, qty,
+                        bot_id, symbol, direction, qty, qty,
                         entry_price, entry_atr, notional_usd,
                         stop_price, tp1_price, tp2_price,
                         min_hold_until,
@@ -1509,6 +1633,7 @@ class AlpacaEtfEngine:
                     cur.execute("""
                         UPDATE alpaca_etf_positions
                         SET status       = 'closed',
+                            current_qty  = 0,
                             closed_at    = NOW(),
                             exit_reason  = %s,
                             realised_pnl = %s

@@ -17,6 +17,7 @@ if loaded_db is not None and not hasattr(loaded_db, "__path__"):
     del sys.modules["db"]
 
 from alpaca_etf_engine import AlpacaEtfEngine
+import alpaca_etf_engine as etf_engine_module
 from db import postgres
 
 
@@ -24,7 +25,9 @@ class _FakeCursor:
     def __init__(self, rows):
         self.rows = rows
         self._result = []
+        self._fetchone_result = None
         self.rowcount = -1
+        self.executed = []
 
     def __enter__(self):
         return self
@@ -34,6 +37,7 @@ class _FakeCursor:
 
     def execute(self, sql, params=None):
         normalized = " ".join(sql.split()).lower()
+        self.executed.append((normalized, params))
         if normalized.startswith("select id, bot_id, symbol, status"):
             self._result = [
                 (row["id"], row["bot_id"], row["symbol"], row["status"])
@@ -44,30 +48,98 @@ class _FakeCursor:
             self.rowcount = len(self._result)
             return
 
+        if normalized.startswith("select id, bot_id, symbol, qty, current_qty"):
+            self._result = [
+                (
+                    row["id"],
+                    row["bot_id"],
+                    row["symbol"],
+                    row["qty"],
+                    row["current_qty"],
+                )
+                for row in self.rows
+                if row["status"] == "open"
+                and (row.get("scaled_out_tp1") or row.get("scaled_out_tp2"))
+                and row["current_qty"] == row.get("qty")
+            ]
+            self.rowcount = len(self._result)
+            return
+
+        if normalized.startswith("select id, symbol"):
+            bot_id = params[0]
+            self._result = [
+                (row["id"], row["symbol"])
+                for row in self.rows
+                if row["bot_id"] == bot_id and row["status"] == "open"
+            ]
+            self.rowcount = len(self._result)
+            return
+
         if "set current_qty = 0" in normalized:
             changed = 0
             for row in self.rows:
-                if row["current_qty"] is None and row["status"] == "closed":
+                if row["status"] == "closed" and row["current_qty"] != 0:
                     row["current_qty"] = 0
                     changed += 1
             self.rowcount = changed
             return
 
         if "set current_qty = %s" in normalized:
-            broker_qty, row_id = params
+            broker_qty, row_id = params[0], params[1]
+            expected_qty = params[2] if len(params) > 2 else None
+            bot_id = params[2] if "bot_id = %s" in normalized and len(params) > 2 else None
             changed = 0
             for row in self.rows:
-                if row["id"] == row_id and row["current_qty"] is None:
+                if (
+                    row["id"] == row_id
+                    and (bot_id is None or row["bot_id"] == bot_id)
+                    and (
+                        "current_qty = qty" not in normalized
+                        or row["current_qty"] == row.get("qty") == expected_qty
+                    )
+                ):
                     row["current_qty"] = broker_qty
                     changed = 1
                     break
             self.rowcount = changed
             return
 
+        if normalized.startswith("insert into alpaca_etf_positions"):
+            self._fetchone_result = None
+            self.rowcount = 1
+            return
+
+        if normalized.startswith("update alpaca_etf_positions") and "set status" in normalized:
+            exit_reason, realised_pnl, bot_id, symbol = params
+            self._fetchone_result = None
+            self.rowcount = 0
+            for row in self.rows:
+                if (
+                    row["bot_id"] == bot_id
+                    and row["symbol"] == symbol
+                    and row["status"] == "open"
+                ):
+                    row["status"] = "closed"
+                    row["current_qty"] = 0
+                    row["exit_reason"] = exit_reason
+                    row["realised_pnl"] = realised_pnl
+                    self._fetchone_result = (row["id"],)
+                    self.rowcount = 1
+                    break
+            return
+
+        if normalized.startswith("select trade_id, intended_price"):
+            self._fetchone_result = None
+            self.rowcount = 0
+            return
+
         raise AssertionError(f"Unexpected SQL: {sql}")
 
     def fetchall(self):
         return list(self._result)
+
+    def fetchone(self):
+        return self._fetchone_result
 
 
 class _FakeConnection:
@@ -89,16 +161,28 @@ class _FakeConnection:
 
 
 class _FakeApi:
-    def __init__(self, positions=None, error=None):
+    def __init__(self, positions=None, error=None, order_status="filled", filled_qty="10"):
         self.positions = positions or []
         self.error = error
         self.list_positions_calls = 0
+        self.order_status = order_status
+        self.filled_qty = filled_qty
 
     def list_positions(self):
         self.list_positions_calls += 1
         if self.error is not None:
             raise self.error
         return self.positions
+
+    def submit_order(self, **_kwargs):
+        return SimpleNamespace(id="sale-1")
+
+    def get_order(self, _order_id):
+        return SimpleNamespace(
+            id="sale-1",
+            status=self.order_status,
+            filled_qty=self.filled_qty,
+        )
 
 
 def _rows():
@@ -220,3 +304,221 @@ def test_current_qty_backfill_is_idempotent(monkeypatch):
 
     assert rows == after_first
     assert api.list_positions_calls == 1
+
+
+def _close_engine(monkeypatch, rows, api, degradation_records=None):
+    engine, connection = _engine(
+        monkeypatch,
+        rows,
+        api,
+        degradation_records,
+    )
+    engine.is_market_open = lambda: True
+    engine._has_pending_owned_exit = lambda *_args: False
+    engine._cancel_owned_stop = lambda *_args: True
+    engine._cancel_and_confirm_order = lambda *_args: True
+    engine.ensure_protective_stop = lambda *_args, **_kwargs: None
+    engine._exit_client_order_prefix = lambda *_args: "test-exit"
+    monkeypatch.setattr(
+        etf_engine_module,
+        "submit_with_unique_client_order_id",
+        lambda submitter, _prefix: (submitter("client-order-1"), "client-order-1"),
+    )
+    return engine, connection
+
+
+def test_record_open_initializes_current_qty_to_entry_qty(monkeypatch):
+    rows = []
+    engine, connection = _engine(monkeypatch, rows, _FakeApi())
+    monkeypatch.setattr("analysis.trade_journal.log_trade", lambda **_kwargs: None)
+
+    assert engine.record_open(
+        "oracle", "SPY", "long", 12.5, 500.0, None, 6250.0,
+        450.0, 525.0, 560.0, 5,
+    )
+
+    insert_sql, insert_params = connection.cursor_obj.executed[0]
+    assert "current_qty" in insert_sql
+    assert insert_params[3] == 12.5
+    assert insert_params[4] == 12.5
+
+
+def test_close_partial_filled_syncs_current_qty_from_broker(monkeypatch):
+    rows = [{
+        "id": 10, "bot_id": "oracle", "symbol": "E/WY", "status": "open",
+        "qty": 65.0, "current_qty": 65.0,
+    }]
+    engine, _connection = _close_engine(
+        monkeypatch,
+        rows,
+        _FakeApi([SimpleNamespace(symbol="EWY", qty="43.355")]),
+    )
+
+    assert engine.close_partial(
+        "EWY", 21.645, bot_id="oracle", stop_price=70.0,
+    )
+    assert rows[0]["current_qty"] == "43.355"
+
+
+def test_close_partial_partial_fill_syncs_residual_and_returns_true(monkeypatch):
+    rows = [{
+        "id": 11, "bot_id": "oracle", "symbol": "SPY", "status": "open",
+        "qty": 100.0, "current_qty": 100.0,
+    }]
+    engine, _connection = _close_engine(
+        monkeypatch,
+        rows,
+        _FakeApi(
+            [SimpleNamespace(symbol="SPY", qty="97.5")],
+            order_status="new",
+            filled_qty="2.5",
+        ),
+    )
+    monkeypatch.setattr(etf_engine_module.time, "sleep", lambda _seconds: None)
+    clock = iter((0.0, 0.0, 21.0))
+    monkeypatch.setattr(etf_engine_module.time, "monotonic", lambda: next(clock))
+
+    assert engine.close_partial(
+        "SPY", 10.0, bot_id="oracle", stop_price=450.0,
+    )
+    assert rows[0]["current_qty"] == "97.5"
+
+
+def test_close_partial_sync_failure_preserves_success_and_records_degradation(monkeypatch):
+    rows = [{
+        "id": 12, "bot_id": "oracle", "symbol": "SPY", "status": "open",
+        "qty": 100.0, "current_qty": 100.0,
+    }]
+    degradation_records = []
+    engine, _connection = _close_engine(
+        monkeypatch,
+        rows,
+        _FakeApi(error=RuntimeError("broker unavailable")),
+        degradation_records,
+    )
+
+    assert engine.close_partial(
+        "SPY", 10.0, bot_id="oracle", stop_price=450.0,
+    )
+    assert rows[0]["current_qty"] == 100.0
+    assert degradation_records[-1]["error_type"] == "etf_current_qty_sync_failed"
+
+
+def test_record_close_sets_current_qty_to_zero(monkeypatch):
+    rows = [{
+        "id": 13, "bot_id": "oracle", "symbol": "SPY", "status": "open",
+        "qty": 100.0, "current_qty": 97.5,
+    }]
+    engine, _connection = _engine(monkeypatch, rows, _FakeApi())
+    monkeypatch.setattr("analysis.trade_journal.close_trade", lambda **_kwargs: None)
+
+    engine.record_close("oracle", "SPY", "trailing_stop", realised_pnl=25.0)
+
+    assert rows[0]["status"] == "closed"
+    assert rows[0]["current_qty"] == 0
+
+
+def test_backfill_repairs_stale_closed_and_scaled_out_rows(monkeypatch):
+    rows = [
+        {
+            "id": 20, "bot_id": "oracle", "symbol": "SPY", "status": "closed",
+            "qty": 15.0, "current_qty": 15.0,
+        },
+        {
+            "id": 21, "bot_id": "oracle", "symbol": "E/WY", "status": "open",
+            "qty": 65.0, "current_qty": 65.0,
+            "scaled_out_tp1": True, "scaled_out_tp2": False,
+        },
+    ]
+    api = _FakeApi([SimpleNamespace(symbol="EWY", qty="43.355")])
+    engine, _connection = _engine(
+        monkeypatch,
+        rows,
+        api,
+    )
+
+    engine._backfill_current_qty()
+
+    assert rows[0]["current_qty"] == 0
+    assert rows[1]["current_qty"] == "43.355"
+    after_first = [dict(row) for row in rows]
+
+    engine._backfill_current_qty()
+
+    assert rows == after_first
+    assert api.list_positions_calls == 1
+
+
+def test_backfill_scaled_out_missing_broker_position_fails_closed(monkeypatch):
+    rows = [{
+        "id": 22, "bot_id": "oracle", "symbol": "SPY", "status": "open",
+        "qty": 100.0, "current_qty": 100.0,
+        "scaled_out_tp1": True, "scaled_out_tp2": False,
+    }]
+    degradation_records = []
+    engine, _connection = _engine(
+        monkeypatch,
+        rows,
+        _FakeApi([]),
+        degradation_records,
+    )
+
+    engine._backfill_current_qty()
+
+    assert rows[0]["current_qty"] == 100.0
+    assert degradation_records[-1]["error_type"] == (
+        "etf_current_qty_broker_position_missing"
+    )
+
+
+def test_backfill_scaled_out_broker_failure_fails_closed(monkeypatch):
+    rows = [{
+        "id": 23, "bot_id": "oracle", "symbol": "SPY", "status": "open",
+        "qty": 100.0, "current_qty": 100.0,
+        "scaled_out_tp1": True, "scaled_out_tp2": False,
+    }]
+    degradation_records = []
+    engine, _connection = _engine(
+        monkeypatch,
+        rows,
+        _FakeApi(error=RuntimeError("broker unavailable")),
+        degradation_records,
+    )
+
+    engine._backfill_current_qty()
+
+    assert rows[0]["current_qty"] == 100.0
+    assert degradation_records[-1]["error_type"] == "etf_current_qty_broker_read_failed"
+
+
+def test_run_exit_checks_uses_immutable_qty_for_scale_out(monkeypatch):
+    engine = object.__new__(AlpacaEtfEngine)
+    captured = []
+    db_position = {
+        "symbol": "SPY",
+        "qty": 100.0,
+        "current_qty": 20.0,
+        "entry_price": 500.0,
+        "stop_price": 450.0,
+    }
+    fresh_position = dict(db_position)
+
+    engine.update_trailing_stop = lambda *_args: None
+    engine.get_db_positions = lambda _bot_id: [fresh_position]
+    engine.ensure_protective_stop = lambda *_args: None
+    engine.check_stop_hit = lambda *_args: False
+    engine.check_min_hold = lambda *_args: True
+    engine.check_tp2_hit = lambda *_args: True
+    engine.close_partial = (
+        lambda _symbol, scale_qty, **_kwargs: captured.append(scale_qty) or True
+    )
+    engine.mark_scaled_out = lambda *_args, **_kwargs: None
+
+    engine.run_exit_checks(
+        "oracle",
+        db_position,
+        [{"symbol": "SPY", "current_price": 550.0}],
+        trail_pct=0.08,
+    )
+
+    assert captured == pytest.approx([33.3])

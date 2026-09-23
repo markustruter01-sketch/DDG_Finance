@@ -37,6 +37,13 @@ class _FakeCursor:
 
     def execute(self, sql, params=None):
         normalized = " ".join(sql.split()).lower()
+        placeholder_count = sql.count("%s")
+        parameter_count = 0 if params is None else len(params)
+        if placeholder_count != parameter_count:
+            raise TypeError(
+                f"placeholder/parameter mismatch: {placeholder_count} placeholders "
+                f"for {parameter_count} parameters"
+            )
         self.executed.append((normalized, params))
         if normalized.startswith("select id, bot_id, symbol, status"):
             self._result = [
@@ -304,6 +311,13 @@ def test_current_qty_backfill_is_idempotent(monkeypatch):
 
     assert rows == after_first
     assert api.list_positions_calls == 1
+
+
+def test_fake_cursor_rejects_placeholder_parameter_mismatch():
+    cursor = _FakeCursor([])
+
+    with pytest.raises(TypeError, match="placeholder/parameter mismatch"):
+        cursor.execute("SELECT %s", (1, 2))
 
 
 def _close_engine(monkeypatch, rows, api, degradation_records=None):

@@ -87,6 +87,7 @@ class RunnerPortfolioCycleTests(unittest.TestCase):
         portfolio_events = []
         logger = MagicMock()
         sleep_calls = 0
+        clock = [0.0]
 
         def strategy_cycle(**_kwargs):
             strategy_calls.append(self.BOT_ID)
@@ -100,6 +101,7 @@ class RunnerPortfolioCycleTests(unittest.TestCase):
 
         def stop_after_cycles(_seconds):
             nonlocal sleep_calls
+            clock[0] += _seconds
             sleep_calls += 1
             if sleep_calls >= cycle_limit:
                 shutdown_event.set()
@@ -110,7 +112,7 @@ class RunnerPortfolioCycleTests(unittest.TestCase):
 
         profile = {
             **profile,
-            "LOOP_SLEEP_SECONDS": 3600,
+            "LOOP_SLEEP_SECONDS": 1,
             "db_id": "runner-test-db",
         }
         strategy_module = SimpleNamespace(cycle=strategy_cycle)
@@ -136,6 +138,7 @@ class RunnerPortfolioCycleTests(unittest.TestCase):
             patch.object(runner, "_next_window_aligned_cycle", return_value=None),
             patch.object(runner, "_write_portfolio_from_alpaca", side_effect=tracked_portfolio_writer),
             patch.object(runner, "logger", logger),
+            patch.object(runner.time, "time", side_effect=lambda: clock[0]),
             patch.object(runner.time, "sleep", side_effect=stop_after_cycles),
         ]
 

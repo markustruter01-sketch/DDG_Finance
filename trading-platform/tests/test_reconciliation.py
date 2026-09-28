@@ -70,8 +70,9 @@ def test_ledger_orphan_findings_scan_all_ledgers_and_normalise_symbols(monkeypat
 
 
 class _Cursor:
-    def __init__(self):
+    def __init__(self, rows=None):
         self.calls = []
+        self.rows = rows or []
 
     def __enter__(self):
         return self
@@ -79,13 +80,18 @@ class _Cursor:
     def __exit__(self, *args):
         return False
 
-    def execute(self, query, params):
+    def execute(self, query, params=None):
+        params = () if params is None else params
+        assert query.count("%s") == len(params)
         self.calls.append((query, params))
+
+    def fetchall(self):
+        return self.rows
 
 
 class _Connection:
-    def __init__(self):
-        self.cursor_instance = _Cursor()
+    def __init__(self, rows=None):
+        self.cursor_instance = _Cursor(rows)
 
     def __enter__(self):
         return self
@@ -273,6 +279,155 @@ def test_authoritative_quantity_mismatch_includes_table(
             "kind": "quantity_mismatch",
             "broker_qty": 1.0,
             "ledger_qty": 2.0,
+        }
+    ]
+
+
+def test_authoritative_etf_null_current_quantity_is_unknown(monkeypatch):
+    monkeypatch.setattr(
+        reconciliation,
+        "_authoritative_ledger_positions",
+        lambda _bot_id: [
+            {
+                "table": "alpaca_etf_positions",
+                "bot_id": "oracle",
+                "symbol": "SPY",
+                "qty": None,
+            }
+        ],
+    )
+
+    findings = reconciliation._authoritative_quantity_mismatches(
+        "oracle",
+        [{"symbol": "SPY", "qty": 2.0}],
+    )
+
+    assert findings == [
+        {
+            "bot_id": "oracle",
+            "table": "alpaca_etf_positions",
+            "symbol": "SPY",
+            "ledger_qty": None,
+            "kind": "quantity_unknown",
+        }
+    ]
+
+
+def test_authoritative_ledger_reads_etf_current_qty_and_preserves_null(
+    monkeypatch,
+):
+    connection = _Connection(rows=[("SPY", None)])
+
+    @contextmanager
+    def fake_get_conn():
+        yield connection
+
+    monkeypatch.setattr("db.postgres.get_conn", fake_get_conn)
+
+    rows = reconciliation._authoritative_ledger_positions("oracle")
+
+    assert rows == [
+        {
+            "table": "alpaca_etf_positions",
+            "bot_id": "oracle",
+            "symbol": "SPY",
+            "qty": None,
+        }
+    ]
+    query, params = connection.cursor_instance.calls[0]
+    assert "current_qty::double precision AS qty" in query
+    assert params == ("oracle",)
+
+
+def test_authoritative_bot3_ledger_read_stays_on_qty(monkeypatch):
+    connection = _Connection(rows=[("BTC/USD", 0.25)])
+
+    @contextmanager
+    def fake_get_conn():
+        yield connection
+
+    monkeypatch.setattr("db.postgres.get_conn", fake_get_conn)
+
+    rows = reconciliation._authoritative_ledger_positions("jerome_macro")
+
+    assert rows == [
+        {
+            "table": "bot3_positions",
+            "bot_id": "jerome_macro",
+            "symbol": "BTC/USD",
+            "qty": 0.25,
+        }
+    ]
+    query, params = connection.cursor_instance.calls[0]
+    assert "qty::double precision AS qty" in query
+    assert "current_qty" not in query
+    assert params == ("jerome_macro",)
+
+
+def test_active_ledger_read_uses_etf_current_qty_and_keeps_bot3_qty(
+    monkeypatch,
+):
+    connection = _Connection(
+        rows=[
+            (
+                "alpaca_etf_positions",
+                "oracle",
+                "SPY",
+                None,
+                1000.0,
+                "open",
+                "2026-08-24",
+            )
+        ]
+    )
+
+    @contextmanager
+    def fake_get_conn():
+        yield connection
+
+    monkeypatch.setattr("db.postgres.get_conn", fake_get_conn)
+
+    rows = reconciliation._active_ledger_rows()
+
+    assert rows[0]["qty"] is None
+    query, params = connection.cursor_instance.calls[0]
+    assert "current_qty::double precision AS qty" in query
+    assert "'bot3_positions'" in query
+    assert "qty::double precision" in query
+    assert params == ()
+
+
+def test_ledger_orphan_findings_report_unmapped_etf_null_quantity(monkeypatch):
+    monkeypatch.setattr(
+        reconciliation,
+        "_active_ledger_rows",
+        lambda: [
+            {
+                "table": "alpaca_etf_positions",
+                "bot_id": "buck_futures",
+                "symbol": "VOO",
+                "qty": None,
+                "notional_usd": 1000,
+                "status": "open",
+                "opened_at": "2026-08-24",
+            }
+        ],
+    )
+
+    findings = reconciliation._ledger_orphan_findings({"oracle": []})
+
+    assert findings == [
+        {
+            "bot_id": "oracle",
+            "ledger_bot_id": "buck_futures",
+            "table": "alpaca_etf_positions",
+            "symbol": "VOO",
+            "ledger_symbol": "VOO",
+            "qty": None,
+            "notional_usd": 1000,
+            "status": "open",
+            "opened_at": "2026-08-24",
+            "kind": "quantity_unknown",
         }
     ]
 

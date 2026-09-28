@@ -251,6 +251,37 @@ def _position_maps(
     return result
 
 
+def _position_presence_maps(
+    positions: dict[str, list[dict[str, Any]]],
+    vault_symbols: dict[str, set[str]],
+) -> dict[str, dict[str, float | None]]:
+    result: dict[str, dict[str, float | None]] = {}
+    for bot_id, rows in positions.items():
+        vault = {canonical_symbol(symbol) for symbol in vault_symbols.get(bot_id, set())}
+        by_symbol: dict[str, float | None] = {}
+        for row in rows:
+            symbol = canonical_symbol(row.get("symbol"))
+            if not symbol or symbol in vault:
+                continue
+            if (
+                row.get("table") == "alpaca_etf_positions"
+                and row.get("qty") is None
+            ):
+                by_symbol[symbol] = None
+                continue
+            qty = _material_qty(row)
+            if qty < DUST_QTY:
+                continue
+            previous_qty = by_symbol.get(symbol)
+            by_symbol[symbol] = (
+                None
+                if previous_qty is None and symbol in by_symbol
+                else float(previous_qty or 0) + qty
+            )
+        result[bot_id] = by_symbol
+    return result
+
+
 def check_stop_coverage(inputs: InvariantInputs) -> dict[str, Any]:
     name = "strategy_positions_have_covering_stops"
     expected = {
@@ -747,8 +778,12 @@ def check_ledger_broker_presence(inputs: InvariantInputs) -> dict[str, Any]:
             source_key="ledger_broker_presence",
         )
 
-    broker = _position_maps(inputs.broker_positions, inputs.vault_symbols)
-    ledger = _position_maps(inputs.ledger_positions, inputs.vault_symbols)
+    broker = _position_presence_maps(
+        inputs.broker_positions, inputs.vault_symbols
+    )
+    ledger = _position_presence_maps(
+        inputs.ledger_positions, inputs.vault_symbols
+    )
     missing_ledger: list[dict[str, Any]] = []
     missing_broker: list[dict[str, Any]] = []
     for bot_id in ACTIVE_BOTS:
@@ -804,8 +839,29 @@ def check_ledger_broker_quantities(inputs: InvariantInputs) -> dict[str, Any]:
     broker = _position_maps(inputs.broker_positions, inputs.vault_symbols)
     ledger = _position_maps(inputs.ledger_positions, inputs.vault_symbols)
     mismatches: list[dict[str, Any]] = []
+    unknown_quantities: list[dict[str, Any]] = []
     maximum_difference = 0.0
     for bot_id in ACTIVE_BOTS:
+        vault = {
+            canonical_symbol(symbol)
+            for symbol in inputs.vault_symbols.get(bot_id, set())
+        }
+        for row in inputs.ledger_positions.get(bot_id, []):
+            symbol = canonical_symbol(row.get("symbol"))
+            if (
+                row.get("table") == "alpaca_etf_positions"
+                and row.get("qty") is None
+                and symbol
+                and symbol not in vault
+            ):
+                unknown_quantities.append(
+                    {
+                        "bot_id": bot_id,
+                        "symbol": symbol,
+                        "table": "alpaca_etf_positions",
+                        "kind": "quantity_unknown",
+                    }
+                )
         for symbol in sorted(set(broker.get(bot_id, {})) & set(ledger.get(bot_id, {}))):
             broker_qty = broker[bot_id][symbol]
             ledger_qty = ledger[bot_id][symbol]
@@ -828,6 +884,7 @@ def check_ledger_broker_quantities(inputs: InvariantInputs) -> dict[str, Any]:
         ),
         "maximum_quantity_difference": maximum_difference,
         "mismatches": mismatches,
+        "quantity_unknown": unknown_quantities,
     }
     if mismatches:
         return _failed(
@@ -836,6 +893,21 @@ def check_ledger_broker_quantities(inputs: InvariantInputs) -> dict[str, Any]:
             expected=expected,
             difference={"mismatched_symbols": len(mismatches), "maximum_quantity_difference": maximum_difference},
             message=f"{len(mismatches)} common symbol quantity mismatch(es) exceed 1e-8.",
+            source_key="ledger_broker_quantity",
+        )
+    if unknown_quantities:
+        return _unknown(
+            name,
+            actual=actual,
+            expected=expected,
+            difference={
+                "maximum_quantity_difference": maximum_difference,
+                "unknown_quantities": len(unknown_quantities),
+            },
+            message=(
+                f"{len(unknown_quantities)} open ETF position quantity "
+                "value(s) are unknown."
+            ),
             source_key="ledger_broker_quantity",
         )
     return _passed(
@@ -1041,7 +1113,7 @@ def read_database_inputs(now: datetime | None = None) -> dict[str, Any]:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT bot_id, symbol, qty::double precision
+                SELECT bot_id, symbol, current_qty::double precision
                 FROM alpaca_etf_positions
                 WHERE lower(status) = 'open'
                 """
@@ -1049,7 +1121,11 @@ def read_database_inputs(now: datetime | None = None) -> dict[str, Any]:
             for bot_id, symbol, qty in cur.fetchall():
                 if bot_id in result["ledger_positions"]:
                     result["ledger_positions"][bot_id].append(
-                        {"symbol": symbol, "qty": qty}
+                        {
+                            "symbol": symbol,
+                            "qty": qty,
+                            "table": "alpaca_etf_positions",
+                        }
                     )
 
             cur.execute(

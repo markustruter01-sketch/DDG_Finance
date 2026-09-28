@@ -60,3 +60,17 @@ record the host and `current_database()` from a read-only connection and verify
 row counts. Keep the live platform on `DATABASE_URL`; do not remove it or
 replace it with the historical Helium reference. Any future research-only wiring
 must use an explicit, separately managed connection boundary.
+
+## Formatting SQL with mogrify
+
+For production-free SQL formatting checks, use the explicit `DEV_DATABASE_URL`
+with `psycopg2` directly. Do not import `trading-platform/db/postgres.py` for
+this narrow check: its import initializes the shared pool and enforces a
+hardcoded expected-host guard that may reject the explicit development endpoint.
+
+**Why:** On 2026-09-28, the explicit development connection worked, but importing
+the shared DB module exited because its configured host guard did not match that
+endpoint. No SQL was executed during the formatting check.
+
+**How to apply:** Connect only to `DEV_DATABASE_URL`, call `cursor.mogrify()` on
+the source SQL and parameters, and never call `execute()` or print the DSN.

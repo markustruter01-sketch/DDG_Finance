@@ -113,6 +113,9 @@ def _authoritative_ledger_positions(bot_id: str) -> list[dict[str, Any]]:
         # Bot 2 is paused and intentionally has no authoritative strategy path
         # until it is reactivated.
         return []
+    quantity_column = (
+        "current_qty" if table == "alpaca_etf_positions" else "qty"
+    )
     try:
         from db.postgres import get_conn
         with get_conn() as conn:
@@ -121,7 +124,7 @@ def _authoritative_ledger_positions(bot_id: str) -> list[dict[str, Any]]:
                     f"""
                     SELECT
                         symbol,
-                        qty::double precision AS qty
+                        {quantity_column}::double precision AS qty
                     FROM {table} AS position
                     WHERE position.bot_id = %s
                       AND lower(position.status) = 'open'
@@ -178,7 +181,7 @@ def _active_ledger_rows() -> list[dict[str, Any]]:
                         'alpaca_etf_positions' AS table_name,
                         bot_id,
                         symbol,
-                        qty::double precision AS qty,
+                        current_qty::double precision AS qty,
                         notional_usd::double precision AS notional_usd,
                         status,
                         opened_at
@@ -280,6 +283,35 @@ def _ledger_orphan_findings(
     if check_failures:
         return check_failures
     for row in ledger_rows:
+        if (
+            row.get("table") == "alpaca_etf_positions"
+            and row.get("qty") is None
+        ):
+            ledger_bot_id = row.get("bot_id")
+            handled_by_authoritative_read = (
+                ledger_bot_id in _AUTHORITATIVE_POSITION_TABLES
+                and ledger_bot_id in broker_positions
+                and _AUTHORITATIVE_POSITION_TABLES[ledger_bot_id]
+                == row.get("table")
+            )
+            if not handled_by_authoritative_read:
+                findings.append(
+                    {
+                        "bot_id": _ledger_account_id(row)
+                        or ledger_bot_id
+                        or "unknown",
+                        "ledger_bot_id": ledger_bot_id,
+                        "table": row.get("table"),
+                        "symbol": canonical_symbol(row.get("symbol")),
+                        "ledger_symbol": row.get("symbol"),
+                        "qty": None,
+                        "notional_usd": row.get("notional_usd"),
+                        "status": row.get("status"),
+                        "opened_at": row.get("opened_at"),
+                        "kind": "quantity_unknown",
+                    }
+                )
+            continue
         if not _is_material_ledger_row(row):
             continue
         account_bot_id = _ledger_account_id(row)
@@ -389,14 +421,33 @@ def _authoritative_quantity_mismatches(
             broker_by_symbol[symbol] = broker_by_symbol.get(symbol, 0.0) + qty
 
     ledger_by_symbol: dict[str, float] = {}
+    unknown_quantities: list[dict[str, Any]] = []
     for position in ledger:
-        qty = abs(float(position.get("qty") or 0))
+        raw_qty = position.get("qty")
+        position_table = position.get(
+            "table", _AUTHORITATIVE_POSITION_TABLES[resolved_bot_id]
+        )
+        if (
+            raw_qty is None
+            and position_table == "alpaca_etf_positions"
+        ):
+            unknown_quantities.append(
+                {
+                    "bot_id": resolved_bot_id,
+                    "table": position_table,
+                    "symbol": canonical_symbol(position.get("symbol")),
+                    "ledger_qty": None,
+                    "kind": "quantity_unknown",
+                }
+            )
+            continue
+        qty = abs(float(raw_qty or 0))
         if qty >= DUST_QTY:
             symbol = canonical_symbol(position.get("symbol"))
             ledger_by_symbol[symbol] = ledger_by_symbol.get(symbol, 0.0) + qty
 
     table = _AUTHORITATIVE_POSITION_TABLES[resolved_bot_id]
-    return [
+    return unknown_quantities + [
         {
             "bot_id": resolved_bot_id,
             "table": table,

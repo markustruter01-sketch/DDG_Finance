@@ -117,9 +117,11 @@ class _DatabaseCursor:
         ("status",),
     ]
 
-    def __init__(self, heartbeat_row=None):
+    def __init__(self, heartbeat_row=None, rows_by_table=None):
         self.heartbeat_row = heartbeat_row
+        self.rows_by_table = rows_by_table or {}
         self.query = ""
+        self.calls = []
 
     def __enter__(self):
         return self
@@ -129,8 +131,14 @@ class _DatabaseCursor:
 
     def execute(self, query, params=None):
         self.query = query
+        params = () if params is None else params
+        assert query.count("%s") == len(params)
+        self.calls.append((query, params))
 
     def fetchall(self):
+        for table, rows in self.rows_by_table.items():
+            if f"FROM {table}" in self.query:
+                return rows
         return []
 
     def fetchone(self):
@@ -138,8 +146,8 @@ class _DatabaseCursor:
 
 
 class _DatabaseConnection:
-    def __init__(self, heartbeat_row=None):
-        self.cursor_instance = _DatabaseCursor(heartbeat_row)
+    def __init__(self, heartbeat_row=None, rows_by_table=None):
+        self.cursor_instance = _DatabaseCursor(heartbeat_row, rows_by_table)
 
     def __enter__(self):
         return self
@@ -246,6 +254,47 @@ def test_read_database_inputs_with_now_none_does_not_raise(monkeypatch):
 
     assert result["runner_heartbeat"]["verdict"] in {"ALIVE", "STALE"}
     assert result["runner_heartbeat"]["age_seconds"] is not None
+
+
+def test_read_database_inputs_uses_etf_current_qty_and_bot3_qty(monkeypatch):
+    connection = _DatabaseConnection(
+        rows_by_table={
+            "alpaca_etf_positions": [("oracle", "SPY", None)],
+            "bot3_positions": [("jerome_macro", "BTC/USD", 0.25)],
+        }
+    )
+    monkeypatch.setenv("DATABASE_URL", "postgresql://fake")
+
+    with patch("psycopg2.connect", return_value=connection):
+        result = read_database_inputs(
+            now=datetime(2026, 8, 31, 12, 0, tzinfo=timezone.utc)
+        )
+
+    assert result["ledger_positions"]["oracle"] == [
+        {
+            "symbol": "SPY",
+            "qty": None,
+            "table": "alpaca_etf_positions",
+        }
+    ]
+    assert result["ledger_positions"]["jerome_macro"] == [
+        {
+            "symbol": "BTC/USD",
+            "qty": 0.25,
+        }
+    ]
+    etf_query = next(
+        query
+        for query, _params in connection.cursor_instance.calls
+        if "FROM alpaca_etf_positions" in query
+    )
+    bot3_query = next(
+        query
+        for query, _params in connection.cursor_instance.calls
+        if "FROM bot3_positions" in query
+    )
+    assert "current_qty::double precision" in etf_query
+    assert "current_qty" not in bot3_query
 
 
 def test_read_database_inputs_marks_unparseable_heartbeat_unreadable(monkeypatch):
@@ -854,12 +903,50 @@ def test_ledger_broker_presence_unknown_when_ledger_is_unreadable(base_inputs):
     assert result["status"] == "UNKNOWN"
 
 
+def test_ledger_broker_presence_keeps_null_etf_row_as_present(base_inputs):
+    inputs = _copy(base_inputs)
+    inputs.ledger_positions["oracle"] = [
+        {
+            "symbol": "SPY",
+            "qty": None,
+            "table": "alpaca_etf_positions",
+        }
+    ]
+
+    result = check_ledger_broker_presence(inputs)
+
+    assert result["status"] == "PASS"
+
+
 def test_ledger_broker_quantities_fires_for_common_quantity_mismatch(base_inputs):
     inputs = _copy(base_inputs)
     inputs.ledger_positions["oracle"][0]["qty"] = 10.5
     result = check_ledger_broker_quantities(inputs)
     assert result["status"] == "FAIL"
     assert result["actual"]["mismatches"][0]["difference"] == 0.5
+
+
+def test_ledger_broker_quantities_reports_null_etf_current_qty(base_inputs):
+    inputs = _copy(base_inputs)
+    inputs.ledger_positions["oracle"] = [
+        {
+            "symbol": "SPY",
+            "qty": None,
+            "table": "alpaca_etf_positions",
+        }
+    ]
+
+    result = check_ledger_broker_quantities(inputs)
+
+    assert result["status"] == "UNKNOWN"
+    assert result["actual"]["quantity_unknown"] == [
+        {
+            "bot_id": "oracle",
+            "symbol": "SPY",
+            "table": "alpaca_etf_positions",
+            "kind": "quantity_unknown",
+        }
+    ]
 
 
 def test_ledger_broker_quantities_unknown_when_broker_is_unreadable(base_inputs):

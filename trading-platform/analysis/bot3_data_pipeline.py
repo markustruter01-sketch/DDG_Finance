@@ -33,6 +33,7 @@ if str(_REPO_ROOT / "trading-platform") not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT / "trading-platform"))
 
 from db.postgres import get_conn  # noqa: E402
+from analysis import crypto_data_pipeline as _crypto_data_pipeline  # noqa: E402
 
 TABLE_NAME = "bot3_inflation_hedge_prices"
 YAHOO_SYMBOLS = ("GLD", "SLV")
@@ -88,7 +89,7 @@ def _yahoo_daily(symbol: str, end_exclusive: date) -> list[dict[str, Any]]:
     timestamps = result.get("timestamp") or []
     quote_data = ((result.get("indicators") or {}).get("quote") or [{}])[0]
     columns = {name: quote_data.get(name) or [] for name in ("open", "high", "low", "close", "volume")}
-    bars: list[dict[str, Any]] = []
+    raw_bars: list[dict[str, Any]] = []
     for index, timestamp in enumerate(timestamps):
         bar_date = datetime.fromtimestamp(timestamp, timezone.utc).date()
         values = {
@@ -97,16 +98,23 @@ def _yahoo_daily(symbol: str, end_exclusive: date) -> list[dict[str, Any]]:
         }
         if bar_date < START_DATE or bar_date >= end_exclusive:
             continue
-        if any(value is None for value in values.values()):
-            raise RuntimeError(f"Yahoo {symbol}: null OHLCV value on {bar_date}")
-        bars.append(
-            {
-                "symbol": symbol,
-                "date": bar_date,
-                **{name: float(value) for name, value in values.items()},
-                "source": "yahoo",
-            }
-        )
+        raw_bars.append({"date": bar_date, **values})
+    raw_bars = _crypto_data_pipeline._drop_incomplete_latest_yahoo_bar(
+        symbol,
+        raw_bars,
+    )
+    bars = [
+        {
+            "symbol": symbol,
+            "date": row["date"],
+            **{
+                name: float(row[name])
+                for name in ("open", "high", "low", "close", "volume")
+            },
+            "source": "yahoo",
+        }
+        for row in raw_bars
+    ]
     return sorted(bars, key=lambda row: row["date"])
 
 

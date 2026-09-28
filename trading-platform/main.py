@@ -140,6 +140,13 @@ def _refresh_crypto_yahoo_history() -> None:
         counts = crypto_data_pipeline.ingest_yahoo_history()
         for symbol, count in counts.items():
             logger.info(f"Yahoo refresh | crypto | {symbol}: {count} bars stored")
+        from core.degradation_tracker import mark_resolved
+
+        mark_resolved(
+            component="data_pipeline",
+            error_type="crypto_yahoo_history_refresh_failed",
+            reason="refresh succeeded",
+        )
     except Exception as _exc:
         logger.error(f"Yahoo refresh | crypto history failed: {_exc}")
         _record_yahoo_refresh_failure(
@@ -156,6 +163,13 @@ def _refresh_bot3_metals_history() -> None:
         counts = bot3_data_pipeline.ingest_metals()
         for symbol, count in counts.items():
             logger.info(f"Yahoo refresh | Bot 3 metals | {symbol}: {count} bars stored")
+        from core.degradation_tracker import mark_resolved
+
+        mark_resolved(
+            component="data_pipeline",
+            error_type="bot3_metals_history_refresh_failed",
+            reason="refresh succeeded",
+        )
     except Exception as _exc:
         logger.error(f"Yahoo refresh | Bot 3 metals history failed: {_exc}")
         _record_yahoo_refresh_failure(

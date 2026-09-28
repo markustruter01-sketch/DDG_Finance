@@ -24,6 +24,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 import psycopg2.extras
+from loguru import logger
 
 _REPO_ROOT = __import__("pathlib").Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT / "trading-platform") not in sys.path:
@@ -69,6 +70,42 @@ def _unix_timestamp(value: datetime) -> int:
     return int(value.timestamp())
 
 
+def _drop_incomplete_latest_yahoo_bar(
+    symbol: str,
+    bars: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Drop only a newest Yahoo bar with incomplete OHLC; reject other nulls."""
+    if not bars:
+        return bars
+
+    newest_index = max(
+        range(len(bars)),
+        key=lambda index: (bars[index]["date"], index),
+    )
+    newest_bar = bars[newest_index]
+    ohlc_fields = ("open", "high", "low", "close")
+    if any(newest_bar.get(field) is None for field in ohlc_fields):
+        newest_date = newest_bar["date"]
+        logger.info(
+            "Yahoo {}: dropping newest bar with null OHLC on {}",
+            symbol,
+            newest_date,
+        )
+        bars = [bar for index, bar in enumerate(bars) if index != newest_index]
+        if not bars:
+            raise RuntimeError(
+                f"Yahoo {symbol}: null OHLCV value on {newest_date}"
+            )
+
+    for bar in bars:
+        if any(
+            bar.get(field) is None
+            for field in ("open", "high", "low", "close", "volume")
+        ):
+            raise RuntimeError(f"Yahoo {symbol}: null OHLCV value on {bar['date']}")
+    return bars
+
+
 def _fetch_yahoo_daily(symbol: str, start: date, end_exclusive: date) -> list[dict[str, Any]]:
     """Fetch Yahoo daily bars, excluding today's potentially incomplete bar."""
     yahoo_symbol = YAHOO_SYMBOLS[symbol]
@@ -102,16 +139,27 @@ def _fetch_yahoo_daily(symbol: str, start: date, end_exclusive: date) -> list[di
     quote = ((result.get("indicators") or {}).get("quote") or [{}])[0]
     fields = {field: quote.get(field) or [] for field in ("open", "high", "low", "close", "volume")}
 
-    bars: list[dict[str, Any]] = []
+    raw_bars: list[dict[str, Any]] = []
     for index, timestamp in enumerate(timestamps):
         values = {field: fields[field][index] if index < len(fields[field]) else None for field in fields}
         bar_date = datetime.fromtimestamp(timestamp, timezone.utc).date()
         if bar_date < start or bar_date >= end_exclusive:
             continue
-        if any(value is None for value in values.values()):
-            raise RuntimeError(f"Yahoo {symbol}: null OHLCV value on {bar_date}")
-        bars.append({"symbol": symbol, "date": bar_date, **{k: float(v) for k, v in values.items()}, "source": "yahoo"})
+        raw_bars.append({"date": bar_date, **values})
 
+    raw_bars = _drop_incomplete_latest_yahoo_bar(symbol, raw_bars)
+    bars = [
+        {
+            "symbol": symbol,
+            "date": row["date"],
+            **{
+                field: float(row[field])
+                for field in ("open", "high", "low", "close", "volume")
+            },
+            "source": "yahoo",
+        }
+        for row in raw_bars
+    ]
     bars.sort(key=lambda row: row["date"])
     return bars
 

@@ -588,13 +588,27 @@ class _ProtectiveStopApi:
         return SimpleNamespace(id="fresh-stop")
 
 
-def _protective_stop_engine(monkeypatch, api, existing_stop, degradation_records=None):
+def _protective_stop_engine(
+    monkeypatch,
+    api,
+    existing_stop,
+    degradation_records=None,
+    *,
+    wait_result=True,
+    wait_calls=None,
+):
     engine = object.__new__(AlpacaEtfEngine)
     engine.api = api
     engine._has_pending_owned_exit = lambda *_args: False
     engine.get_positions = lambda: [{"symbol": "SPY", "qty": 10.0}]
     engine._find_owned_stop = lambda *_args: existing_stop
-    engine._wait_for_shares_free = lambda *_args: True
+    wait_calls = wait_calls if wait_calls is not None else []
+
+    def _wait_for_shares_free(*args):
+        wait_calls.append(args)
+        return wait_result
+
+    engine._wait_for_shares_free = _wait_for_shares_free
     stored = []
     engine._store_stop_order_id = (
         lambda *args, **kwargs: stored.append((args, kwargs))
@@ -758,29 +772,87 @@ def test_replace_failure_with_terminal_stop_keeps_fresh_submit_path(monkeypatch)
     assert not alerts
 
 
-def test_replace_failure_when_verification_read_fails_keeps_critical_path(
+def test_replace_failure_when_stop_reread_fails_uses_guarded_fresh_submit(monkeypatch):
+    api, existing_stop = _protective_stop_fixtures(
+        stop_read_error=RuntimeError("stop reread unavailable")
+    )
+    wait_calls = []
+    engine, stored = _protective_stop_engine(
+        monkeypatch,
+        api,
+        existing_stop,
+        wait_calls=wait_calls,
+    )
+    critical_inserts, alerts = _capture_protective_stop_critical_path(monkeypatch)
+    monkeypatch.setattr(
+        etf_engine_module,
+        "submit_with_unique_client_order_id",
+        lambda submitter, _prefix: (submitter("test-client-order"), "test-client-order"),
+    )
+
+    result = engine.ensure_protective_stop("oracle", "SPY", 100.0)
+
+    assert result == "fresh-stop"
+    assert wait_calls == [("SPY", 10)]
+    assert api.submit_order_calls[0]["symbol"] == "SPY"
+    assert api.submit_order_calls[0]["side"] == "sell"
+    assert api.submit_order_calls[0]["type"] == "stop"
+    assert len(stored) == 1
+    assert not critical_inserts
+    assert not alerts
+
+
+def test_replace_failure_when_position_reread_fails_keeps_critical_path(monkeypatch):
+    api, existing_stop = _protective_stop_fixtures(
+        position_read_error=RuntimeError("position reread unavailable")
+    )
+    wait_calls = []
+    engine, _stored = _protective_stop_engine(
+        monkeypatch,
+        api,
+        existing_stop,
+        wait_calls=wait_calls,
+    )
+    critical_inserts, alerts = _capture_protective_stop_critical_path(monkeypatch)
+
+    result = engine.ensure_protective_stop("oracle", "SPY", 100.0)
+
+    assert result is None
+    assert api.list_positions_calls == 1
+    assert api.submit_order_calls == []
+    assert wait_calls == []
+    assert len(critical_inserts) == 1
+    assert critical_inserts[0][1][1:3] == (
+        "critical",
+        "protective_stop_failed",
+    )
+    assert len(alerts) == 1
+
+
+def test_replace_failure_when_stop_reread_fails_and_shares_stay_reserved(
     monkeypatch,
 ):
-    for failed_read in ("stop", "positions"):
-        api_kwargs = {
-            "stop_read_error": RuntimeError("stop reread unavailable")
-            if failed_read == "stop"
-            else None,
-            "position_read_error": RuntimeError("position reread unavailable")
-            if failed_read == "positions"
-            else None,
-        }
-        api, existing_stop = _protective_stop_fixtures(**api_kwargs)
-        engine, _stored = _protective_stop_engine(monkeypatch, api, existing_stop)
-        critical_inserts, alerts = _capture_protective_stop_critical_path(monkeypatch)
+    api, existing_stop = _protective_stop_fixtures(
+        stop_read_error=RuntimeError("stop reread unavailable")
+    )
+    wait_calls = []
+    engine, _stored = _protective_stop_engine(
+        monkeypatch,
+        api,
+        existing_stop,
+        wait_result=False,
+        wait_calls=wait_calls,
+    )
+    critical_inserts, alerts = _capture_protective_stop_critical_path(monkeypatch)
 
-        result = engine.ensure_protective_stop("oracle", "SPY", 100.0)
+    result = engine.ensure_protective_stop("oracle", "SPY", 100.0)
 
-        assert result is None
-        assert api.submit_order_calls == []
-        assert len(critical_inserts) == 1
-        assert critical_inserts[0][1][1:3] == (
-            "critical",
-            "protective_stop_failed",
-        )
-        assert len(alerts) == 1
+    assert result is None
+    assert wait_calls == [("SPY", 10)]
+    assert api.submit_order_calls == []
+    assert len(critical_inserts) == 1
+    assert critical_inserts[0][1][1:3] == (
+        "critical",
+        "protective_stop_failed",
+    )
+    assert len(alerts) == 1

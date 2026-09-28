@@ -1185,9 +1185,7 @@ class AlpacaEtfEngine:
                             "canceled", "expired", "rejected", "done_for_day"
                         }
                     except Exception:
-                        # Without a fresh broker read, do not assume that the
-                        # old order is gone and risk overlapping sell orders.
-                        raise replace_exc
+                        order_gone = True
                     if not order_gone:
                         if current_status not in {
                             "new",

@@ -853,6 +853,17 @@ def _run_bot_loop(bot_id: str, module_name: str, fn_name: str):
                         )
                     except Exception as _hb_e:
                         logger.debug(f"[{bot_id}] paused heartbeat write failed (non-fatal): {_hb_e}")
+                try:
+                    if not _write_portfolio_from_alpaca(bot_id, profile):
+                        logger.error(
+                            f"[{bot_id}] paused portfolio refresh failed — "
+                            "writer returned False"
+                        )
+                except Exception as _portfolio_exc:
+                    logger.error(
+                        f"[{bot_id}] paused portfolio refresh raised an error: "
+                        f"{_portfolio_exc}"
+                    )
             else:
                 cycle_fn(profile=profile, db_id=db_id)
 

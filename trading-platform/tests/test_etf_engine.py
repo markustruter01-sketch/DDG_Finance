@@ -545,3 +545,242 @@ def test_run_exit_checks_uses_immutable_qty_for_scale_out(monkeypatch):
     )
 
     assert captured == pytest.approx([33.3])
+
+
+class _ProtectiveStopApi:
+    def __init__(
+        self,
+        position,
+        current_stop,
+        *,
+        replace_error=None,
+        stop_read_error=None,
+        position_read_error=None,
+    ):
+        self.position = position
+        self.current_stop = current_stop
+        self.replace_error = replace_error or RuntimeError("order chain not fully replaced")
+        self.stop_read_error = stop_read_error
+        self.position_read_error = position_read_error
+        self.list_positions_calls = 0
+        self.get_order_calls = 0
+        self.replace_order_calls = []
+        self.submit_order_calls = []
+
+    def list_positions(self):
+        self.list_positions_calls += 1
+        if self.position_read_error is not None:
+            raise self.position_read_error
+        return [self.position]
+
+    def get_order(self, _order_id):
+        self.get_order_calls += 1
+        if self.stop_read_error is not None:
+            raise self.stop_read_error
+        return self.current_stop
+
+    def replace_order(self, order_id, **kwargs):
+        self.replace_order_calls.append((order_id, kwargs))
+        raise self.replace_error
+
+    def submit_order(self, **kwargs):
+        self.submit_order_calls.append(kwargs)
+        return SimpleNamespace(id="fresh-stop")
+
+
+def _protective_stop_engine(monkeypatch, api, existing_stop, degradation_records=None):
+    engine = object.__new__(AlpacaEtfEngine)
+    engine.api = api
+    engine._has_pending_owned_exit = lambda *_args: False
+    engine.get_positions = lambda: [{"symbol": "SPY", "qty": 10.0}]
+    engine._find_owned_stop = lambda *_args: existing_stop
+    engine._wait_for_shares_free = lambda *_args: True
+    stored = []
+    engine._store_stop_order_id = (
+        lambda *args, **kwargs: stored.append((args, kwargs))
+    )
+    if degradation_records is not None:
+        monkeypatch.setattr(
+            "core.degradation_tracker.record_degradation",
+            lambda **kwargs: degradation_records.append(kwargs),
+        )
+    return engine, stored
+
+
+def _protective_stop_fixtures(
+    *,
+    current_status="new",
+    current_qty="10",
+    position_qty="10",
+    stop_read_error=None,
+    position_read_error=None,
+):
+    existing_stop = SimpleNamespace(
+        id="existing-stop",
+        symbol="SPY",
+        qty="10",
+        stop_price="99",
+        status="new",
+        side="sell",
+        type="stop",
+        asset_class="us_equity",
+    )
+    current_stop = SimpleNamespace(
+        id="existing-stop",
+        symbol="SPY",
+        qty=current_qty,
+        stop_price="99",
+        status=current_status,
+        side="sell",
+        type="stop",
+        asset_class="us_equity",
+    )
+    live_position = SimpleNamespace(
+        symbol="SPY",
+        qty=position_qty,
+        side="long",
+        asset_class="us_equity",
+    )
+    api = _ProtectiveStopApi(
+        live_position,
+        current_stop,
+        stop_read_error=stop_read_error,
+        position_read_error=position_read_error,
+    )
+    return api, existing_stop
+
+
+def _capture_protective_stop_critical_path(monkeypatch):
+    critical_inserts = []
+    alerts = []
+
+    class Cursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, sql, params=None):
+            critical_inserts.append((" ".join(sql.split()).lower(), params))
+
+    class Connection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def cursor(self):
+            return Cursor()
+
+    monkeypatch.setattr(postgres, "get_conn", lambda: Connection())
+    monkeypatch.setattr(postgres, "is_pg_available", lambda: True)
+    from notifications import discord
+
+    monkeypatch.setattr(
+        discord,
+        "notify_capital_risk",
+        lambda *args, **kwargs: alerts.append((args, kwargs)),
+    )
+    return critical_inserts, alerts
+
+
+def test_replace_failure_with_active_covering_stop_is_warning_only(monkeypatch, caplog):
+    degradation_records = []
+    api, existing_stop = _protective_stop_fixtures()
+    engine, _stored = _protective_stop_engine(
+        monkeypatch, api, existing_stop, degradation_records
+    )
+    alerts = []
+    from notifications import discord
+
+    monkeypatch.setattr(
+        discord,
+        "notify_capital_risk",
+        lambda *args, **kwargs: alerts.append((args, kwargs)),
+    )
+
+    result = engine.ensure_protective_stop("oracle", "SPY", 100.0)
+
+    assert result == "existing-stop"
+    assert api.replace_order_calls[0][0] == "existing-stop"
+    assert api.get_order_calls == 1
+    assert api.list_positions_calls == 1
+    assert len(degradation_records) == 1
+    assert degradation_records[0]["severity"] == "warning"
+    assert degradation_records[0]["error_type"] == "protective_stop_ratchet_deferred"
+    assert "stop ratchet deferred" in caplog.text
+    assert "existing_stop_id=existing-stop" in caplog.text
+    assert "existing_stop_price=$99.00" in caplog.text
+    assert "desired_stop_price=$100.00" in caplog.text
+    assert not alerts
+
+
+def test_replace_failure_with_active_noncovering_stop_keeps_critical_path(monkeypatch):
+    api, existing_stop = _protective_stop_fixtures(current_qty="4", position_qty="10")
+    engine, _stored = _protective_stop_engine(monkeypatch, api, existing_stop)
+    critical_inserts, alerts = _capture_protective_stop_critical_path(monkeypatch)
+
+    result = engine.ensure_protective_stop("oracle", "SPY", 100.0)
+
+    assert result is None
+    assert api.list_positions_calls == 1
+    assert api.submit_order_calls == []
+    assert len(critical_inserts) == 1
+    assert "insert into system_degradations" in critical_inserts[0][0]
+    assert critical_inserts[0][1][1:3] == (
+        "critical",
+        "protective_stop_failed",
+    )
+    assert len(alerts) == 1
+
+
+def test_replace_failure_with_terminal_stop_keeps_fresh_submit_path(monkeypatch):
+    api, existing_stop = _protective_stop_fixtures(current_status="canceled")
+    engine, stored = _protective_stop_engine(monkeypatch, api, existing_stop)
+    critical_inserts, alerts = _capture_protective_stop_critical_path(monkeypatch)
+    monkeypatch.setattr(
+        etf_engine_module,
+        "submit_with_unique_client_order_id",
+        lambda submitter, _prefix: (submitter("test-client-order"), "test-client-order"),
+    )
+
+    result = engine.ensure_protective_stop("oracle", "SPY", 100.0)
+
+    assert result == "fresh-stop"
+    assert api.list_positions_calls == 0
+    assert api.submit_order_calls[0]["symbol"] == "SPY"
+    assert api.submit_order_calls[0]["side"] == "sell"
+    assert api.submit_order_calls[0]["type"] == "stop"
+    assert len(stored) == 1
+    assert not critical_inserts
+    assert not alerts
+
+
+def test_replace_failure_when_verification_read_fails_keeps_critical_path(
+    monkeypatch,
+):
+    for failed_read in ("stop", "positions"):
+        api_kwargs = {
+            "stop_read_error": RuntimeError("stop reread unavailable")
+            if failed_read == "stop"
+            else None,
+            "position_read_error": RuntimeError("position reread unavailable")
+            if failed_read == "positions"
+            else None,
+        }
+        api, existing_stop = _protective_stop_fixtures(**api_kwargs)
+        engine, _stored = _protective_stop_engine(monkeypatch, api, existing_stop)
+        critical_inserts, alerts = _capture_protective_stop_critical_path(monkeypatch)
+
+        result = engine.ensure_protective_stop("oracle", "SPY", 100.0)
+
+        assert result is None
+        assert api.submit_order_calls == []
+        assert len(critical_inserts) == 1
+        assert critical_inserts[0][1][1:3] == (
+            "critical",
+            "protective_stop_failed",
+        )
+        assert len(alerts) == 1

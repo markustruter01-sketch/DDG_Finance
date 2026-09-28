@@ -1178,14 +1178,102 @@ class AlpacaEtfEngine:
                     # is already terminal or no longer exists at the broker.
                     try:
                         current = self.api.get_order(existing_stop.id)
-                        current_status = str(current.status).lower()
+                        current_status = (
+                            str(current.status).lower().rsplit(".", 1)[-1]
+                        )
                         order_gone = current_status in {
                             "canceled", "expired", "rejected", "done_for_day"
                         }
                     except Exception:
-                        order_gone = True
+                        # Without a fresh broker read, do not assume that the
+                        # old order is gone and risk overlapping sell orders.
+                        raise replace_exc
                     if not order_gone:
-                        raise
+                        if current_status not in {
+                            "new",
+                            "partially_filled",
+                            "accepted",
+                            "pending_new",
+                            "accepted_for_bidding",
+                            "pending_cancel",
+                            "pending_replace",
+                        }:
+                            raise replace_exc
+                        try:
+                            broker_position = next(
+                                (
+                                    position
+                                    for position in self.api.list_positions()
+                                    if same_symbol(position.symbol, symbol)
+                                ),
+                                None,
+                            )
+                            covered = False
+                            if broker_position is not None:
+                                position_asset_class = broker_position.asset_class
+                                order_asset_class = current.asset_class
+                                if not position_asset_class or not order_asset_class:
+                                    raise ValueError(
+                                        "broker position or stop is missing asset_class"
+                                    )
+                                position_snapshot = {
+                                    "symbol": broker_position.symbol,
+                                    "side": str(broker_position.side).lower().rsplit(".", 1)[-1],
+                                    "qty": broker_position.qty,
+                                    "asset_class": position_asset_class,
+                                }
+                                order_snapshot = {
+                                    "symbol": current.symbol,
+                                    "side": str(current.side).lower().rsplit(".", 1)[-1],
+                                    "type": str(current.type).lower().rsplit(".", 1)[-1],
+                                    "qty": current.qty,
+                                    "asset_class": order_asset_class,
+                                }
+                                current_stop_price = float(current.stop_price or 0)
+                                if current_stop_price <= 0:
+                                    raise ValueError(
+                                        "broker stop is missing a valid stop_price"
+                                    )
+                                from core.kill_switch import _covers
+
+                                covered = _covers(position_snapshot, order_snapshot)
+                        except Exception:
+                            # Failed or incomplete verification follows the
+                            # existing critical failure path.
+                            raise replace_exc
+
+                        if covered:
+                            logger.warning(
+                                f"EtfEngine | {symbol}: stop ratchet deferred; "
+                                f"existing_stop_id={current.id} "
+                                f"existing_stop_price=${current_stop_price:.2f} "
+                                f"desired_stop_price=${broker_stop:.2f}"
+                            )
+                            from core.degradation_tracker import record_degradation
+
+                            degradation_component = (
+                                "spy_qqq_trend"
+                                if bot_id == "bot2_spy_qqq"
+                                else bot_id
+                            )
+                            record_degradation(
+                                component=degradation_component,
+                                severity="warning",
+                                error_type="protective_stop_ratchet_deferred",
+                                message=(
+                                    f"{symbol} stop ratchet deferred; existing stop "
+                                    "remains active and covers the live broker position"
+                                ),
+                                detail=(
+                                    f"existing_stop_id={current.id}; "
+                                    f"existing_stop_price={current_stop_price}; "
+                                    f"desired_stop_price={broker_stop}; "
+                                    f"qty={position_snapshot['qty']}"
+                                ),
+                                bot_id=bot_id,
+                            )
+                            return current.id
+                        raise replace_exc
                     logger.warning(
                         f"EtfEngine | {symbol}: replace_order found terminal/missing "
                         f"stop {existing_stop.id}; guarded fresh submit follows: "

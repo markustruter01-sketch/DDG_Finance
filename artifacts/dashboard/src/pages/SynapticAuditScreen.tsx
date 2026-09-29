@@ -25,8 +25,7 @@ export default function SynapticAuditScreen() {
     ? ((summary.pass / totalChecks * 100)).toFixed(1)
     : "—";
   const checksRun = summary?.total_logged ?? null;
-  const errorsCaught = summary?.fail != null && summary?.warn != null ? summary.fail + summary.warn : null;
-  const activePaths = summary?.pass ?? null;
+  const nonPassingChecks = summary?.fail != null && summary?.warn != null ? summary.fail + summary.warn : null;
   const hasError = summary?.fail != null && summary.fail > 0;
 
   const events = recentData?.rows?.slice(0, 8) ?? [];
@@ -108,7 +107,7 @@ export default function SynapticAuditScreen() {
   }
 
   return (
-    <div className="w-full h-full bg-[#020617] text-slate-200 overflow-hidden relative font-mono">
+    <div className="stream-screen stream-screen-math w-full h-full bg-[#020617] text-slate-200 overflow-hidden relative font-mono">
       <style dangerouslySetInnerHTML={{ __html: `
         @keyframes synapse-pulse-travel {
           0%   { stroke-dashoffset: 800; opacity: 0; }
@@ -272,14 +271,14 @@ export default function SynapticAuditScreen() {
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
             <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-cyan-500" />
           </div>
-          <h1 className="text-xs font-semibold tracking-[0.22em] text-cyan-50">Synaptic Math Audit Engine v4.1</h1>
+          <h1 className="text-xs font-semibold tracking-[0.22em] text-cyan-50">Risk metric audit</h1>
         </div>
       </header>
 
       {/* Formula Input Row */}
       <div className="absolute top-[60px] left-0 right-0 h-[120px] z-20 px-10 flex flex-col justify-center gap-2">
         <div>
-          <span className="text-[13px] font-semibold text-white tracking-wider">Synaptic Math Audit Engine v4.1</span>
+          <span className="text-[13px] font-semibold text-white tracking-wider">Service-reported risk metrics</span>
         </div>
         <div className="flex items-center gap-4">
         {FORMULAS.map((f, i) => (
@@ -294,8 +293,20 @@ export default function SynapticAuditScreen() {
                 <span className="text-cyan-400">{f.icon}</span>
                 {f.label}
               </div>
-              <span className={`text-[9px] font-semibold ${activeFormula === i ? "text-cyan-300" : "text-cyan-600"}`}>
-                {activeFormula === i ? "● COMPUTING" : "● VERIFIED"}
+              <span className={`text-[9px] font-semibold ${
+                riskMetrics.isLoading
+                  ? "text-slate-600"
+                  : riskMetrics.isError || f.result === "—" || f.result === "unavailable"
+                    ? "text-amber-800"
+                    : "text-emerald-800"
+              }`}>
+                {riskMetrics.isLoading
+                  ? "● AWAITING DATA"
+                  : riskMetrics.isError || f.result === "unavailable"
+                    ? "● UNAVAILABLE"
+                    : f.result === "—"
+                      ? "● NO VALUE"
+                      : "● VALUE RECEIVED"}
               </span>
             </div>
             <div className={`text-[12px] font-mono font-semibold tracking-wide ${activeFormula === i ? "text-white" : "text-slate-100"}`}>
@@ -324,16 +335,16 @@ export default function SynapticAuditScreen() {
           </div>
           <div className="absolute" style={{ top: "28%", right: "20px" }}>
             <MiniStat
-              label="Active Pathways"
-               value={activePaths == null ? "—" : activePaths.toLocaleString()}
+              label="Passing Checks"
+               value={summary?.pass == null ? "—" : summary.pass.toLocaleString()}
               icon={<Activity className="w-3.5 h-3.5 text-cyan-400" />}
             />
           </div>
           <div className="absolute" style={{ bottom: "22%", right: "20px" }}>
             <MiniStat
-              label="Errors Caught"
-               value={errorsCaught == null ? "—" : errorsCaught.toLocaleString()}
-              error={hasError}
+              label="Warnings + Failures"
+               value={nonPassingChecks == null ? "—" : nonPassingChecks.toLocaleString()}
+              error={summary?.fail != null && summary.fail > 0}
               icon={<AlertTriangle className={`w-3.5 h-3.5 ${hasError ? "text-red-400" : "text-cyan-400"}`} />}
             />
           </div>

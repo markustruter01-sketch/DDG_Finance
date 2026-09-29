@@ -106,6 +106,7 @@ export default function StreamPage() {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const progressStartRef = useRef<number>(0);
+  const tabButtonRefs = useRef<Partial<Record<SubPage, HTMLButtonElement | null>>>({});
 
   const clearCycle = useCallback(() => {
     if (intervalRef.current) {
@@ -241,21 +242,55 @@ export default function StreamPage() {
 
   const activeTab = tabs.find((t) => t.id === active)!;
 
+  function renderSubPage(id: SubPage) {
+    switch (id) {
+      case "a": return <StreamingScreen />;
+      case "b": return <SynapticAuditScreen />;
+      case "c": return <StreamingBotsScreen />;
+      case "d": return <StreamingHealthScreen />;
+      case "e": return <StreamingLearningScreen />;
+      case "f": return <StreamingOrbScreen />;
+      case "g": return <StreamingPerformanceScreen />;
+      case "h": return <StreamingArchitectureScreen />;
+    }
+  }
+
   return (
-    <div style={{ height: "100vh", width: "100vw", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+    <div className="stream-production-shell" style={{ height: "100vh", width: "100vw", overflow: "hidden", display: "flex", flexDirection: "column" }}>
       <StreamHeaderBar />
       <div
-        className="flex items-center shrink-0 z-20 relative"
+        className="stream-production-tabs flex items-center shrink-0 z-20 relative"
         style={{
           background: "#000000",
           borderBottom: "1px solid rgba(255,255,255,0.06)",
           minHeight: 44,
         }}
       >
-        <div className="flex items-center gap-1 px-4">
+        <div className="flex items-center gap-1 px-4" role="tablist" aria-label="Stream views">
           {tabs.map((tab) => (
             <button
               key={tab.id}
+              id={`stream-tab-${tab.id}`}
+              role="tab"
+              aria-selected={active === tab.id}
+              aria-controls={`stream-panel-${tab.id}`}
+              tabIndex={active === tab.id ? 0 : -1}
+              ref={(element) => { tabButtonRefs.current[tab.id] = element; }}
+              onKeyDown={(event) => {
+                const currentIndex = tabs.findIndex((item) => item.id === tab.id);
+                let targetIndex: number | undefined;
+                if (event.key === "ArrowRight") targetIndex = (currentIndex + 1) % tabs.length;
+                else if (event.key === "ArrowLeft") targetIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+                else if (event.key === "Home") targetIndex = 0;
+                else if (event.key === "End") targetIndex = tabs.length - 1;
+
+                if (targetIndex !== undefined) {
+                  event.preventDefault();
+                  const targetId = tabs[targetIndex].id;
+                  setActive(targetId);
+                  tabButtonRefs.current[targetId]?.focus();
+                }
+              }}
               onClick={() => setActive(tab.id)}
               className="px-4 py-1.5 rounded-md text-xs font-bold uppercase tracking-wider transition-all"
               style={{
@@ -290,6 +325,7 @@ export default function StreamPage() {
             </span>
             <input
               type="number"
+              aria-label="Auto-cycle interval in seconds"
               min={5}
               max={120}
               value={intervalSeconds}
@@ -301,6 +337,9 @@ export default function StreamPage() {
           </div>
 
           <button
+            type="button"
+            aria-pressed={autoCycle}
+            aria-label={`Auto-cycle is ${autoCycle ? "on" : "off"}`}
             onClick={handleToggleAutoCycle}
             className="flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-bold uppercase tracking-wider transition-all"
             style={{
@@ -336,31 +375,23 @@ export default function StreamPage() {
         </div>
       )}
 
-      <div className="flex-1 relative overflow-hidden">
-        <div style={{ display: active === "a" ? "block" : "none", position: "absolute", inset: 0 }}>
-          <StreamingScreen />
-        </div>
-        <div style={{ display: active === "b" ? "block" : "none", position: "absolute", inset: 0 }}>
-          <SynapticAuditScreen />
-        </div>
-        <div style={{ display: active === "c" ? "block" : "none", position: "absolute", inset: 0 }}>
-          <StreamingBotsScreen />
-        </div>
-        <div style={{ display: active === "d" ? "block" : "none", position: "absolute", inset: 0 }}>
-          <StreamingHealthScreen />
-        </div>
-        <div style={{ display: active === "e" ? "block" : "none", position: "absolute", inset: 0 }}>
-          <StreamingLearningScreen />
-        </div>
-        <div style={{ display: active === "f" ? "block" : "none", position: "absolute", inset: 0 }}>
-          <StreamingOrbScreen />
-        </div>
-        <div style={{ display: active === "g" ? "block" : "none", position: "absolute", inset: 0 }}>
-          <StreamingPerformanceScreen />
-        </div>
-        <div style={{ display: active === "h" ? "block" : "none", position: "absolute", inset: 0 }}>
-          <StreamingArchitectureScreen />
-        </div>
+      <div className="stream-production-content flex-1 relative overflow-hidden">
+        {tabs.map((tab) => {
+          const selected = active === tab.id;
+          return (
+            <div
+              key={tab.id}
+              id={`stream-panel-${tab.id}`}
+              role="tabpanel"
+              aria-labelledby={`stream-tab-${tab.id}`}
+              aria-hidden={!selected}
+              hidden={!selected}
+              className="absolute inset-0"
+            >
+              {selected ? renderSubPage(tab.id) : null}
+            </div>
+          );
+        })}
       </div>
 
       <ClippyAssistant active={active} />

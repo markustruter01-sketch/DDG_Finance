@@ -25,3 +25,20 @@ export function getBotIdentity(id: string): BotIdentity {
     icon: "🤖",
   };
 }
+
+/**
+ * Resolve only explicit canonical IDs for data attribution. Unlike
+ * getBotIdentity(), this never treats a missing or unknown ID as a valid bot.
+ */
+export function getAttributedBotIdentity(id?: string | null): BotIdentity {
+  const normalized = typeof id === "string" ? id.trim() : "";
+  const identity = normalized ? IDENTITY_MAP[normalized] : undefined;
+  if (identity) return identity;
+
+  return {
+    canonicalId: normalized || "unattributed",
+    displayName: normalized ? `Unknown bot (${normalized})` : "Unattributed",
+    shortName: "Unknown",
+    icon: "?",
+  };
+}

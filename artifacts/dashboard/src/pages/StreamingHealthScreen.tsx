@@ -3,6 +3,7 @@ import { Activity, Server, Shield, Database, Anchor, AlertTriangle, CheckCircle2
 import { useQuery } from "@tanstack/react-query";
 import { DDGBadge } from "@/components/DDGBadge";
 import { api } from "@/hooks/use-trading-client";
+import { getAttributedBotIdentity } from "@/lib/bot-identity";
 
 type Level = "green" | "yellow" | "red" | "unknown";
 
@@ -94,9 +95,9 @@ const WIRES: WireSpec[] = [
 const COMPONENT_LABELS: Record<string, string> = {
   platform_core: "Platform Core",
   data_pipeline: "Data Pipeline",
-  bot_oracle: "Oracle / US Core",
-  bot_spy_qqq_trend: "SPY/QQQ Trend",
-  bot_jerome_macro: "Jerome Macro",
+  bot_oracle: getAttributedBotIdentity("oracle").displayName,
+  bot_spy_qqq_trend: getAttributedBotIdentity("spy_qqq_trend").displayName,
+  bot_jerome_macro: getAttributedBotIdentity("jerome_macro").displayName,
   degradation_events: "Degradation Events",
   alpaca_api: "Alpaca API",
   equity_manager: "Equity Manager",
@@ -472,7 +473,7 @@ export default function StreamingHealthScreen() {
 
   return (
     <div
-      className="h-full w-full flex flex-col relative"
+      className="stream-screen stream-screen-health h-full w-full flex flex-col relative"
       style={{ background: "radial-gradient(ellipse at 30% 0%, rgba(8,18,38,1) 0%, rgba(2,6,18,1) 100%)" }}
     >
       <DDGBadge style={{ position: "absolute", bottom: 10, left: 10, zIndex: 50 }} />
@@ -523,12 +524,21 @@ export default function StreamingHealthScreen() {
         {/* LEFT — diagram + fleet strip */}
         <div className="flex flex-col w-1/2 min-h-0 border-r" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
           <div className="flex-1 relative overflow-hidden min-h-0">
-            {isLoading || !nodes ? (
+            {isLoading ? (
               <div className="flex items-center justify-center h-full gap-3">
-                <div className="h-2 w-2 rounded-full bg-green-400 animate-bounce" style={{ animationDelay: "0ms" }} />
-                <div className="h-2 w-2 rounded-full bg-green-400 animate-bounce" style={{ animationDelay: "150ms" }} />
-                <div className="h-2 w-2 rounded-full bg-green-400 animate-bounce" style={{ animationDelay: "300ms" }} />
+                <div className="h-2 w-2 rounded-full bg-cyan-700 animate-bounce" style={{ animationDelay: "0ms" }} />
+                <div className="h-2 w-2 rounded-full bg-cyan-700 animate-bounce" style={{ animationDelay: "150ms" }} />
+                <div className="h-2 w-2 rounded-full bg-cyan-700 animate-bounce" style={{ animationDelay: "300ms" }} />
                 <span className="text-xs font-mono ml-1" style={{ color: "rgba(148,163,184,0.5)" }}>Scanning subsystems…</span>
+              </div>
+            ) : !nodes ? (
+              <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
+                <span className="text-[10px] font-mono font-bold uppercase tracking-[0.18em] text-amber-800">
+                  Health data unavailable
+                </span>
+                <p className="max-w-sm text-xs leading-5 text-slate-600">
+                  The service did not return a subsystem report. Health remains unknown until a report is available.
+                </p>
               </div>
             ) : (
               <svg viewBox="0 0 800 620" className="w-full h-full" preserveAspectRatio="xMidYMid meet">
@@ -584,7 +594,20 @@ export default function StreamingHealthScreen() {
 
         {/* RIGHT — full alert list */}
         <div className="flex flex-col w-1/2 min-h-0 overflow-y-auto" style={{ background: "rgba(2,6,23,0.6)" }}>
-          {nodes && <AlertPanel nodes={nodes} />}
+          {nodes ? (
+            <AlertPanel nodes={nodes} />
+          ) : (
+            <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
+              <span className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
+                {isLoading ? "Awaiting health report" : "Alert details unavailable"}
+              </span>
+              <p className="max-w-xs text-xs leading-5 text-slate-600">
+                {isLoading
+                  ? "Subsystem checks will appear when the service responds."
+                  : "A missing report is not a healthy result; alert checks cannot be evaluated."}
+              </p>
+            </div>
+          )}
         </div>
 
       </div>

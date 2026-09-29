@@ -98,41 +98,36 @@ export function StreamHeaderBar() {
   // Drive bot dots from the 3-bot color map — dynamic, no hardcoded count
   const botStatuses = Object.entries(BOT_COLORS).map(([k, color]) => {
     const b = fleet ? (fleet as unknown as Record<string, unknown>)[k] as { equity?: number; stale?: boolean } | undefined : undefined;
-    const active = b != null && typeof b.equity === "number" && b.equity > 0 && !b.stale;
-    return { key: k, color, active };
+    const known = b != null && typeof b.equity === "number" && !b.stale;
+    const active = known && (b?.equity ?? 0) > 0;
+    return { key: k, color, known, active };
   });
-  const activeCount = botStatuses.filter(b => b.active).length;
+  const activeCount = botStatuses.every(b => b.known)
+    ? botStatuses.filter(b => b.active).length
+    : null;
 
   const CELL = "flex flex-col items-start justify-center px-4 shrink-0 whitespace-nowrap";
-  const LABEL_STYLE: React.CSSProperties = { color: "rgba(100,116,139,0.8)", fontSize: 8, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.18em", marginBottom: 2 };
+  const LABEL_STYLE: React.CSSProperties = { color: "rgba(30,41,59,0.82)", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 2 };
   const DIV_STYLE: React.CSSProperties = { borderRight: "1px solid rgba(255,255,255,0.05)" };
 
   return (
     <div
-      className="w-full shrink-0 flex items-stretch font-mono"
+      className="stream-production-header w-full shrink-0 flex items-stretch font-mono"
       style={{
         height: 52,
-        background: "rgba(0,0,0,0.82)",
+        background: "rgba(255,255,255,0.12)",
         borderBottom: "1px solid rgba(34,211,238,0.12)",
         backdropFilter: "blur(20px)",
         WebkitBackdropFilter: "blur(20px)",
         zIndex: 30,
       }}
     >
-      <style dangerouslySetInnerHTML={{ __html: `
-        @keyframes shb-ping {
-          0%, 100% { opacity: 1; transform: scale(1); }
-          50% { opacity: 0.4; transform: scale(1.5); }
-        }
-        .shb-live-dot { animation: shb-ping 1.4s ease-in-out infinite; }
-      ` }} />
-
-      {/* ── LIVE ── */}
+      {/* ── STREAM VIEW ── */}
       <div className="flex items-center gap-2.5 px-4 shrink-0" style={{ borderRight: "1px solid rgba(255,255,255,0.06)" }}>
         <div className="relative w-2 h-2 flex items-center justify-center">
-          <span className="shb-live-dot absolute inline-flex rounded-full" style={{ width: 8, height: 8, background: "#22c55e", boxShadow: "0 0 6px #22c55e" }} />
+          <span className="absolute inline-flex rounded-full" style={{ width: 8, height: 8, background: "#0e7490", boxShadow: "0 0 6px rgba(14,116,144,0.35)" }} />
         </div>
-        <span className="text-[10px] font-black tracking-[0.2em] uppercase" style={{ color: "#22c55e" }}>LIVE</span>
+        <span className="text-[10px] font-black tracking-[0.16em] uppercase" style={{ color: "#0e7490" }}>STREAM</span>
       </div>
 
       {/* ── TOTAL P&L ── */}
@@ -254,15 +249,17 @@ export function StreamHeaderBar() {
                 className="rounded-full"
                 style={{
                   width: 8, height: 8,
-                  background: b.active ? b.color : "rgba(100,116,139,0.2)",
-                  boxShadow: b.active ? `0 0 5px ${b.color}` : "none",
+                  background: !b.known
+                    ? "rgba(245,158,11,0.7)"
+                    : b.active ? b.color : "rgba(100,116,139,0.55)",
+                  boxShadow: b.known && b.active ? `0 0 5px ${b.color}` : "none",
                   transition: "all 0.6s",
                   flexShrink: 0,
                 }}
               />
             ))}
             <span className="text-[11px] font-bold ml-1" style={{ color: "#22d3ee" }}>
-              {activeCount}/{botStatuses.length}
+              {activeCount == null ? `—/${botStatuses.length}` : `${activeCount}/${botStatuses.length}`}
             </span>
           </div>
         </div>

@@ -905,6 +905,900 @@
 .bench-select-wrap svg { position: absolute; top: 9px; right: 8px; color: #657883; pointer-events: none; }
 .bench-range-field input { width: 100%; height: 20px; accent-color: var(--bench-warm); cursor: ew-resize; }
 .bench-control-footer { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 12px 18px; border-top: 1px solid #22323a; background: #0d161b; }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Production dashboard surfaces
+   Home is the visual source of truth: scenic artwork, neutral white glass,
+   quiet slate borders and readable dark backplates. These rules are scoped
+   away from the design studies and the existing Home implementation.
+   ─────────────────────────────────────────────────────────────────────────── */
+.stream-production-shell,
+.bench-shell,
+.production-not-found {
+  isolation: isolate;
+  position: relative;
+  color: #172033;
+}
+
+.stream-production-shell::before,
+.bench-shell::after,
+.production-not-found::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255,255,255,.08), rgba(255,255,255,.14)),
+    url("/desktop-home-background.jpg");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.stream-production-shell::after,
+.bench-shell::before,
+.production-not-found::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(15,23,42,.22));
+}
+
+.stream-production-shell {
+  min-height: 100dvh;
+  height: auto !important;
+  width: 100%;
+  overflow: hidden;
+  background: transparent !important;
+}
+
+.stream-production-shell > *,
+.bench-shell > *,
+.production-not-found > * {
+  position: relative;
+  z-index: 1;
+}
+
+.stream-production-shell .stream-screen {
+  color: #172033 !important;
+  background: transparent !important;
+}
+
+/* The older screens use inline terminal backgrounds. Turn those into the
+   same translucent surface without changing their data or component layout. */
+.stream-production-shell .stream-screen [class*="bg-slate-800"],
+.stream-production-shell .stream-screen [class*="bg-slate-900"],
+.stream-production-shell .stream-screen [class*="bg-slate-950"],
+.stream-production-shell .stream-screen [class*="bg-gray-800"],
+.stream-production-shell .stream-screen [class*="bg-gray-900"],
+.stream-production-shell .stream-screen [class*="bg-zinc-800"],
+.stream-production-shell .stream-screen [class*="bg-zinc-900"],
+.stream-production-shell .stream-screen [class*="bg-black"],
+.stream-production-shell .stream-screen [class*="bg-[#020617]"],
+.stream-production-shell .stream-screen [style*="#020617"],
+.stream-production-shell .stream-screen [style*="rgb(2, 6, 23)"],
+.stream-production-shell .stream-screen [style*="rgba(2, 6, 23"],
+.stream-production-shell .stream-screen [style*="rgba(2,6,23"],
+.stream-production-shell .stream-screen [style*="rgba(15, 23, 42"],
+.stream-production-shell .stream-screen [style*="rgba(15,23,42"],
+.stream-production-shell .stream-screen [style*="rgba(8, 16, 40"],
+.stream-production-shell .stream-screen [style*="rgba(8,16,40"],
+.stream-production-shell .stream-screen [style*="rgba(0, 0, 0"],
+.stream-production-shell .stream-screen [style*="rgba(0,0,0"] {
+  background: rgba(255,255,255,.18) !important;
+  border-color: rgba(100,116,139,.22) !important;
+  box-shadow: 0 10px 28px rgba(15,23,42,.14), inset 0 1px rgba(255,255,255,.22);
+  backdrop-filter: blur(18px) saturate(125%);
+  -webkit-backdrop-filter: blur(18px) saturate(125%);
+}
+
+.stream-production-shell .stream-screen [class*="text-slate-"],
+.stream-production-shell .stream-screen [class*="text-white"] {
+  color: rgba(30,41,59,.86) !important;
+  text-shadow: 0 1px 2px rgba(15,23,42,.18);
+}
+
+.stream-production-shell .stream-screen [class*="text-cyan-"],
+.stream-production-shell .stream-screen [class*="text-teal-"] {
+  color: #0e7490 !important;
+}
+
+.stream-production-shell .stream-screen [class*="text-indigo-"],
+.stream-production-shell .stream-screen [class*="text-violet-"],
+.stream-production-shell .stream-screen [class*="text-purple-"] {
+  color: #6d28d9 !important;
+}
+
+.stream-production-shell .stream-screen [class*="text-green-"],
+.stream-production-shell .stream-screen [class*="text-emerald-"] {
+  color: #166534 !important;
+}
+
+.stream-production-shell .stream-screen [class*="text-yellow-"],
+.stream-production-shell .stream-screen [class*="text-amber-"],
+.stream-production-shell .stream-screen [class*="text-orange-"] {
+  color: #92400e !important;
+}
+
+.stream-production-shell .stream-screen [class*="text-red-"],
+.stream-production-shell .stream-screen [class*="text-rose-"] {
+  color: #b91c1c !important;
+}
+
+.stream-production-shell .stream-screen [class*="text-blue-"] {
+  color: #1d4ed8 !important;
+}
+
+.stream-production-shell .stream-screen [style*="rgba(148,163,184"],
+.stream-production-shell .stream-screen [style*="rgba(148, 163, 184"],
+.stream-production-shell .stream-screen [style*="rgba(100,116,139"],
+.stream-production-shell .stream-screen [style*="rgba(100, 116, 139"],
+.stream-production-shell .stream-screen [style*="rgba(226,232,240"],
+.stream-production-shell .stream-screen [style*="rgba(226, 232, 240"],
+.stream-production-shell .stream-screen [style*="rgb(226, 232, 240"],
+.stream-production-shell .stream-screen [style*="rgb(148, 163, 184"],
+.stream-production-shell .stream-screen [style*="rgb(100, 116, 139"],
+.stream-production-shell .stream-screen [style*="#94a3b8"],
+.stream-production-shell .stream-screen [style*="#e2e8f0"] {
+  color: rgba(30,41,59,.78) !important;
+  text-shadow: 0 1px 2px rgba(15,23,42,.16);
+}
+
+.stream-production-shell .stream-screen [style*="#22d3ee"],
+.stream-production-shell .stream-screen [style*="#67e8f9"],
+.stream-production-shell .stream-screen [style*="rgb(34, 211, 238"],
+.stream-production-shell .stream-screen [style*="rgb(103, 232, 249"] {
+  color: #0e7490 !important;
+}
+
+.stream-production-shell .stream-screen [style*="#22c55e"],
+.stream-production-shell .stream-screen [style*="#34d399"],
+.stream-production-shell .stream-screen [style*="#4ade80"],
+.stream-production-shell .stream-screen [style*="rgb(34, 197, 94"],
+.stream-production-shell .stream-screen [style*="rgb(52, 211, 153"],
+.stream-production-shell .stream-screen [style*="rgb(74, 222, 128"] {
+  color: #166534 !important;
+}
+
+.stream-production-shell .stream-screen [style*="#a78bfa"],
+.stream-production-shell .stream-screen [style*="rgb(167, 139, 250"] {
+  color: #6d28d9 !important;
+}
+
+.stream-production-shell .stream-screen [style*="#a5b4fc"],
+.stream-production-shell .stream-screen [style*="#818cf8"],
+.stream-production-shell .stream-screen [style*="rgb(165, 180, 252"],
+.stream-production-shell .stream-screen [style*="rgb(129, 140, 248"] {
+  color: #4338ca !important;
+}
+
+.stream-production-shell .stream-screen [style*="#fbbf24"],
+.stream-production-shell .stream-screen [style*="#f59e0b"],
+.stream-production-shell .stream-screen [style*="rgb(251, 191, 36"],
+.stream-production-shell .stream-screen [style*="rgb(245, 158, 11"] {
+  color: #92400e !important;
+}
+
+.stream-production-shell .stream-screen [style*="#fb923c"],
+.stream-production-shell .stream-screen [style*="rgb(251, 146, 60"] {
+  color: #c2410c !important;
+}
+
+.stream-production-shell .stream-screen [style*="#f97316"],
+.stream-production-shell .stream-screen [style*="rgb(249, 115, 22"] {
+  color: #c2410c !important;
+}
+
+.stream-production-shell .stream-screen [style*="#60a5fa"],
+.stream-production-shell .stream-screen [style*="#3b82f6"],
+.stream-production-shell .stream-screen [style*="rgb(96, 165, 250"],
+.stream-production-shell .stream-screen [style*="rgb(59, 130, 246"] {
+  color: #1d4ed8 !important;
+}
+
+.stream-production-shell .stream-screen [style*="#f87171"],
+.stream-production-shell .stream-screen [style*="#ef4444"],
+.stream-production-shell .stream-screen [style*="rgb(248, 113, 113"],
+.stream-production-shell .stream-screen [style*="rgb(239, 68, 68"] {
+  color: #b91c1c !important;
+}
+
+.stream-screen-bots > div:first-child,
+.stream-screen-architecture > div:first-child,
+.stream-screen-architecture > div:nth-child(2) > div:last-child,
+.stream-screen-architecture > div:last-child {
+  background: rgba(255,255,255,.12) !important;
+  border-color: rgba(100,116,139,.22) !important;
+  box-shadow: 0 10px 28px rgba(15,23,42,.14), inset 0 1px rgba(255,255,255,.22);
+  backdrop-filter: blur(18px) saturate(125%);
+  -webkit-backdrop-filter: blur(18px) saturate(125%);
+}
+
+.stream-screen-bots > div:nth-child(2),
+.stream-screen-orb > * {
+  background: transparent !important;
+}
+
+.stream-screen-bots > div:nth-child(2) > * {
+  background: rgba(255,255,255,.20) !important;
+  box-shadow: 0 10px 28px rgba(15,23,42,.14), inset 0 1px rgba(255,255,255,.22);
+  backdrop-filter: blur(18px) saturate(125%);
+  -webkit-backdrop-filter: blur(18px) saturate(125%);
+}
+
+.stream-production-shell .stream-screen button,
+.stream-production-shell .stream-screen input,
+.stream-production-shell .stream-screen select {
+  outline-offset: 3px;
+}
+
+.stream-production-shell .stream-screen button:focus-visible,
+.stream-production-shell .stream-screen input:focus-visible,
+.stream-production-shell .stream-screen select:focus-visible,
+.stream-production-shell [role="tab"]:focus-visible {
+  outline: 2px solid rgba(8,145,178,.85);
+  box-shadow: 0 0 0 4px rgba(8,145,178,.18);
+}
+
+.stream-production-header,
+.stream-production-tabs {
+  background: rgba(255,255,255,.12) !important;
+  border-color: rgba(100,116,139,.22) !important;
+  color: #172033;
+  box-shadow: 0 8px 24px rgba(15,23,42,.14), inset 0 1px rgba(255,255,255,.22);
+  backdrop-filter: blur(18px) saturate(135%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(135%) !important;
+}
+
+.stream-production-header [style*="rgba(100,116,139"],
+.stream-production-header [style*="rgba(100, 116, 139"],
+.stream-production-header [style*="rgba(148,163,184"],
+.stream-production-header [style*="rgba(148, 163, 184"],
+.stream-production-header [style*="rgb(100, 116, 139"],
+.stream-production-header [style*="rgb(148, 163, 184"] {
+  color: rgba(30,41,59,.76) !important;
+}
+
+.stream-production-header [style*="#22d3ee"],
+.stream-production-header [style*="rgb(34, 211, 238"] {
+  color: #0e7490 !important;
+}
+
+.stream-production-header [style*="#4ade80"],
+.stream-production-header [style*="rgb(74, 222, 128"] {
+  color: #166534 !important;
+}
+
+.stream-production-header [style*="#a78bfa"],
+.stream-production-header [style*="rgb(167, 139, 250"] {
+  color: #6d28d9 !important;
+}
+
+.stream-production-header [style*="#f87171"],
+.stream-production-header [style*="rgb(248, 113, 113"] {
+  color: #b91c1c !important;
+}
+
+.stream-production-header [style*="#fbbf24"],
+.stream-production-header [style*="rgb(251, 191, 36"] {
+  color: #92400e !important;
+}
+
+.stream-production-tabs {
+  flex-wrap: wrap;
+  min-height: 48px !important;
+  padding: 5px 12px;
+  gap: 4px;
+}
+
+.stream-production-tabs > div:first-child {
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.stream-production-tabs [role="tab"] {
+  min-height: 36px;
+  color: rgba(23,32,51,.78) !important;
+  border-color: transparent !important;
+  font-size: 11px;
+}
+
+.stream-production-tabs [role="tab"][aria-selected="true"] {
+  color: #0e7490 !important;
+  background: rgba(255,255,255,.30) !important;
+  border-color: rgba(8,145,178,.35) !important;
+  box-shadow: 0 4px 12px rgba(15,23,42,.10);
+}
+
+.stream-production-tabs input {
+  min-height: 34px;
+  color: #172033 !important;
+  background: rgba(255,255,255,.22) !important;
+  border-color: rgba(100,116,139,.32) !important;
+}
+
+.stream-production-tabs > div:last-child button {
+  min-height: 36px;
+  color: #166534 !important;
+  background: rgba(255,255,255,.20) !important;
+  border-color: rgba(100,116,139,.28) !important;
+}
+
+/* Keep legacy telemetry readable after the neutral-glass treatment. */
+.stream-production-shell .stream-screen [class*="text-[7px]"],
+.stream-production-shell .stream-screen [class*="text-[8px]"],
+.stream-production-shell .stream-screen [class*="text-[9px]"],
+.stream-production-shell .stream-screen [class*="text-[10px]"] {
+  font-size: 11px !important;
+  line-height: 1.35;
+}
+
+.production-global-nav button {
+  min-height: 64px;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.production-global-nav button [class*="text-[9px]"] {
+  font-size: 10px !important;
+}
+
+/* Strategy Bench keeps its research semantics but inherits the production
+   surface, so it no longer reads as a separate terminal prototype. */
+.bench-shell {
+  min-height: 100dvh;
+  background: transparent !important;
+  font-family: "IBM Plex Sans", sans-serif;
+}
+
+.bench-shell::after {
+  background-image:
+    linear-gradient(rgba(255,255,255,.09), rgba(255,255,255,.16)),
+    url("/desktop-home-background.jpg");
+}
+
+.bench-rail,
+.bench-panel,
+.bench-controls-panel,
+.bench-compare-view,
+.bench-notice,
+.bench-loading-panel,
+.bench-fallback,
+.bench-metric-strip {
+  border-color: rgba(100,116,139,.22) !important;
+  background: rgba(255,255,255,.12) !important;
+  box-shadow: 0 10px 28px rgba(15,23,42,.13), inset 0 1px rgba(255,255,255,.20);
+  backdrop-filter: blur(18px) saturate(125%);
+  -webkit-backdrop-filter: blur(18px) saturate(125%);
+}
+
+.bench-panel,
+.bench-controls-panel,
+.bench-compare-view,
+.bench-loading-panel,
+.bench-fallback,
+.bench-metric-strip {
+  border-radius: 14px;
+}
+
+.bench-rail {
+  background: rgba(255,255,255,.16) !important;
+  border-right-color: rgba(100,116,139,.22) !important;
+}
+
+.bench-rail-brand strong,
+.bench-title-group h1,
+.bench-panel-heading h2,
+.bench-section-heading h2,
+.bench-result-head h2,
+.bench-chart-heading h3,
+.bench-loading-panel h2 {
+  color: #172033 !important;
+  text-shadow: 0 1px 3px rgba(255,255,255,.32);
+}
+
+.bench-overline,
+.bench-breadcrumb,
+.bench-field,
+.bench-metric-label,
+.bench-chart-heading .chart-legend,
+.bench-footer,
+.bench-readonly {
+  color: rgba(30,41,59,.72) !important;
+}
+
+.bench-rail-button {
+  color: rgba(30,41,59,.78) !important;
+}
+
+.bench-rail-button:hover,
+.bench-rail-button.active {
+  color: #0e7490 !important;
+  background: rgba(255,255,255,.24) !important;
+  border-color: rgba(8,145,178,.28) !important;
+}
+
+.bench-select-wrap select,
+.bench-readonly-field,
+.bench-control-footer,
+.bench-compare-card,
+.bench-compare-rule {
+  color: #172033 !important;
+  border-color: rgba(100,116,139,.24) !important;
+  background: rgba(255,255,255,.18) !important;
+}
+
+.bench-select-wrap select:focus,
+.bench-reset-button:focus-visible,
+.bench-subtle-button:focus-visible,
+.bench-compare-button:focus-visible,
+.bench-rail-button:focus-visible {
+  outline: 2px solid rgba(8,145,178,.82);
+  outline-offset: 3px;
+}
+
+.production-not-found {
+  min-height: 100dvh;
+  background: transparent !important;
+}
+
+.production-not-found .production-not-found-card {
+  border: 1px solid rgba(100,116,139,.24);
+  border-radius: 16px;
+  background: rgba(255,255,255,.12);
+  box-shadow: 0 18px 44px rgba(15,23,42,.18), inset 0 1px rgba(255,255,255,.24);
+  backdrop-filter: blur(18px) saturate(125%);
+  -webkit-backdrop-filter: blur(18px) saturate(125%);
+}
+
+.production-not-found .production-not-found-card h1,
+.production-not-found .production-not-found-card p {
+  color: #172033 !important;
+  text-shadow: 0 1px 2px rgba(15,23,42,.18);
+}
+
+.production-not-found .production-not-found-card p {
+  color: rgba(30,41,59,.82) !important;
+}
+
+.bench-fallback {
+  width: 100%;
+  height: 100dvh;
+  min-height: 100dvh;
+  box-sizing: border-box;
+  background: transparent !important;
+  color: #172033 !important;
+}
+
+.bench-fallback-card {
+  display: flex;
+  width: min(620px, calc(100% - 32px));
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: clamp(24px, 4vw, 38px);
+  border: 1px solid rgba(100,116,139,.24);
+  border-radius: 16px;
+  background: rgba(255,255,255,.18);
+  box-shadow: 0 18px 44px rgba(15,23,42,.16), inset 0 1px rgba(255,255,255,.24);
+  text-align: center;
+  backdrop-filter: blur(18px) saturate(125%);
+  -webkit-backdrop-filter: blur(18px) saturate(125%);
+}
+
+.bench-fallback-card > svg {
+  color: #b45309 !important;
+}
+
+.bench-fallback-card > strong {
+  padding: 6px 8px;
+  color: #92400e !important;
+  border-color: rgba(180,83,9,.28) !important;
+  background: rgba(255,255,255,.34) !important;
+  font-size: 11px !important;
+}
+
+.bench-fallback-card h1 {
+  color: #172033 !important;
+  font-size: clamp(22px, 3vw, 30px) !important;
+}
+
+.bench-fallback-card p {
+  max-width: 540px;
+  color: rgba(30,41,59,.78) !important;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12px !important;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.bench-fallback-card button {
+  min-height: 44px;
+  padding: 10px 14px;
+  color: #172033 !important;
+  border: 1px solid rgba(100,116,139,.28) !important;
+  border-radius: 10px;
+  background: rgba(255,255,255,.52) !important;
+  font-size: 12px !important;
+}
+
+/* Raise low-alpha micro-labels on Bench without changing its data density. */
+.bench-shell .bench-rail-meta,
+.bench-shell .bench-breadcrumb,
+.bench-shell .bench-readonly,
+.bench-shell .bench-notice,
+.bench-shell .bench-field,
+.bench-shell .bench-range-field,
+.bench-shell .bench-metric-label,
+.bench-shell .bench-metric-compare,
+.bench-shell .bench-chart-heading .chart-legend,
+.bench-shell .bench-footer {
+  font-size: 11px !important;
+}
+
+.bench-shell .bench-rail-meta,
+.bench-shell .bench-breadcrumb,
+.bench-shell .bench-readonly,
+.bench-shell .bench-notice,
+.bench-shell .bench-field,
+.bench-shell .bench-range-field,
+.bench-shell .bench-metric-label,
+.bench-shell .bench-metric-compare,
+.bench-shell .bench-chart-heading .chart-legend,
+.bench-shell .bench-footer,
+.bench-shell .bench-compare-rule,
+.bench-shell .bench-unverified p {
+  color: rgba(30,41,59,.76) !important;
+}
+
+@media (max-width: 900px) {
+  .stream-production-shell {
+    overflow: auto;
+  }
+
+  .stream-production-shell::before,
+  .bench-shell::after,
+  .production-not-found::before {
+    background-image:
+      linear-gradient(rgba(255,255,255,.08), rgba(255,255,255,.12)),
+      url("/phone-home-background.jpg");
+    background-position: center;
+  }
+
+  .stream-production-shell .stream-screen [style*="rgba(15,23,42"],
+  .stream-production-shell .stream-screen [style*="rgba(8,16,40"],
+  .stream-production-shell .stream-screen [style*="rgba(0,0,0"] {
+    backdrop-filter: blur(9px) saturate(120%);
+    -webkit-backdrop-filter: blur(9px) saturate(120%);
+  }
+
+  .stream-production-tabs {
+    align-items: stretch;
+    overflow: visible;
+  }
+
+  .stream-production-tabs > div:last-child {
+    width: 100%;
+    justify-content: flex-start;
+    padding: 4px 0 0;
+    gap: 8px;
+  }
+
+  .stream-production-shell .stream-screen [class*="text-[7px]"],
+  .stream-production-shell .stream-screen [class*="text-[8px]"],
+  .stream-production-shell .stream-screen [class*="text-[9px]"],
+  .stream-production-shell .stream-screen [class*="text-[10px]"] {
+    font-size: 10px !important;
+  }
+
+  .stream-production-tabs > div:last-child > div {
+    flex: 1;
+  }
+
+  .stream-production-tabs > div:last-child button {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .bench-rail {
+    position: relative;
+    width: 100%;
+    min-height: 58px;
+    padding: 10px 12px;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    overflow-x: auto;
+  }
+
+  .bench-rail-brand {
+    flex-shrink: 0;
+    margin-right: 4px;
+  }
+
+  .bench-rail-rule,
+  .bench-rail-spacer,
+  .bench-rail-note,
+  .bench-rail-meta {
+    display: none;
+  }
+
+  .bench-rail-button {
+    width: auto;
+    min-width: max-content;
+    margin: 0;
+  }
+
+  .bench-content {
+    width: 100%;
+    margin-left: 0;
+    padding-bottom: 76px;
+  }
+
+  .bench-topbar {
+    padding: 18px 16px 16px;
+    flex-wrap: wrap;
+  }
+
+  .bench-top-actions {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .bench-notice,
+  .bench-controls-panel,
+  .bench-panel,
+  .bench-compare-view {
+    margin-left: 16px;
+    margin-right: 16px;
+  }
+
+  .bench-notice {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .bench-control-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .bench-control-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .bench-chart-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .stream-screen-bots {
+    flex-direction: column !important;
+    overflow: auto !important;
+  }
+
+  .stream-screen-bots > div:first-child {
+    width: 100% !important;
+    max-height: 170px;
+    flex-direction: row !important;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .stream-screen-bots > div:first-child > div {
+    flex-shrink: 0;
+  }
+
+  .stream-screen-bots > div:nth-child(2) {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    grid-auto-rows: auto !important;
+    min-height: 420px;
+  }
+
+  .stream-screen-health > div:nth-child(3) {
+    flex-direction: column !important;
+    overflow: auto !important;
+  }
+
+  .stream-screen-health > div:nth-child(3) > div {
+    width: 100% !important;
+    min-height: 330px;
+    border-right: 0 !important;
+    border-bottom: 1px solid rgba(100,116,139,.22);
+  }
+
+  .stream-screen-architecture > div:nth-child(2) {
+    flex-direction: column !important;
+    overflow: auto !important;
+  }
+
+  .stream-screen-architecture > div:nth-child(2) > div:first-child {
+    min-height: 380px;
+    flex: 1 0 380px !important;
+  }
+
+  .stream-screen-architecture > div:nth-child(2) > div:last-child {
+    width: 100% !important;
+    max-height: 245px;
+    flex: 0 0 auto !important;
+    border-left: 0 !important;
+    border-top: 1px solid rgba(100,116,139,.22);
+  }
+
+  .stream-screen-performance {
+    height: auto !important;
+    min-height: 100%;
+    overflow: auto !important;
+  }
+
+  .stream-screen-performance > div:first-child {
+    flex-wrap: wrap !important;
+  }
+
+  .stream-screen-performance > div:first-child > * {
+    flex: 1 1 calc(50% - 8px) !important;
+    min-width: 150px;
+  }
+
+  .stream-screen-performance > div:nth-child(2) {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    flex: none !important;
+  }
+}
+
+@media (max-width: 560px) {
+  .stream-production-tabs {
+    padding: 5px 8px;
+  }
+
+  .stream-production-tabs > div:first-child {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .stream-production-tabs [role="tab"] {
+    padding-left: 6px;
+    padding-right: 6px;
+    font-size: 10px;
+  }
+
+  .bench-control-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .bench-top-actions > * {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .stream-screen-bots > div:nth-child(2) {
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-auto-rows: auto !important;
+  }
+
+  .stream-production-header > div:nth-of-type(n + 3):nth-of-type(-n + 9) {
+    display: none !important;
+  }
+
+  .stream-production-header > div {
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+  }
+
+  .stream-production-header > div:nth-of-type(2) {
+    width: 110px !important;
+  }
+
+  .stream-bot-card-grid {
+    padding-bottom: 96px !important;
+  }
+
+  .stream-production-shell .stream-clippy-assistant {
+    display: none !important;
+  }
+
+  .stream-production-shell .stream-screen [style*="position: absolute"][style*="bottom:"][style*="left:"] {
+    display: none !important;
+  }
+
+  .stream-production-shell::before {
+    filter: blur(5px) saturate(1.08);
+    transform: scale(1.04);
+  }
+
+  .stream-screen-health > div:last-child {
+    flex-direction: column !important;
+    overflow-y: auto !important;
+  }
+
+  .stream-screen-health > div:last-child > div:first-child {
+    width: 100% !important;
+    min-height: 300px !important;
+    flex: 1 0 300px !important;
+    border-right: 0 !important;
+    border-bottom: 1px solid rgba(100,116,139,.22) !important;
+  }
+
+  .stream-screen-health > div:last-child > div:last-child {
+    width: 100% !important;
+    min-height: 220px !important;
+    flex: 0 0 auto !important;
+  }
+
+  .stream-screen-performance {
+    overflow-y: auto !important;
+    padding-bottom: 96px !important;
+  }
+
+  .stream-screen-math {
+    display: flex !important;
+    flex-direction: column !important;
+    overflow-y: auto !important;
+    padding-bottom: 88px !important;
+  }
+
+  .stream-screen-math > header {
+    position: relative !important;
+    inset: auto !important;
+    flex: 0 0 auto !important;
+  }
+
+  .stream-screen-math > svg {
+    display: none !important;
+  }
+
+  .stream-screen-math > div[class*="top-[60px]"] {
+    position: relative !important;
+    top: auto !important;
+    left: auto !important;
+    right: auto !important;
+    height: auto !important;
+    padding: 8px 12px !important;
+    flex: 0 0 auto !important;
+  }
+
+  .stream-screen-math > div[class*="top-[60px]"] > div:last-child {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .stream-screen-math > div[class*="inset-0"][class*="z-20"] {
+    position: relative !important;
+    inset: auto !important;
+    top: auto !important;
+    height: auto !important;
+    margin-top: 8px !important;
+    flex: 0 0 auto !important;
+  }
+
+  .stream-screen-math > div[class*="inset-0"][class*="z-20"] > div {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+    height: auto !important;
+  }
+
+  .stream-screen-math > div[class*="inset-0"][class*="z-20"] > div > div.absolute {
+    position: static !important;
+    inset: auto !important;
+  }
+
+  .stream-screen-math > div[class*="bottom-0"] {
+    position: relative !important;
+    inset: auto !important;
+    height: auto !important;
+    min-height: 72px !important;
+    margin-top: 8px !important;
+    padding: 12px !important;
+    flex: 0 0 auto !important;
+  }
+}
 .bench-config-string { display: flex; align-items: center; gap: 8px; color: #687d86; }
 .bench-config-string code { color: #9aabb0; font-family: "IBM Plex Mono", monospace; font-size: 10px; }
 .bench-holdout { display: flex; align-items: center; gap: 15px; }
@@ -1040,4 +1934,9 @@
   .bench-compare-card { margin-bottom: 12px; }
   .bench-compare-rule { margin: 0 15px; }
   .bench-footer { flex-direction: column; margin: 22px 15px 0; line-height: 1.5; }
+}
+
+@media (max-width: 560px) {
+  .bench-control-grid { grid-template-columns: 1fr; }
+  .bench-top-actions > * { flex: 1; justify-content: center; }
 }

@@ -58,20 +58,20 @@ const NODES: Node[] = [
 ];
 
 const STATUS_MESSAGES = [
-  "AUDITING FLEET POSITIONS…",
-  "CROSS-FLEET CORRELATION SCAN…",
-  "REGIME DETECTION: SIDEWAYS MARKET…",
-  "VPIN MICROSTRUCTURE CHECK PASSED…",
-  "NEURAL PATTERN SYNC COMPLETE…",
-  "PORTFOLIO RISK ASSESSMENT: NOMINAL…",
-  "GEMINI ANALYZING MACRO INDICATORS…",
-  "CLAUDE REVIEWING TRADE JOURNAL…",
-  "SIGNAL VALIDATION IN PROGRESS…",
-  "DRAWDOWN PROTECTION: ACTIVE…",
-  "LEARNING MODEL — EPOCH 247…",
-  "FLEET STATUS SYNC PENDING — LIVE COUNT UNAVAILABLE…",
-  "ORACLE: BULL REGIME EQUITY SCAN…",
-  "CRYPTO REGIME: BEAR — SHORTS ENABLED…",
+  "FLEET OVERVIEW",
+  "REGISTRY SNAPSHOT",
+  "MARKET CONTEXT",
+  "AUDIT RESULTS",
+  "PERFORMANCE METRICS",
+  "RISK METRICS",
+  "SIGNAL ANALYSIS",
+  "TRADE REVIEW",
+  "POSITION STATUS",
+  "DRAWDOWN METRICS",
+  "LEARNING NOTES",
+  "DATA AVAILABILITY",
+  "CANONICAL BOT IDENTITY",
+  "ETF FLEET MONITORING",
 ];
 
 function nodeDist(a: Node, b: Node) {
@@ -286,10 +286,10 @@ export function AIBrainVisual() {
           <animate attributeName="opacity" values="0.2;0.55;0.2" dur="2.6s" repeatCount="indefinite" />
         </path>
 
-        {/* GEMINI label — left hemisphere */}
+        {/* Analysis label — left hemisphere */}
         <text x={240} y={90} textAnchor="middle" fontFamily="'Courier New',monospace"
           fontSize={21} fontWeight="bold" fill="#22d3ee" letterSpacing="4" opacity={0.92}>
-          ✦ GEMINI
+          SIGNAL ANALYSIS
         </text>
         <text x={240} y={107} textAnchor="middle" fontFamily="monospace"
           fontSize={9} fill="#22d3ee" opacity={0.48} letterSpacing="2">
@@ -299,10 +299,10 @@ export function AIBrainVisual() {
           <animate attributeName="opacity" values="0.14;0.42;0.14" dur="2s" repeatCount="indefinite" />
         </line>
 
-        {/* CLAUDE label — right hemisphere */}
+        {/* Review label — right hemisphere */}
         <text x={760} y={90} textAnchor="middle" fontFamily="'Courier New',monospace"
           fontSize={21} fontWeight="bold" fill="#a78bfa" letterSpacing="4" opacity={0.92}>
-          ✦ CLAUDE
+          TRADE REVIEW
         </text>
         <text x={760} y={107} textAnchor="middle" fontFamily="monospace"
           fontSize={9} fill="#a78bfa" opacity={0.48} letterSpacing="2">
@@ -317,10 +317,10 @@ export function AIBrainVisual() {
         <rect x={60} y={463} width={880} height={44} fill="rgba(2,6,23,0.55)" />
 
         <text x={88} y={491} fontFamily="'Courier New',monospace" fontSize={12} fill="#22d3ee" opacity={0.7} letterSpacing="2">
-          GEMINI-3
+          ANALYSIS
         </text>
         <text x={912} y={491} textAnchor="end" fontFamily="'Courier New',monospace" fontSize={12} fill="#a78bfa" opacity={0.7} letterSpacing="2">
-          CLAUDE-4
+          REVIEW
         </text>
         <text
           x={500} y={491}

@@ -110,9 +110,9 @@ export default function StreamingPerformanceScreen() {
   const st  = status.data;
   const totalVaulted = vaultData.data?.total_vaulted_usd ?? null;
   const { data: fleetEq } = useFleetEquity();
-  const { data: registry } = useBotRegistry();
+  const registryQuery = useBotRegistry();
+  const registry = registryQuery.data;
 
-  const cryptoFG = sg?.crypto_fear_greed?.value;
   const marketFG = sg?.market_fear_greed?.value;
   const regime   = st?.groq?.regime ?? "—";
 
@@ -175,7 +175,7 @@ export default function StreamingPerformanceScreen() {
   }
 
   return (
-    <div style={{
+    <div className="stream-screen stream-screen-performance" style={{
       width: "100%",
       height: "100%",
       background: `radial-gradient(ellipse at 20% 0%, rgba(6,18,50,1) 0%, ${C.bg} 70%)`,
@@ -308,7 +308,11 @@ export default function StreamingPerformanceScreen() {
               );
             }) : (
               <div style={{ padding: 24, textAlign: "center", color: C.dim, fontSize: 12, fontFamily: "monospace" }}>
-                Loading fleet data…
+                {registryQuery.isLoading
+                  ? "Loading fleet data…"
+                  : registryQuery.isError
+                    ? "Fleet registry unavailable"
+                    : "No active bots are registered."}
               </div>
             )}
           </div>
@@ -357,7 +361,6 @@ export default function StreamingPerformanceScreen() {
               ◈ Market Sentiment
             </div>
             {[
-              { label: "Crypto Fear & Greed", value: cryptoFG },
               { label: "Market Fear & Greed",  value: marketFG },
             ].map(({ label, value }) => (
               <div key={label} style={{ marginBottom: 10 }}>

@@ -376,18 +376,20 @@ export default function BenchPage() {
 
   if (error || !result) {
     return (
-      <div className="bench-fallback bench-unverified" data-testid="status-bench-error">
-        <ShieldAlert size={28} />
-        <strong>UNVERIFIED — NO PROVENANCE</strong>
-        <h1>Strategy Bench result unavailable</h1>
-        <p>{error ?? "The development engine returned no result."}</p>
-        <button
-          data-testid="button-retry-bench"
-          onClick={() => setParams((current) => ({ ...current }))}
-        >
-          <RotateCcw size={15} /> Retry run
-        </button>
-      </div>
+      <main className="bench-shell bench-fallback bench-unverified" data-testid="status-bench-error">
+        <section className="bench-fallback-card" role="alert">
+          <ShieldAlert size={28} />
+          <strong>UNVERIFIED — NO PROVENANCE</strong>
+          <h1>Strategy Bench result unavailable</h1>
+          <p>{error ?? "The development engine returned no result."}</p>
+          <button
+            data-testid="button-retry-bench"
+            onClick={() => setParams((current) => ({ ...current }))}
+          >
+            <RotateCcw size={15} /> Retry run
+          </button>
+        </section>
+      </main>
     );
   }
 

@@ -15,7 +15,7 @@ interface PageConfig {
 
 const PAGE_CONFIG: Record<SubPage, PageConfig> = {
   a: {
-    message: "Our robots are making live trades right now! Watch the green numbers — that means we're winning! 🤖",
+    message: "The Live view summarizes the latest activity available from the dashboard feeds. Missing data stays marked as unavailable.",
     color: "#818cf8",
     glowColor: "rgba(99,102,241,0.5)",
     floatDur: "3.5s",
@@ -25,7 +25,7 @@ const PAGE_CONFIG: Record<SubPage, PageConfig> = {
     blinkDur: "5s",
   },
   b: {
-    message: "This is the Synaptic Math Audit Engine — it checks every trade calculation for accuracy. A 100% pass rate means our math is bulletproof! 🧮",
+    message: "The Math view shows audit results returned by the service. Review failures and unavailable checks before drawing conclusions.",
     color: "#22d3ee",
     glowColor: "rgba(34,211,238,0.5)",
     floatDur: "4s",
@@ -35,7 +35,7 @@ const PAGE_CONFIG: Record<SubPage, PageConfig> = {
     blinkDur: "4.5s",
   },
   c: {
-    message: "Bot Fleet Leaderboard — every trading robot ranked by all-time P&L. The top bot earns the crown! 👑",
+    message: "The Bots view uses registry identities and per-bot metrics where the service provides them.",
     color: "#34d399",
     glowColor: "rgba(52,211,153,0.5)",
     floatDur: "3s",
@@ -45,7 +45,7 @@ const PAGE_CONFIG: Record<SubPage, PageConfig> = {
     blinkDur: "4s",
   },
   d: {
-    message: "Mission control! Every green node means that system is running perfectly. Red means trouble — but auto-heal kicks in immediately! 🟢",
+    message: "Health indicators reflect the available service checks. Unknown status is not the same as healthy status.",
     color: "#fbbf24",
     glowColor: "rgba(251,191,36,0.5)",
     floatDur: "2.2s",
@@ -55,7 +55,7 @@ const PAGE_CONFIG: Record<SubPage, PageConfig> = {
     blinkDur: "3s",
   },
   e: {
-    message: "The Learning Journal tracks every symbol pair our algorithms study. Hurst exponents below 0.45 mean it's safe to mean-revert! 🧠",
+    message: "The Fleet Notes view is informational. It does not change the active strategy or risk settings.",
     color: "#6ee7b7",
     glowColor: "rgba(110,231,183,0.5)",
     floatDur: "4.5s",
@@ -65,7 +65,7 @@ const PAGE_CONFIG: Record<SubPage, PageConfig> = {
     blinkDur: "6s",
   },
   f: {
-    message: "The Orb is alive! Every glow, pulse and tendril is live trading activity. Each orbiting ring is one of your bots — watch the flares when trades close! ✨",
+    message: "The Orb is a visual summary. Its animation should not be read as a separate order or position feed.",
     color: "#c084fc",
     glowColor: "rgba(192,132,252,0.55)",
     floatDur: "5s",
@@ -75,7 +75,7 @@ const PAGE_CONFIG: Record<SubPage, PageConfig> = {
     blinkDur: "7s",
   },
   g: {
-    message: "Raw performance! Sharpe, Sortino, max drawdown, Calmar — every number that tells you if the system is ACTUALLY working. Green ratios mean the math is on our side! 📊",
+    message: "Performance metrics are shown when the API provides them. A missing value is not a zero or a passing result.",
     color: "#fb923c",
     glowColor: "rgba(251,146,60,0.5)",
     floatDur: "3.2s",
@@ -85,7 +85,7 @@ const PAGE_CONFIG: Record<SubPage, PageConfig> = {
     blinkDur: "5s",
   },
   h: {
-    message: "System Architecture map! Every component, database table, and external service laid out visually. Click a Flow on the right to highlight exactly how data moves through the platform. 🗺️",
+    message: "The Architecture view is a simplified system map. Select a node or flow to inspect the available description.",
     color: "#a5b4fc",
     glowColor: "rgba(99,102,241,0.5)",
     floatDur: "4s",
@@ -159,6 +159,7 @@ export function ClippyAssistant({ active }: ClippyAssistantProps) {
       `}</style>
 
       <div
+        className="stream-clippy-assistant"
         style={{
           position: "fixed",
           bottom: 56,
@@ -176,6 +177,7 @@ export function ClippyAssistant({ active }: ClippyAssistantProps) {
       >
         {/* Speech bubble */}
         <div
+          className="stream-clippy-bubble"
           style={{
             maxWidth: 340,
             background: "linear-gradient(135deg, rgba(15,23,42,0.97), rgba(30,41,59,0.95))",
@@ -236,6 +238,7 @@ export function ClippyAssistant({ active }: ClippyAssistantProps) {
 
         {/* Clippy mascot SVG */}
         <div
+          className="stream-clippy-mascot"
           style={{
             marginRight: 14,
             animation: `${animId}-float ${cfg.floatDur} ease-in-out infinite, ${animId}-heartbeat 3s ease-in-out infinite`,

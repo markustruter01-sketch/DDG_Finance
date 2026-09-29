@@ -4,6 +4,7 @@ import { DDGBadge } from "@/components/DDGBadge";
 export default function StreamingScreen() {
   return (
     <div
+      className="stream-screen stream-screen-live"
       style={{
         height: "100%",
         width: "100%",

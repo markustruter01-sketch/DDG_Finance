@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { X, ChevronRight } from "lucide-react";
 import { NODES, EDGES, FLOWS, COLUMN_LABELS, COLUMN_COLORS, type ArchNode, type ArchEdge, type ArchFlow } from "@/data/architectureData";
 
@@ -10,6 +10,7 @@ const SVG_PADDING_X = 18;
 const SVG_PADDING_TOP = 14;
 const COL_COUNT = 5;
 const NATURAL_W = 1040;
+const COLUMN_TEXT_COLORS = ["#9a3412", "#0e7490", "#6d28d9", "#166534", "#92400e"] as const;
 
 function getColX(col: number): number {
   const usable = NATURAL_W - SVG_PADDING_X * 2;
@@ -124,12 +125,14 @@ function ArchNodeBox({
   dimmed,
   selected,
   onClick,
+  onKeyDown,
 }: {
   node: ArchNode;
   highlighted: boolean;
   dimmed: boolean;
   selected: boolean;
   onClick: () => void;
+  onKeyDown: (event: ReactKeyboardEvent<SVGGElement>) => void;
 }) {
   const { x, y } = nodeCenter(node);
   const nx = x - NODE_W / 2;
@@ -142,18 +145,22 @@ function ArchNodeBox({
     ? nodeColor
     : highlighted
     ? nodeColor
-    : "rgba(148,163,184,0.18)";
+    : "rgba(71,85,105,0.35)";
   const bgColor = selected
     ? `${nodeColor}22`
     : highlighted
     ? `${nodeColor}18`
-    : "rgba(15,23,42,0.85)";
+    : "rgba(255,255,255,0.48)";
   const glowFilter = (highlighted || selected) ? `drop-shadow(0 0 6px ${nodeColor}55)` : "none";
 
   return (
     <g
+      role="button"
+      tabIndex={0}
+      aria-label={`Inspect ${node.label}`}
       style={{ cursor: "pointer", opacity, transition: "opacity 0.25s", filter: glowFilter }}
       onClick={onClick}
+      onKeyDown={onKeyDown}
     >
       <rect
         x={nx}
@@ -179,7 +186,7 @@ function ArchNodeBox({
         cx={nx + NODE_W - 10}
         cy={ny + 10}
         r={3}
-        fill={highlighted || selected ? nodeColor : "rgba(148,163,184,0.2)"}
+        fill={highlighted || selected ? nodeColor : "rgba(71,85,105,0.45)"}
       />
       {/* label via foreignObject */}
       <foreignObject x={nx + 8} y={ny + 6} width={NODE_W - 16} height={NODE_H - 12}>
@@ -197,7 +204,7 @@ function ArchNodeBox({
             style={{
               fontSize: 10,
               fontWeight: 700,
-              color: highlighted || selected ? nodeColor : "#e2e8f0",
+              color: highlighted || selected ? nodeColor : "#172033",
               letterSpacing: "0.04em",
               lineHeight: 1.2,
               whiteSpace: "nowrap",
@@ -210,7 +217,7 @@ function ArchNodeBox({
           <div
             style={{
               fontSize: 8,
-              color: "rgba(148,163,184,0.55)",
+              color: "rgba(51,65,85,0.8)",
               whiteSpace: "nowrap",
               overflow: "hidden",
               textOverflow: "ellipsis",
@@ -231,6 +238,7 @@ function ColumnHeaders() {
       {([0, 1, 2, 3, 4] as const).map((col) => {
         const cx = getColX(col);
         const color = COLUMN_COLORS[col];
+        const textColor = COLUMN_TEXT_COLORS[col];
         return (
           <g key={col}>
             <rect
@@ -251,7 +259,7 @@ function ColumnHeaders() {
                 fontSize: 8,
                 fontFamily: "'JetBrains Mono', monospace",
                 fontWeight: 700,
-                fill: color,
+                fill: textColor,
                 letterSpacing: "0.18em",
               }}
             >
@@ -288,6 +296,7 @@ function NodePopover({ node, onClose }: { node: ArchNode; onClose: () => void })
       >
         <button
           onClick={onClose}
+          aria-label="Close node details"
           style={{
             position: "absolute",
             top: 6,
@@ -326,6 +335,7 @@ function FlowsSidebar({
 }) {
   return (
     <div
+      className="stream-screen stream-screen-architecture"
       style={{
         width: 264,
         flexShrink: 0,
@@ -572,6 +582,7 @@ export default function StreamingArchitectureScreen() {
 
   return (
     <div
+      className="stream-screen stream-screen-architecture"
       style={{
         height: "100%",
         width: "100%",
@@ -594,7 +605,7 @@ export default function StreamingArchitectureScreen() {
           gap: 10,
         }}
       >
-        <span style={{ fontSize: 13, fontWeight: 700, color: "#e2e8f0", letterSpacing: "0.04em" }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: "#172033", letterSpacing: "0.04em" }}>
           System Architecture & Flows
         </span>
         <span style={{ fontSize: 9, color: "rgba(148,163,184,0.35)", letterSpacing: "0.08em" }}>
@@ -658,7 +669,13 @@ export default function StreamingArchitectureScreen() {
                   highlighted={highlighted}
                   dimmed={dimmed}
                   selected={selected}
-                  onClick={() => handleNodeClick(node.id)}
+                   onClick={() => handleNodeClick(node.id)}
+                   onKeyDown={(event) => {
+                     if (event.key === "Enter" || event.key === " ") {
+                       event.preventDefault();
+                       handleNodeClick(node.id);
+                     }
+                   }}
                 />
               );
             })}
@@ -699,7 +716,7 @@ export default function StreamingArchitectureScreen() {
                 border: `1px solid ${COLUMN_COLORS[col]}80`,
               }}
             />
-            <span style={{ fontSize: 8, color: COLUMN_COLORS[col], fontWeight: 700, letterSpacing: "0.12em" }}>
+            <span style={{ fontSize: 8, color: COLUMN_TEXT_COLORS[col], fontWeight: 700, letterSpacing: "0.12em" }}>
               {COLUMN_LABELS[col]}
             </span>
           </div>

@@ -1,25 +1,21 @@
 import {
-  usePortfolio,
+  useLivePositions,
   useFleetEquity,
   useBotRegistry,
   useJournal,
 } from "@/hooks/use-trading";
 import { getBotColors } from "@/lib/bot-colors";
+import { getAttributedBotIdentity } from "@/lib/bot-identity";
 import { DDGBadge } from "@/components/DDGBadge";
 
 const STATIC_BOTS: Array<{ id: string; name: string; icon: string; exchange: string; asset_class: string; color: string; status: string }> = [
-  { id: "oracle",        name: "Oracle",        icon: "🔮", exchange: "alpaca", asset_class: "stocks",        color: "purple", status: "active" },
-  { id: "spy_qqq_trend", name: "SPY/QQQ Trend", icon: "📈", exchange: "alpaca", asset_class: "equity_etf",    color: "cyan",   status: "active" },
-  { id: "jerome_macro",  name: "Jerome",        icon: "🏛",  exchange: "alpaca", asset_class: "macro_etf",     color: "orange", status: "active" },
-  // buck_futures retired May 2026 — removed from display
+  { id: "oracle", name: getAttributedBotIdentity("oracle").displayName, icon: getAttributedBotIdentity("oracle").icon, exchange: "alpaca", asset_class: "stocks", color: "purple", status: "active" },
+  { id: "spy_qqq_trend", name: getAttributedBotIdentity("spy_qqq_trend").displayName, icon: getAttributedBotIdentity("spy_qqq_trend").icon, exchange: "alpaca", asset_class: "equity_etf", color: "cyan", status: "active" },
+  { id: "jerome_macro", name: getAttributedBotIdentity("jerome_macro").displayName, icon: getAttributedBotIdentity("jerome_macro").icon, exchange: "alpaca", asset_class: "macro_etf", color: "orange", status: "active" },
+  // Retired identities stay out of the runtime fallback.
 ];
 
-const PARAMS_TEXT: Record<string, string> = {
-  oracle:        "Z-Score > 2.1 | Min Profit 0.5% | NYSE hours only",
-  spy_qqq_trend: "Z-Entry 2.0 | Z-Exit 0.3 | Trail 1.5% | Stop 3%",
-  jerome_macro:  "EMA/ADX/ATR trend-following | LLM parachute | 9AM+9PM UTC",
-  // buck_futures retired May 2026 — no params entry
-};
+const PARAMS_UNAVAILABLE = "Not provided by the bot registry.";
 
 function fmtEq(v: number) {
   return `$${Math.round(v).toLocaleString()}`;
@@ -68,19 +64,25 @@ interface BotCardData {
   pnl_pct: number | null;
   paused: boolean;
   stale?: boolean;
+  statusUnknown?: boolean;
   openPositionCount: number | null;
   openPositionSymbols: string[];
   recentTrades: Array<{ symbol: string; pnl_usd: number | null }>;
+  recentTradesAttributionUnavailable?: boolean;
+  recentTradesLoading?: boolean;
+  recentTradesError?: boolean;
   paramsText: string;
 }
 
-function StatusBadge({ paused, stale }: { paused: boolean; stale?: boolean }) {
+function StatusBadge({ paused, stale, unknown }: { paused: boolean; stale?: boolean; unknown?: boolean }) {
   const isStale = stale && !paused;
-  const label = paused ? "PAUSED" : isStale ? "STALE" : "LIVE";
+  const label = paused ? "PAUSED" : isStale ? "STALE" : unknown ? "UNKNOWN" : "LIVE";
   const c = paused
     ? { bg: "rgba(245,158,11,0.15)", border: "rgba(245,158,11,0.4)", dot: "#f59e0b", text: "#f59e0b", glow: "0 0 5px #f59e0b44" }
     : isStale
     ? { bg: "rgba(100,116,139,0.12)", border: "rgba(100,116,139,0.3)", dot: "#64748b", text: "#64748b", glow: "none" }
+    : unknown
+    ? { bg: "rgba(245,158,11,0.12)", border: "rgba(245,158,11,0.35)", dot: "#f59e0b", text: "#f59e0b", glow: "none" }
     : { bg: "rgba(34,197,94,0.12)", border: "rgba(34,197,94,0.35)", dot: "#22c55e", text: "#22c55e", glow: "0 0 5px #22c55e44" };
   return (
     <div
@@ -116,7 +118,7 @@ function BotCard({ bot }: { bot: BotCardData }) {
             </div>
           </div>
         </div>
-        <StatusBadge paused={bot.paused} stale={bot.stale} />
+        <StatusBadge paused={bot.paused} stale={bot.stale} unknown={bot.statusUnknown} />
       </div>
 
       <div className="px-2.5 pb-1 shrink-0">
@@ -152,7 +154,13 @@ function BotCard({ bot }: { bot: BotCardData }) {
               {bot.openPositionSymbols.join(", ")}
             </div>
           ) : (
-            <div className="text-[8px] font-mono text-slate-700">None</div>
+            <div className="text-[8px] font-mono text-slate-400">
+              {bot.openPositionCount === 0
+                ? "None"
+                : bot.openPositionCount == null
+                  ? "Position data unavailable"
+                  : "Position symbols unavailable"}
+            </div>
           )}
         </div>
 
@@ -170,7 +178,15 @@ function BotCard({ bot }: { bot: BotCardData }) {
             Recent Trades
           </div>
           {bot.recentTrades.length === 0 ? (
-            <div className="text-[8px] font-mono" style={{ color: "rgba(148,163,184,0.25)" }}>No recent trades</div>
+            <div className="text-[8px] font-mono" style={{ color: "rgba(148,163,184,0.55)" }}>
+              {bot.recentTradesLoading
+                ? "Loading journal data"
+                : bot.recentTradesError
+                  ? "Journal data unavailable"
+                  : bot.recentTradesAttributionUnavailable
+                    ? "Journal has no bot ID; not assigned"
+                    : "No recent trades returned for this bot"}
+            </div>
           ) : (
             <div className="flex flex-col gap-px overflow-hidden">
               {bot.recentTrades.slice(0, 3).map((t, i) => (
@@ -210,12 +226,25 @@ function BotCard({ bot }: { bot: BotCardData }) {
 }
 
 export default function StreamingBotsScreen() {
-  const { data: portfolio } = usePortfolio();
+  const { data: livePositions } = useLivePositions();
   const { data: fleetEq } = useFleetEquity();
   const { data: registry } = useBotRegistry();
-  const { data: journal } = useJournal();
+  const journalQuery = useJournal();
+  const { data: journal } = journalQuery;
 
-  const oraclePositions = portfolio?.positions?.filter((p) => p.market_value != null && p.market_value > 10) ?? [];
+  const oraclePositionData = livePositions?.positions_by_bot?.oracle;
+  const spyPositionData = livePositions?.positions_by_bot?.spy_qqq_trend;
+  const jeromePositionData = livePositions?.positions_by_bot?.jerome_macro;
+  const closedJournalTrades = (journal?.trades ?? [])
+    .filter((trade) => trade.status === "Closed_Win" || trade.status === "Closed_Loss");
+  const journalHasUnattributedTrades = closedJournalTrades.some((trade) => !trade.bot_id?.trim());
+  const recentTradesForBot = (botId: string) => closedJournalTrades
+    .filter((trade) => trade.bot_id === botId)
+    .slice(0, 3)
+    .map((trade) => ({
+      symbol: trade.ticker,
+      pnl_usd: trade.pnl_usd ?? trade.realized_pnl ?? null,
+    }));
 
   const fleetTotal   = fleetEq?.fleet_total?.equity ?? null;
   const fleetPnl     = fleetEq?.fleet_total?.pnl ?? null;
@@ -224,45 +253,52 @@ export default function StreamingBotsScreen() {
 
   const botRuntimeByRegistryId: Record<string, Partial<BotCardData>> = {
     oracle: {
-      equity:             fleetEq?.oracle?.equity ?? portfolio?.account?.equity ?? null,
+      equity:             fleetEq?.oracle?.equity ?? null,
       pnl:                fleetEq?.oracle?.pnl ?? null,
       pnl_pct:            fleetEq?.oracle?.pnl_pct ?? null,
-      paused:             fleetEq?.oracle?.paused ?? false,
-      openPositionCount:  oraclePositions.length,
-      openPositionSymbols: oraclePositions.map((p) => p.symbol),
-      recentTrades: (journal?.trades ?? [])
-        .filter((t) => t.status === "Closed_Win" || t.status === "Closed_Loss")
-        .slice(0, 3)
-        .map((t) => ({
-          symbol: t.ticker,
-          pnl_usd: t.pnl_usd ?? t.realized_pnl ?? null,
-        })),
+      ...(fleetEq?.oracle?.paused != null ? { paused: fleetEq.oracle.paused } : {}),
+      statusUnknown:      fleetEq?.oracle?.paused == null,
+      openPositionCount:  oraclePositionData?.count ?? fleetEq?.oracle?.positions ?? null,
+      openPositionSymbols: oraclePositionData?.positions.map((position) => position.symbol) ?? [],
+      recentTrades: recentTradesForBot("oracle"),
+      recentTradesAttributionUnavailable: journalHasUnattributedTrades,
+      recentTradesLoading: journalQuery.isLoading,
+      recentTradesError: journalQuery.isError,
     },
     spy_qqq_trend: {
       equity:             fleetEq?.spy_qqq_trend?.equity ?? null,
       pnl:                fleetEq?.spy_qqq_trend?.pnl ?? null,
       pnl_pct:            fleetEq?.spy_qqq_trend?.pnl_pct ?? null,
-      paused:             fleetEq?.spy_qqq_trend?.paused ?? false,
-      openPositionCount:  fleetEq?.spy_qqq_trend?.positions ?? null,
-      openPositionSymbols: [],
-      recentTrades: [],
+      ...(fleetEq?.spy_qqq_trend?.paused != null ? { paused: fleetEq.spy_qqq_trend.paused } : {}),
+      statusUnknown:      fleetEq?.spy_qqq_trend?.paused == null,
+      openPositionCount:  spyPositionData?.count ?? fleetEq?.spy_qqq_trend?.positions ?? null,
+      openPositionSymbols: spyPositionData?.positions.map((position) => position.symbol) ?? [],
+      recentTrades: recentTradesForBot("spy_qqq_trend"),
+      recentTradesAttributionUnavailable: journalHasUnattributedTrades,
+      recentTradesLoading: journalQuery.isLoading,
+      recentTradesError: journalQuery.isError,
     },
     jerome_macro: {
       equity:             fleetEq?.jerome_macro?.equity ?? null,
       pnl:                fleetEq?.jerome_macro?.pnl ?? null,
       pnl_pct:            fleetEq?.jerome_macro?.pnl_pct ?? null,
-      paused:             fleetEq?.jerome_macro?.paused ?? false,
-      openPositionCount:  fleetEq?.jerome_macro?.positions ?? null,
-      openPositionSymbols: [],
-      recentTrades: [],
+      ...(fleetEq?.jerome_macro?.paused != null ? { paused: fleetEq.jerome_macro.paused } : {}),
+      statusUnknown:      fleetEq?.jerome_macro?.paused == null,
+      openPositionCount:  jeromePositionData?.count ?? fleetEq?.jerome_macro?.positions ?? null,
+      openPositionSymbols: jeromePositionData?.positions.map((position) => position.symbol) ?? [],
+      recentTrades: recentTradesForBot("jerome_macro"),
+      recentTradesAttributionUnavailable: journalHasUnattributedTrades,
+      recentTradesLoading: journalQuery.isLoading,
+      recentTradesError: journalQuery.isError,
     },
-    // buck_futures retired May 2026 — no runtime slot
+    // Retired identities stay out of the runtime map.
   };
 
   const rawBotSource = registry?.bots ?? STATIC_BOTS;
-  // Filter: hide any bot whose fleet-equity slot is stale (retired bots always stale)
-  // When fleet is not yet loaded, show all so the skeleton renders properly.
+  const supportedBotIds = Object.keys(botRuntimeByRegistryId);
+  // Keep retired or unknown registry identities out of the pre-load fallback.
   const botSource = rawBotSource.filter((b: { id: string }) => {
+    if (!supportedBotIds.includes(b.id)) return false;
     if (!fleetEq) return true;
     const eq = (fleetEq as unknown as Record<string, { stale?: boolean } | undefined>)[b.id];
     return eq != null && !eq.stale;
@@ -270,10 +306,11 @@ export default function StreamingBotsScreen() {
   const bots: BotCardData[] = botSource.map((bot) => {
     const colors = getBotColors(bot.color);
     const runtime = botRuntimeByRegistryId[bot.id] ?? {};
+    const identity = getAttributedBotIdentity(bot.id);
     return {
       id:                 bot.id,
-      name:               (bot as { display_name?: string }).display_name ?? (bot as { name?: string }).name ?? bot.id,
-      icon:               bot.icon,
+      name:               identity.displayName,
+      icon:               identity.icon,
       exchangeLabel:      getExchangeLabel(bot.exchange, bot.asset_class),
       color:              colors.hex,
       equity:             null,
@@ -283,7 +320,7 @@ export default function StreamingBotsScreen() {
       openPositionCount:  null,
       openPositionSymbols: [],
       recentTrades:       [],
-      paramsText:         PARAMS_TEXT[bot.id] ?? "Strategy parameters unavailable",
+      paramsText:         PARAMS_UNAVAILABLE,
       ...runtime,
     };
   });
@@ -294,16 +331,16 @@ export default function StreamingBotsScreen() {
     return pb - pa;
   });
 
-  const liveCount  = bots.filter((b) => !b.paused && !b.stale).length;
+  const liveCount  = bots.every((b) => !b.statusUnknown)
+    ? bots.filter((b) => !b.paused && !b.stale).length
+    : null;
   const totalOpen  = bots.every((b) => b.openPositionCount != null)
     ? bots.reduce((s, b) => s + b.openPositionCount!, 0)
     : null;
-  const liveFeedTrades = (journal?.trades ?? [])
-    .filter((t) => t.status === "Closed_Win" || t.status === "Closed_Loss")
-    .slice(0, 15);
+  const liveFeedTrades = closedJournalTrades.slice(0, 15);
 
   return (
-    <div className="h-full w-full flex overflow-hidden" style={{ background: "#020617", color: "#e2e8f0" }}>
+    <div className="stream-screen stream-screen-bots h-full w-full flex overflow-hidden" style={{ background: "#020617", color: "#e2e8f0" }}>
       {/* ── LEFT SIDEBAR ── */}
       <div
         className="flex flex-col shrink-0 overflow-hidden"
@@ -330,7 +367,7 @@ export default function StreamingBotsScreen() {
               <div className="text-[7px] uppercase tracking-wider font-bold" style={{ color: "rgba(148,163,184,0.35)" }}>
                 Active Bots
               </div>
-              <div className="text-[13px] font-black font-mono text-white">{liveCount}/{bots.length}</div>
+              <div className="text-[13px] font-black font-mono text-white">{liveCount == null ? `—/${bots.length}` : `${liveCount}/${bots.length}`}</div>
             </div>
             <div
               className="flex-1 rounded px-1.5 py-1"
@@ -362,7 +399,7 @@ export default function StreamingBotsScreen() {
                     </span>
                   </div>
                   <span className="text-[8px] font-mono font-bold shrink-0" style={{ color: pColor }}>
-                    {p != null ? fmtPnl(p) : "$0"}
+                    {p != null ? fmtPnl(p) : "—"}
                   </span>
                 </div>
               );
@@ -376,15 +413,31 @@ export default function StreamingBotsScreen() {
             <span className="text-[8px] uppercase tracking-widest font-bold" style={{ color: "rgba(148,163,184,0.35)" }}>
               Live Feed
             </span>
-            <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#22c55e", boxShadow: "0 0 5px #22c55e" }} />
+            <span
+              className="w-1.5 h-1.5 rounded-full"
+              role="img"
+              aria-label={journalQuery.isError ? "Journal request failed" : journal ? "Journal data available" : "Journal data loading"}
+              title={journalQuery.isError ? "Journal request failed" : journal ? "Journal data available" : "Journal data loading"}
+              style={{
+                background: journalQuery.isError ? "#ef4444" : journal ? "#22c55e" : "#f59e0b",
+                boxShadow: journal ? "0 0 5px #22c55e" : "none",
+              }}
+            />
           </div>
           <div className="flex-1 overflow-y-auto flex flex-col gap-2 min-h-0 pr-2">
             {liveFeedTrades.length === 0 ? (
-              <div className="text-[8px] font-mono" style={{ color: "rgba(148,163,184,0.2)" }}>No recent trades</div>
+              <div className="text-[8px] font-mono" style={{ color: "rgba(148,163,184,0.6)" }}>
+                {journalQuery.isLoading
+                  ? "Loading journal data"
+                  : journalQuery.isError
+                    ? "Journal data unavailable"
+                    : "No recent trades returned"}
+              </div>
             ) : (
               liveFeedTrades.map((t, i) => {
                 const pnlUsd = t.pnl_usd ?? t.realized_pnl ?? null;
                 const pColor = pnlUsd == null ? "#64748b" : pnlUsd >= 0 ? "#34d399" : "#f87171";
+                const identity = getAttributedBotIdentity(t.bot_id);
                 return (
                   <div key={t.trade_id ?? i} className="shrink-0">
                     <div className="text-[7px] font-mono" style={{ color: "rgba(148,163,184,0.25)" }}>
@@ -396,7 +449,7 @@ export default function StreamingBotsScreen() {
                         {pnlUsd == null ? "—" : `${pnlUsd >= 0 ? "+" : ""}$${Math.abs(pnlUsd).toFixed(0)}`}
                       </span>
                     </div>
-                    <div className="text-[7px] font-mono" style={{ color: "rgba(148,163,184,0.3)" }}>Oracle</div>
+                    <div className="text-[7px] font-mono" style={{ color: "rgba(148,163,184,0.65)" }}>{identity.displayName}</div>
                   </div>
                 );
               })
@@ -407,7 +460,7 @@ export default function StreamingBotsScreen() {
 
       {/* ── BOT GRID — dynamic from botSource, no hardcoded count ── */}
       <div
-        className="flex-1 overflow-y-auto p-2"
+        className="stream-bot-card-grid flex-1 overflow-y-auto p-2"
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(4, 1fr)",

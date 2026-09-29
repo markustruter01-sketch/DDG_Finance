@@ -6,7 +6,6 @@
 - [Buck futures account collision](buck-futures-account-collision.md) — buck_futures uses same Alpaca account as oracle; fleet equity double-counts ~$96k; fix before Phase 2 refactor.
 - [Crypto removal Phase F migration](crypto-removal-phase-f.md) — Phase F in ensure_schema() drops crypto_signals/crypto_price_cache and deletes 4 bot_portfolio rows; fires on first trading-api startup after publish.
 - [Fleet equity SSOT](fleet-equity-ssot.md) — /fleet/equity is the single source of truth: provides pnl, pnl_pct, win_rate per bot + fleet_total. Never recompute these client-side.
-- [Bot identity canonical set](bot-identity-canonical.md) — bot-identity.ts has exactly 4 entries: oracle, spy_qqq_trend, jerome_macro, buck_futures. All Kraken aliases (davy-jones, blackbeard, bot2_spy_qqq) removed after Phase 2 cleanup.
 - [DB pool stale connection fix](db-pool-stale-connection.md) — conn.closed==0 even for server-dropped connections; must SELECT 1 ping after getconn() to detect. Two-stage check in _acquire_healthy_conn().
 - [Oracle OOS validation results](oracle-oos-results.md) — MARGINAL (3/4 criteria): passes 4/5 windows, survives stress, MaxDD always <20%, but pooled Sharpe 0.156 (below 0.5 threshold).
 - [OOS harness cash-tracking pattern](oos-cash-tracking.md) — backtest engines must track cash explicitly; never do equity+=pnl on close when daily MTM already reflects unrealized gains (double-counts).
@@ -61,3 +60,4 @@
 - [Large backup asset packaging](large-backup-asset-packaging.md) — downloadable asset registration caps files at 100 MiB; split larger verified archives and preserve the full-file hash.
 - [Research connection isolation](research-connection-isolation.md) — research imports must not initialize or fall back through the shared application database.
 - [ETF current quantity backfill](current-qty-backfill.md) — keep immutable entry qty separate from one-time broker-matched current_qty backfill; closed=0, canceled=NULL, failures stay NULL.
+- [CSSOM inline-style selectors](cssom-inline-style-selectors.md) — React/browser style serialization can differ from source literals; verify substring selectors against rendered attributes.

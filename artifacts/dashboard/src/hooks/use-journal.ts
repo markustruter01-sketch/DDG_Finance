@@ -8,6 +8,7 @@ export interface TradeJournal {
     date: string;
     ticker: string;
     asset_class: string;
+    bot_id?: string | null;
     conviction_score: number;
     pnl_percentage: number;
     original_thesis: string;

@@ -34,3 +34,7 @@ packages = ["glibcLocales", "libxcrypt", "postgresql_17"]
 
 [userenv.shared]
 PER_BOT_VAULT_ENABLED = "true"
+
+[[ports]]
+localPort = 23183
+externalPort = 80

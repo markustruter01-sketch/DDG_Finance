@@ -57,6 +57,11 @@ export interface LivePosition {
 export interface LivePositionsData {
   count: number;
   positions: LivePosition[];
+  positions_by_bot?: Partial<Record<"oracle" | "spy_qqq_trend" | "jerome_macro", {
+    positions: LivePosition[];
+    count: number;
+    strategy_count: number;
+  }>>;
 }
 
 export interface AllocationPlan {

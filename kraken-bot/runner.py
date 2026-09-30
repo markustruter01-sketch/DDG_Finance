@@ -1193,7 +1193,7 @@ def main() -> int:
                         locks_ready = False
                         retry_exception = exc
 
-                if not locks_ready and _shutdown_event.is_set():
+                if _shutdown_event.is_set():
                     logger.info(
                         "Runner | shutdown requested while awaiting published leases"
                     )

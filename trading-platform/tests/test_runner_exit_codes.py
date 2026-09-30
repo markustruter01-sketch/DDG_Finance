@@ -106,6 +106,7 @@ def _configure_main_harness(
     )
     monkeypatch.setattr(runner_module, "_shutdown_event", shutdown_event)
     monkeypatch.setattr(runner_module, "_runner_can_trade", live)
+    monkeypatch.setattr(runner_module, "_runner_lock_ready", False)
     monkeypatch.setattr(
         runner_module,
         "RUNNER_EXECUTION_MODE",
@@ -248,14 +249,303 @@ def test_published_refusal_sends_alert_with_claim_lease_row(runner_module, monke
         "notifications.discord.alert_critical",
         lambda *args, **kwargs: alerts.append((args, kwargs)),
     )
+    harness = _configure_main_harness(
+        runner_module,
+        monkeypatch,
+        wait_results=[False, False, False, True],
+    )
+    monkeypatch.setattr(runner_module, "LEASE_WAIT_RETRY_SECONDS", 1)
+    monkeypatch.setattr(runner_module, "LEASE_WAIT_ALERT_SECONDS", 2)
 
-    assert runner_module.main() == runner_module.EXIT_REFUSAL
+    assert runner_module.main() == runner_module.EXIT_SUCCESS
     assert len(alerts) == 1
     field_value = alerts[0][1]["fields"][0]["value"]
     assert '"bot_id": "oracle"' in field_value
     assert '"environment": "published"' in field_value
     assert '"heartbeat_age_seconds"' in field_value
     assert "[]" not in field_value
+    assert not harness["bot_thread_starts"]
+    assert harness["heartbeat_statuses"].count("awaiting_leases") >= 1
+    assert sum(event[0] == "health_server" for event in harness["events"]) == 1
+    assert harness["clock"].seconds > runner_module.LEASE_WAIT_ALERT_SECONDS
+
+
+def test_successful_first_claim_starts_server_and_bots_once(runner_module, monkeypatch):
+    harness = _configure_main_harness(
+        runner_module,
+        monkeypatch,
+        wait_results=[True],
+    )
+    monkeypatch.setattr(runner_module, "RUNNER_ENVIRONMENT", "published")
+    claims = []
+
+    def claim_once():
+        claims.append("claim")
+        harness["events"].append(("claim",))
+        runner_module._runner_lock_ready = True
+        return True
+
+    monkeypatch.setattr(runner_module, "_prepare_runner_locks", claim_once)
+
+    assert runner_module.main() == runner_module.EXIT_SUCCESS
+    assert claims == ["claim"]
+    assert harness["heartbeat_statuses"][0] == "starting"
+    assert "awaiting_leases" not in harness["heartbeat_statuses"]
+    assert harness["bot_thread_starts"] == ["bot-oracle"]
+    assert sum(event[0] == "health_server" for event in harness["events"]) == 1
+    assert harness["events"].index(("claim",)) < harness["events"].index(
+        ("health_server",)
+    )
+
+
+def test_published_occupied_twice_then_free_waits_before_starting_bots(
+    runner_module, monkeypatch
+):
+    harness = _configure_main_harness(
+        runner_module,
+        monkeypatch,
+        wait_results=[False, False, True],
+    )
+    monkeypatch.setattr(runner_module, "RUNNER_ENVIRONMENT", "published")
+    monkeypatch.setattr(runner_module, "LEASE_WAIT_RETRY_SECONDS", 1)
+    claim_count = 0
+    waiting_logs = harness["waiting_logs"]
+
+    def claim_until_free():
+        nonlocal claim_count
+        claim_count += 1
+        harness["events"].append(("claim", claim_count))
+        if claim_count < 3:
+            _set_lock_failure(
+                runner_module,
+                monkeypatch,
+                cause="occupied_lease",
+                holder_environment="published",
+                decision="remote_runner_heartbeat_fresh",
+            )
+            return False
+        runner_module._runner_lock_ready = True
+        harness["events"].append(("claim_succeeded", claim_count))
+        return True
+
+    monkeypatch.setattr(runner_module, "_prepare_runner_locks", claim_until_free)
+
+    assert runner_module.main() == runner_module.EXIT_SUCCESS
+    assert claim_count == 3
+    assert harness["heartbeat_statuses"].count("awaiting_leases") == 2
+    assert "decision=remote_runner_heartbeat_fresh" in " ".join(waiting_logs)
+    assert harness["events"].index(("claim", 1)) < harness["events"].index(
+        ("health_server",)
+    )
+    successful_claim_index = harness["events"].index(("claim_succeeded", 3))
+    first_bot_index = next(
+        index
+        for index, event in enumerate(harness["events"])
+        if event[0] == "thread_started" and event[1].startswith("bot-")
+    )
+    assert successful_claim_index < first_bot_index
+    assert not any(
+        event[0] == "thread_started" and event[1].startswith("bot-")
+        for event in harness["events"][:successful_claim_index]
+    )
+    assert sum(event[0] == "health_server" for event in harness["events"]) == 1
+
+
+def test_published_lease_wait_continues_through_database_failure(
+    runner_module, monkeypatch
+):
+    harness = _configure_main_harness(
+        runner_module,
+        monkeypatch,
+        wait_results=[False, False, True],
+    )
+    monkeypatch.setattr(runner_module, "RUNNER_ENVIRONMENT", "published")
+    monkeypatch.setattr(runner_module, "LEASE_WAIT_RETRY_SECONDS", 1)
+    claim_count = 0
+
+    def fail_then_claim():
+        nonlocal claim_count
+        claim_count += 1
+        if claim_count == 1:
+            _set_lock_failure(
+                runner_module,
+                monkeypatch,
+                cause="occupied_lease",
+                holder_environment="published",
+            )
+            return False
+        if claim_count == 2:
+            _set_lock_failure(
+                runner_module,
+                monkeypatch,
+                cause="postgresql_unavailable",
+                holder_environment=None,
+                decision="database_unavailable",
+            )
+            return False
+        runner_module._runner_lock_ready = True
+        return True
+
+    monkeypatch.setattr(runner_module, "_prepare_runner_locks", fail_then_claim)
+
+    assert runner_module.main() == runner_module.EXIT_SUCCESS
+    assert claim_count == 3
+    assert any(
+        "cause=postgresql_unavailable" in message
+        for message in harness["waiting_logs"]
+    )
+    assert harness["bot_thread_starts"] == ["bot-oracle"]
+    assert harness["heartbeat_statuses"].count("awaiting_leases") == 2
+
+
+def test_shutdown_while_waiting_exits_successfully_without_bot_threads(
+    runner_module, monkeypatch
+):
+    harness = _configure_main_harness(
+        runner_module,
+        monkeypatch,
+        wait_results=[True],
+    )
+    monkeypatch.setattr(runner_module, "RUNNER_ENVIRONMENT", "published")
+    claim_calls = []
+
+    def occupied():
+        claim_calls.append("claim")
+        _set_lock_failure(
+            runner_module,
+            monkeypatch,
+            cause="occupied_lease",
+            holder_environment="published",
+        )
+        return False
+
+    monkeypatch.setattr(runner_module, "_prepare_runner_locks", occupied)
+
+    assert runner_module.main() == runner_module.EXIT_SUCCESS
+    assert claim_calls == ["claim"]
+    assert harness["heartbeat_statuses"] == ["starting", "awaiting_leases"]
+    assert not harness["bot_thread_starts"]
+    assert sum(event[0] == "health_server" for event in harness["events"]) == 1
+
+
+def test_shutdown_during_successful_retry_does_not_start_bot_threads(
+    runner_module, monkeypatch
+):
+    harness = _configure_main_harness(
+        runner_module,
+        monkeypatch,
+        wait_results=[False],
+    )
+    monkeypatch.setattr(runner_module, "RUNNER_ENVIRONMENT", "published")
+    claim_count = 0
+
+    def signal_shutdown_on_successful_retry():
+        nonlocal claim_count
+        claim_count += 1
+        if claim_count == 1:
+            _set_lock_failure(
+                runner_module,
+                monkeypatch,
+                cause="occupied_lease",
+                holder_environment="published",
+            )
+            return False
+        harness["event"].set()
+        runner_module._runner_lock_ready = True
+        return True
+
+    monkeypatch.setattr(
+        runner_module,
+        "_prepare_runner_locks",
+        signal_shutdown_on_successful_retry,
+    )
+
+    assert runner_module.main() == runner_module.EXIT_SUCCESS
+    assert claim_count == 2
+    assert not harness["bot_thread_starts"]
+    assert harness["heartbeat_statuses"] == ["starting", "awaiting_leases"]
+    assert sum(event[0] == "health_server" for event in harness["events"]) == 1
+
+
+def test_published_runner_does_not_wait_for_dev_holder(
+    runner_module, monkeypatch
+):
+    harness = _configure_main_harness(
+        runner_module,
+        monkeypatch,
+        wait_results=[True],
+    )
+    monkeypatch.setattr(runner_module, "RUNNER_ENVIRONMENT", "published")
+    alerts = []
+    _set_lock_failure(
+        runner_module,
+        monkeypatch,
+        cause="occupied_lease",
+        holder_environment="dev",
+    )
+    monkeypatch.setattr(
+        "notifications.discord.alert_critical",
+        lambda *args, **kwargs: alerts.append((args, kwargs)),
+    )
+    monkeypatch.setattr(runner_module, "_prepare_runner_locks", lambda: False)
+
+    assert runner_module.main() == runner_module.EXIT_REFUSAL
+    assert len(alerts) == 1
+    assert not harness["bot_thread_starts"]
+    assert not any(event[0] == "health_server" for event in harness["events"])
+    assert harness["event"].wait_calls == []
+
+
+def test_published_non_occupied_failure_aborts_without_health_server(
+    runner_module, monkeypatch
+):
+    harness = _configure_main_harness(
+        runner_module,
+        monkeypatch,
+        wait_results=[True],
+    )
+    monkeypatch.setattr(runner_module, "RUNNER_ENVIRONMENT", "published")
+    alerts = []
+    _set_lock_failure(
+        runner_module,
+        monkeypatch,
+        cause="postgresql_unavailable",
+        holder_environment=None,
+        decision="database_unavailable",
+    )
+    monkeypatch.setattr(
+        "notifications.discord.alert_critical",
+        lambda *args, **kwargs: alerts.append((args, kwargs)),
+    )
+    monkeypatch.setattr(runner_module, "_prepare_runner_locks", lambda: False)
+
+    assert runner_module.main() == runner_module.EXIT_REFUSAL
+    assert len(alerts) == 1
+    assert not harness["bot_thread_starts"]
+    assert not any(event[0] == "health_server" for event in harness["events"])
+    assert harness["event"].wait_calls == []
+
+
+def test_read_only_runner_skips_lease_waiting(runner_module, monkeypatch):
+    harness = _configure_main_harness(
+        runner_module,
+        monkeypatch,
+        wait_results=[True],
+        live=False,
+    )
+    monkeypatch.setattr(runner_module, "RUNNER_ENVIRONMENT", "dev")
+    claims = []
+    monkeypatch.setattr(
+        runner_module,
+        "_prepare_runner_locks",
+        lambda: claims.append("prepare") or True,
+    )
+
+    assert runner_module.main() == runner_module.EXIT_SUCCESS
+    assert claims == ["prepare"]
+    assert "awaiting_leases" not in harness["heartbeat_statuses"]
+    assert harness["bot_thread_starts"] == ["bot-oracle"]
+    assert sum(event[0] == "health_server" for event in harness["events"]) == 1
 
 
 def test_dev_refusal_logs_but_does_not_send_alert(runner_module, monkeypatch):

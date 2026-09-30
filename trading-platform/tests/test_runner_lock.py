@@ -601,10 +601,16 @@ def test_live_runner_exits_nonzero_when_lease_preparation_fails(monkeypatch):
     monkeypatch.setattr(runner, "_runner_lock_ready", False)
     monkeypatch.setattr(runner, "_shutdown_event", Event())
     monkeypatch.setattr(runner, "_prepare_runner_locks", lambda: False)
+    monkeypatch.setattr(runner, "_record_runner_heartbeat", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(
         runner,
         "_runner_lock_failure_reason",
         "lease refused for oracle",
+    )
+    monkeypatch.setattr(
+        runner,
+        "_runner_lock_failure_detail",
+        {"cause": "claim_exception", "claim_result": None},
     )
     monkeypatch.setattr(
         runner,

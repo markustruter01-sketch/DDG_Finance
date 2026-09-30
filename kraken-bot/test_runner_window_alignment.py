@@ -178,24 +178,29 @@ class RunnerPortfolioCycleTests(unittest.TestCase):
             ["paused", "paused"],
         )
 
-    def test_read_only_paused_bot_refreshes_portfolio_without_strategy_or_orders(self):
-        writer = MagicMock(return_value=True)
+    def test_read_only_runner_never_writes_or_runs_strategy_for_paused_or_active_bots(self):
+        for state, profile in (
+            ("paused", {"BOT_PAUSED": True}),
+            ("active", {"BOT_PAUSED": False}),
+        ):
+            with self.subTest(state=state):
+                writer = MagicMock(return_value=True)
 
-        result = self._run_cycles(
-            {"BOT_PAUSED": True},
-            writer,
-            cycle_limit=2,
-            runner_can_trade=False,
-        )
+                result = self._run_cycles(
+                    profile,
+                    writer,
+                    cycle_limit=1,
+                    runner_can_trade=False,
+                )
 
-        self.assertEqual(writer.call_count, 2)
-        self.assertEqual(result["portfolio_events"], ["portfolio", "portfolio"])
-        self.assertEqual(result["strategy_calls"], [])
-        self.assertEqual(result["order_calls"], [])
-        self.assertEqual(
-            [fields["status"] for fields in result["status_updates"]].count("read_only"),
-            2,
-        )
+                self.assertEqual(writer.call_count, 0)
+                self.assertEqual(result["portfolio_events"], [])
+                self.assertEqual(result["strategy_calls"], [])
+                self.assertEqual(result["order_calls"], [])
+                self.assertEqual(
+                    [fields["status"] for fields in result["status_updates"]].count("read_only"),
+                    1,
+                )
 
     def test_active_bot_keeps_strategy_then_portfolio_cycle_flow(self):
         writer = MagicMock(return_value=True)

@@ -844,8 +844,6 @@ def _run_bot_loop(bot_id: str, module_name: str, fn_name: str):
                     consecutive_errors=0,
                     error=None,
                 )
-                if profile_paused or db_paused:
-                    _refresh_paused_portfolio(bot_id, profile)
             elif profile_paused or db_paused:
                 logger.info(
                     f"[{bot_id}] Paused — "

@@ -952,7 +952,7 @@ def ensure_schema() -> None:
                     VALUES
                       ('oracle',              FALSE, '', 0, NULL),
                       ('spy_qqq_trend',       FALSE, '', 0, NULL),
-                      ('jerome_macro',        FALSE, '', 0, NULL),
+                      ('jerome_macro',        FALSE, '', 0, NULL)
 
                     ON CONFLICT (bot_id) DO NOTHING;
                 """)

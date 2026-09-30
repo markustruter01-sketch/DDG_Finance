@@ -243,3 +243,8 @@ It does not claim that a process is running merely because a module, workflow
 entry, database row, legacy alias, or dashboard label exists. Re-check current
 runtime state before reporting execution, liveness, broker state, or database
 contents.
+
+## Agent reporting
+- Do not post progress updates while working. Reply once, at the end.
+- Put the entire reply in one fenced code block, ending with a FACTS
+  block.

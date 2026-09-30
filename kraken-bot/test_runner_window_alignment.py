@@ -78,7 +78,7 @@ class WindowAlignedCycleTests(unittest.TestCase):
 class RunnerPortfolioCycleTests(unittest.TestCase):
     BOT_ID = "spy_qqq_trend"
 
-    def _run_cycles(self, profile, portfolio_writer, cycle_limit):
+    def _run_cycles(self, profile, portfolio_writer, cycle_limit, runner_can_trade=True):
         shutdown_event = Event()
         strategy_calls = []
         order_calls = []
@@ -119,7 +119,7 @@ class RunnerPortfolioCycleTests(unittest.TestCase):
         patches = [
             patch.multiple(
                 runner,
-                _runner_can_trade=True,
+                _runner_can_trade=runner_can_trade,
                 _pause_alignment_ok=True,
                 _owned_lock_bot_ids={self.BOT_ID},
                 _shutdown_event=shutdown_event,
@@ -176,6 +176,25 @@ class RunnerPortfolioCycleTests(unittest.TestCase):
         self.assertEqual(
             [args[4] for args, _kwargs in result["liveness_writes"]],
             ["paused", "paused"],
+        )
+
+    def test_read_only_paused_bot_refreshes_portfolio_without_strategy_or_orders(self):
+        writer = MagicMock(return_value=True)
+
+        result = self._run_cycles(
+            {"BOT_PAUSED": True},
+            writer,
+            cycle_limit=2,
+            runner_can_trade=False,
+        )
+
+        self.assertEqual(writer.call_count, 2)
+        self.assertEqual(result["portfolio_events"], ["portfolio", "portfolio"])
+        self.assertEqual(result["strategy_calls"], [])
+        self.assertEqual(result["order_calls"], [])
+        self.assertEqual(
+            [fields["status"] for fields in result["status_updates"]].count("read_only"),
+            2,
         )
 
     def test_active_bot_keeps_strategy_then_portfolio_cycle_flow(self):

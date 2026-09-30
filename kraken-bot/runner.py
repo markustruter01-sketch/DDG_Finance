@@ -642,6 +642,21 @@ def _write_portfolio_from_alpaca(bot_id: str, profile: dict) -> bool:
         return False
 
 
+def _refresh_paused_portfolio(bot_id: str, profile: dict) -> None:
+    """Refresh live portfolio state without affecting cycle health on failure."""
+    try:
+        if not _write_portfolio_from_alpaca(bot_id, profile):
+            logger.error(
+                f"[{bot_id}] paused portfolio refresh failed — "
+                "writer returned False"
+            )
+    except Exception as portfolio_exc:
+        logger.error(
+            f"[{bot_id}] paused portfolio refresh raised an error: "
+            f"{portfolio_exc}"
+        )
+
+
 def _record_cycle_liveness(
     bot_id: str,
     cycle_started_at: datetime,
@@ -829,6 +844,8 @@ def _run_bot_loop(bot_id: str, module_name: str, fn_name: str):
                     consecutive_errors=0,
                     error=None,
                 )
+                if profile_paused or db_paused:
+                    _refresh_paused_portfolio(bot_id, profile)
             elif profile_paused or db_paused:
                 logger.info(
                     f"[{bot_id}] Paused — "
@@ -853,17 +870,7 @@ def _run_bot_loop(bot_id: str, module_name: str, fn_name: str):
                         )
                     except Exception as _hb_e:
                         logger.debug(f"[{bot_id}] paused heartbeat write failed (non-fatal): {_hb_e}")
-                try:
-                    if not _write_portfolio_from_alpaca(bot_id, profile):
-                        logger.error(
-                            f"[{bot_id}] paused portfolio refresh failed — "
-                            "writer returned False"
-                        )
-                except Exception as _portfolio_exc:
-                    logger.error(
-                        f"[{bot_id}] paused portfolio refresh raised an error: "
-                        f"{_portfolio_exc}"
-                    )
+                _refresh_paused_portfolio(bot_id, profile)
             else:
                 cycle_fn(profile=profile, db_id=db_id)
 

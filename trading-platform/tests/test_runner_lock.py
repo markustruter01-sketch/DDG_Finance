@@ -11,6 +11,16 @@ from core import runner_lock
 def _fake_conn():
     conn = MagicMock()
     cursor = conn.cursor.return_value.__enter__.return_value
+
+    def execute(query, params=None):
+        expected = str(query).count("%s")
+        actual = len(params) if params is not None else 0
+        if expected != actual:
+            raise AssertionError(
+                f"SQL placeholder count {expected} does not match parameter count {actual}"
+            )
+
+    cursor.execute.side_effect = execute
     return conn, cursor
 
 
@@ -143,6 +153,208 @@ def test_live_competing_owner_is_never_displaced(monkeypatch):
 
     assert result["owned"] is False
     assert result["lock"]["pid"] == 101
+
+
+def test_remote_holder_with_recent_runner_heartbeat_is_refused(monkeypatch):
+    conn, cursor = _fake_conn()
+    heartbeat_age_seconds = 10
+    old = _lock_row(
+        heartbeat_at=datetime(2026, 9, 28, tzinfo=timezone.utc),
+        pid=101,
+        token="runner:v2:holder-boot:100:holder",
+    )
+    cursor.fetchone.side_effect = [
+        old,
+        (heartbeat_age_seconds <= runner_lock.HOLDER_SILENCE_SECONDS,),
+    ]
+    monkeypatch.setattr(
+        runner_lock,
+        "_pid_is_alive",
+        lambda _pid: (_ for _ in ()).throw(AssertionError("remote PID checked locally")),
+    )
+
+    with patch("db.postgres.get_conn") as get_conn:
+        get_conn.return_value.__enter__.return_value = conn
+        result = runner_lock.claim_lock(
+            "oracle",
+            "published",
+            202,
+            60,
+            owner_token="runner:v2:caller-boot:200:caller",
+        )
+
+    assert result["owned"] is False
+    assert result["decision"] == "remote_runner_heartbeat_fresh"
+    assert result["lock"]["pid"] == 101
+    heartbeat_query = next(
+        call for call in cursor.execute.call_args_list
+        if "FROM runner_heartbeat" in str(call.args[0])
+    )
+    assert "NOW()" in str(heartbeat_query.args[0])
+    assert heartbeat_query.args[1] == (
+        runner_lock.HOLDER_SILENCE_SECONDS,
+        "runner:v2:holder-boot:100:holder",
+    )
+
+
+def test_remote_holder_with_stale_runner_heartbeat_is_taken_over(monkeypatch):
+    conn, cursor = _fake_conn()
+    heartbeat_age_seconds = 120
+    old = _lock_row(
+        heartbeat_at=datetime.now(timezone.utc),
+        pid=101,
+        token="runner:v2:holder-boot:100:holder",
+    )
+    replacement = _lock_row(
+        heartbeat_at=datetime.now(timezone.utc),
+        pid=202,
+        token="runner:v2:caller-boot:200:caller",
+    )
+    cursor.fetchone.side_effect = [
+        old,
+        (heartbeat_age_seconds <= runner_lock.HOLDER_SILENCE_SECONDS,),
+        replacement,
+    ]
+    monkeypatch.setattr(
+        runner_lock,
+        "_pid_is_alive",
+        lambda _pid: (_ for _ in ()).throw(AssertionError("remote PID checked locally")),
+    )
+
+    with patch("db.postgres.get_conn") as get_conn:
+        get_conn.return_value.__enter__.return_value = conn
+        result = runner_lock.claim_lock(
+            "oracle",
+            "published",
+            202,
+            10800,
+            owner_token="runner:v2:caller-boot:200:caller",
+        )
+
+    assert result["owned"] is True
+    assert result["decision"] == "remote_runner_heartbeat_stale"
+    assert result["lock"]["pid"] == 202
+
+
+def test_remote_holder_without_heartbeat_and_fresh_lease_is_refused(monkeypatch):
+    conn, cursor = _fake_conn()
+    current = _lock_row(
+        heartbeat_at=datetime.now(timezone.utc),
+        pid=101,
+        token="runner:v2:holder-boot:100:holder",
+    )
+    cursor.fetchone.side_effect = [current, None]
+    monkeypatch.setattr(
+        runner_lock,
+        "_pid_is_alive",
+        lambda _pid: (_ for _ in ()).throw(AssertionError("remote PID checked locally")),
+    )
+
+    with patch("db.postgres.get_conn") as get_conn:
+        get_conn.return_value.__enter__.return_value = conn
+        result = runner_lock.claim_lock(
+            "oracle",
+            "published",
+            202,
+            10800,
+            owner_token="runner:v2:caller-boot:200:caller",
+        )
+
+    assert result["owned"] is False
+    assert result["decision"] == "remote_runner_heartbeat_missing_or_unreadable"
+    assert result["lock"]["pid"] == 101
+
+
+def test_remote_holder_heartbeat_read_failure_is_fail_closed(monkeypatch):
+    conn, cursor = _fake_conn()
+    current = _lock_row(
+        heartbeat_at=datetime.now(timezone.utc),
+        pid=101,
+        token="runner:v2:holder-boot:100:holder",
+    )
+    cursor.fetchone.return_value = current
+    check_placeholders = cursor.execute.side_effect
+
+    def fail_heartbeat_read(query, params=None):
+        check_placeholders(query, params)
+        if "FROM runner_heartbeat" in str(query):
+            raise RuntimeError("runner heartbeat table unavailable")
+
+    cursor.execute.side_effect = fail_heartbeat_read
+    monkeypatch.setattr(
+        runner_lock,
+        "_pid_is_alive",
+        lambda _pid: (_ for _ in ()).throw(AssertionError("remote PID checked locally")),
+    )
+
+    with patch("db.postgres.get_conn") as get_conn:
+        get_conn.return_value.__enter__.return_value = conn
+        result = runner_lock.claim_lock(
+            "oracle",
+            "published",
+            202,
+            10800,
+            owner_token="runner:v2:caller-boot:200:caller",
+        )
+
+    assert result["owned"] is False
+    assert result["decision"] == "remote_runner_heartbeat_missing_or_unreadable"
+    assert result["lock"]["pid"] == 101
+
+
+def test_remote_holder_without_heartbeat_and_stale_lease_is_taken_over(monkeypatch):
+    conn, cursor = _fake_conn()
+    old = _lock_row(
+        heartbeat_at=datetime(2020, 1, 1, tzinfo=timezone.utc),
+        pid=101,
+        token="runner:v2:holder-boot:100:holder",
+    )
+    replacement = _lock_row(
+        heartbeat_at=datetime.now(timezone.utc),
+        pid=202,
+        token="runner:v2:caller-boot:200:caller",
+    )
+    cursor.fetchone.side_effect = [old, None, replacement]
+    monkeypatch.setattr(
+        runner_lock,
+        "_pid_is_alive",
+        lambda _pid: (_ for _ in ()).throw(AssertionError("remote PID checked locally")),
+    )
+
+    with patch("db.postgres.get_conn") as get_conn:
+        get_conn.return_value.__enter__.return_value = conn
+        result = runner_lock.claim_lock(
+            "oracle",
+            "published",
+            202,
+            10800,
+            owner_token="runner:v2:caller-boot:200:caller",
+        )
+
+    assert result["owned"] is True
+    assert result["decision"] == "stale_lease_process_identity_mismatch"
+    assert result["lock"]["pid"] == 202
+
+
+def test_missing_lease_row_is_claimed_with_decision():
+    conn, cursor = _fake_conn()
+    inserted = _lock_row(
+        heartbeat_at=datetime.now(timezone.utc),
+        pid=202,
+        token="runner-b",
+    )
+    cursor.fetchone.side_effect = [None, inserted]
+
+    with patch("db.postgres.is_pg_available", return_value=True), patch(
+        "db.postgres.get_conn"
+    ) as get_conn:
+        get_conn.return_value.__enter__.return_value = conn
+        result = runner_lock.claim_lock(
+            "oracle", "published", 202, 10800, owner_token="runner-b"
+        )
+
+    assert result["owned"] is True
+    assert result["decision"] == "no_existing_lease"
 
 
 def test_same_process_instance_can_refresh_stale_lease(monkeypatch):

@@ -12,6 +12,11 @@ from datetime import datetime, timezone
 from typing import Any
 
 
+# Proposed value: twelve times the 5-second runner heartbeat, so a live runner
+# always beats within it.
+HOLDER_SILENCE_SECONDS = 60
+
+
 LOCK_TABLE_DDL = """
 CREATE TABLE IF NOT EXISTS runner_account_locks (
     bot_id       TEXT PRIMARY KEY,
@@ -252,13 +257,49 @@ def claim_lock(
                         requested_token,
                     ),
                 )
-                return {"owned": True, "lock": _lock_row(cur.fetchone())}
+                return {
+                    "owned": True,
+                    "lock": _lock_row(cur.fetchone()),
+                    "decision": "no_existing_lease",
+                }
 
             current_environment = current[1]
             current_pid = int(current[2])
             current_token = current[5] if len(current) > 5 else ""
             current_token = current_token or ""
             stored_identity = _token_identity(current_token)
+            other_machine = (
+                stored_identity[0] is not None
+                and requested_identity[0] is not None
+                and stored_identity[0] != requested_identity[0]
+            )
+            remote_heartbeat_fresh: bool | None = None
+            if other_machine:
+                try:
+                    cur.execute("SAVEPOINT runner_heartbeat_liveness")
+                    cur.execute(
+                        """
+                        SELECT last_beat_at >= NOW() - (%s::double precision * INTERVAL '1 second')
+                        FROM runner_heartbeat
+                        WHERE instance_token = %s
+                        """,
+                        (HOLDER_SILENCE_SECONDS, current_token),
+                    )
+                    heartbeat_row = cur.fetchone()
+                    if heartbeat_row is not None and heartbeat_row[0] is not None:
+                        remote_heartbeat_fresh = bool(heartbeat_row[0])
+                    cur.execute("RELEASE SAVEPOINT runner_heartbeat_liveness")
+                except Exception:
+                    try:
+                        cur.execute("ROLLBACK TO SAVEPOINT runner_heartbeat_liveness")
+                        cur.execute("RELEASE SAVEPOINT runner_heartbeat_liveness")
+                    except Exception:
+                        pass
+                    # Missing/unreadable heartbeat evidence fails closed: regard
+                    # the remote holder as alive, subject to the existing lease
+                    # staleness rules below.
+                    remote_heartbeat_fresh = None
+
             identity = (
                 _identity_matches(
                     stored_identity,
@@ -282,7 +323,11 @@ def claim_lock(
                     or current_token == requested_token
                 )
             )
-            owner_alive = _pid_is_alive(current_pid)
+            owner_alive = (
+                remote_heartbeat_fresh is not False
+                if other_machine
+                else _pid_is_alive(current_pid)
+            )
             stale = _heartbeat_is_stale(current[3], stale_after_seconds)
             dead_same_environment = (
                 current_environment == environment and not owner_alive
@@ -298,7 +343,10 @@ def claim_lock(
                 and not stored_identity_present
                 and current_environment == environment
             )
-            can_takeover = (
+            recent_remote_heartbeat = (
+                other_machine and remote_heartbeat_fresh is True
+            )
+            can_takeover = not recent_remote_heartbeat and (
                 dead_same_environment
                 or (stale and not owner_alive)
                 or identity_proves_reuse
@@ -306,6 +354,18 @@ def claim_lock(
             )
 
             if same_owner or can_takeover:
+                if same_owner:
+                    decision = "same_owner"
+                elif other_machine and remote_heartbeat_fresh is False:
+                    decision = "remote_runner_heartbeat_stale"
+                elif dead_same_environment:
+                    decision = "dead_same_environment_process"
+                elif stale and not owner_alive:
+                    decision = "stale_lease_owner_not_alive"
+                elif identity_proves_reuse:
+                    decision = "stale_lease_process_identity_mismatch"
+                else:
+                    decision = "stale_legacy_lease_identity_unknown"
                 cur.execute(
                     """
                     UPDATE runner_account_locks
@@ -324,9 +384,25 @@ def claim_lock(
                         bot_id,
                     ),
                 )
-                return {"owned": True, "lock": _lock_row(cur.fetchone())}
+                return {
+                    "owned": True,
+                    "lock": _lock_row(cur.fetchone()),
+                    "decision": decision,
+                }
 
-            return {"owned": False, "lock": _lock_row(current)}
+            if recent_remote_heartbeat:
+                decision = "remote_runner_heartbeat_fresh"
+            elif other_machine and remote_heartbeat_fresh is None:
+                decision = "remote_runner_heartbeat_missing_or_unreadable"
+            elif stale and identity is True:
+                decision = "stale_lease_process_identity_matches"
+            else:
+                decision = "lease_holder_alive_or_lease_not_stale"
+            return {
+                "owned": False,
+                "lock": _lock_row(current),
+                "decision": decision,
+            }
 
 
 def refresh_lock(

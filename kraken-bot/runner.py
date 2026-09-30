@@ -45,6 +45,11 @@ EXIT_SUCCESS = 0
 EXIT_CRASH = 70       # unexpected process failure / startup infrastructure failure
 EXIT_REFUSAL = 78     # deliberate fail-closed refusal (leases or pause alignment)
 
+# Proposed value: retry a published-to-published lease handoff every 15 seconds.
+LEASE_WAIT_RETRY_SECONDS = 15
+# Proposed value: alert once after waiting longer than ten minutes for leases.
+LEASE_WAIT_ALERT_SECONDS = 600
+
 # Bridge stdlib logging → loguru so that jerome_alpaca / etf_engine
 # logger.error() calls are visible in the workflow output.
 import logging as _stdlib_logging
@@ -1035,6 +1040,49 @@ def _release_owned_runner_locks() -> None:
         logger.critical(f"Runner lock | release failed: {exc}")
 
 
+def _send_lease_refusal_alert(
+    reason: str,
+    lease_rows: list[dict[str, Any]],
+    lease_evidence: str,
+) -> None:
+    """Send the existing published-only lease refusal alert."""
+    if str(RUNNER_ENVIRONMENT).lower() == "published":
+        try:
+            from notifications.discord import alert_critical
+
+            if lease_rows:
+                alert_fields = [
+                    {
+                        "name": f"Lease row {index}",
+                        "value": json.dumps(row, default=str),
+                    }
+                    for index, row in enumerate(lease_rows, start=1)
+                ]
+            else:
+                alert_fields = [
+                    {
+                        "name": "Lease evidence",
+                        "value": lease_evidence,
+                    }
+                ]
+            alert_critical(
+                "Runner startup blocked by lease refusal",
+                "Live runner refused to start because the lease claim returned "
+                f"owned=False. Reason: {reason}",
+                fields=alert_fields,
+            )
+        except Exception as exc:
+            logger.critical(
+                f"Runner | failed to send lease-refusal alert: {type(exc).__name__}"
+            )
+    else:
+        logger.critical(
+            "Runner | lease-refusal Discord alert suppressed; "
+            f"environment={RUNNER_ENVIRONMENT}; reason={reason}; "
+            f"lease_evidence={lease_evidence}"
+        )
+
+
 def main() -> int:
     global _pause_alignment_ok
     signal.signal(signal.SIGTERM, _shutdown_handler)
@@ -1042,57 +1090,129 @@ def main() -> int:
 
     threads = []
     exit_code = EXIT_SUCCESS
+    health_server_started = False
+    runner_loop_count = 0
+
+    def start_health_server_once() -> None:
+        nonlocal health_server_started
+        if not health_server_started:
+            _start_health_server()
+            health_server_started = True
+
     try:
+        if not _record_runner_heartbeat(runner_loop_count, "starting"):
+            logger.critical(
+                "Runner heartbeat | startup write failed; "
+                "continuing without presenting process aliveness as healthy"
+            )
+
         locks_ready = _prepare_runner_locks()
         if _runner_can_trade and not locks_ready:
             reason = _runner_lock_failure_reason
             if reason is None:
                 reason = "unknown lease preparation failure"
-            lease_rows, lease_read_note = _lease_refusal_evidence()
-            if lease_rows:
-                lease_evidence = json.dumps(lease_rows, default=str)
-            else:
-                lease_evidence = f"lease rows unreadable: {lease_read_note}"
-            logger.critical(
-                "Runner | LIVE STARTUP ABORTED — lease preparation failed; "
-                f"reason={reason}; lease_evidence={lease_evidence}"
+            detail = _runner_lock_failure_detail or {}
+            initial_claim_result = detail.get("claim_result")
+            if not isinstance(initial_claim_result, dict):
+                initial_claim_result = {}
+            initial_holder = initial_claim_result.get("lock")
+            wait_for_published_holder = (
+                RUNNER_ENVIRONMENT == "published"
+                and detail.get("cause") == "occupied_lease"
+                and isinstance(initial_holder, dict)
+                and initial_holder.get("environment") == "published"
             )
-            if str(RUNNER_ENVIRONMENT).lower() == "published":
-                try:
-                    from notifications.discord import alert_critical
-                    if lease_rows:
-                        alert_fields = [
-                            {
-                                "name": f"Lease row {index}",
-                                "value": json.dumps(row, default=str),
-                            }
-                            for index, row in enumerate(lease_rows, start=1)
-                        ]
+
+            if wait_for_published_holder:
+                start_health_server_once()
+                lease_wait_started_at = time.monotonic()
+                lease_wait_alert_sent = False
+                retry_exception: Exception | None = None
+
+                while not locks_ready and not _shutdown_event.is_set():
+                    if not _record_runner_heartbeat(
+                        runner_loop_count, "awaiting_leases"
+                    ):
+                        logger.critical(
+                            "Runner heartbeat | awaiting_leases write failed"
+                        )
+
+                    latest_detail = _runner_lock_failure_detail or {}
+                    latest_result = latest_detail.get("claim_result")
+                    if not isinstance(latest_result, dict):
+                        latest_result = {}
+                    if retry_exception is not None:
+                        logger.critical(
+                            "Runner | lease retry raised; continuing to wait; "
+                            f"error={type(retry_exception).__name__}: {retry_exception}; "
+                            f"cause={latest_detail.get('cause')}; "
+                            f"claim_result={json.dumps(latest_result, default=str)}; "
+                            f"decision={latest_result.get('decision', 'unknown')}"
+                        )
+                        retry_exception = None
                     else:
-                        alert_fields = [
-                            {
-                                "name": "Lease evidence",
-                                "value": lease_evidence,
-                            }
-                        ]
-                    alert_critical(
-                        "Runner startup blocked by lease refusal",
-                        "Live runner refused to start because the lease claim returned "
-                        f"owned=False. Reason: {reason}",
-                        fields=alert_fields,
+                        logger.warning(
+                            "Runner | awaiting published leases; "
+                            f"reason={_runner_lock_failure_reason}; "
+                            f"cause={latest_detail.get('cause')}; "
+                            f"claim_result={json.dumps(latest_result, default=str)}; "
+                            f"decision={latest_result.get('decision', 'unknown')}"
+                        )
+
+                    shutdown_requested = _shutdown_event.wait(
+                        LEASE_WAIT_RETRY_SECONDS
                     )
-                except Exception as exc:
-                    logger.critical(
-                        f"Runner | failed to send lease-refusal alert: {type(exc).__name__}"
+                    waited_seconds = time.monotonic() - lease_wait_started_at
+                    if (
+                        not lease_wait_alert_sent
+                        and waited_seconds > LEASE_WAIT_ALERT_SECONDS
+                    ):
+                        if isinstance(initial_holder, dict):
+                            alert_rows = [_lease_row_with_age(initial_holder)]
+                            alert_evidence = json.dumps(alert_rows, default=str)
+                        else:
+                            alert_rows, alert_note = _lease_refusal_evidence()
+                            alert_evidence = (
+                                json.dumps(alert_rows, default=str)
+                                if alert_rows
+                                else f"lease rows unreadable: {alert_note}"
+                            )
+                        _send_lease_refusal_alert(
+                            reason,
+                            alert_rows,
+                            alert_evidence,
+                        )
+                        lease_wait_alert_sent = True
+
+                    if shutdown_requested or _shutdown_event.is_set():
+                        break
+
+                    try:
+                        locks_ready = _prepare_runner_locks()
+                    except Exception as exc:
+                        locks_ready = False
+                        retry_exception = exc
+
+                if not locks_ready and _shutdown_event.is_set():
+                    logger.info(
+                        "Runner | shutdown requested while awaiting published leases"
                     )
-            else:
+                    return EXIT_SUCCESS
+
+            if not locks_ready:
+                lease_rows, lease_read_note = _lease_refusal_evidence()
+                if lease_rows:
+                    lease_evidence = json.dumps(lease_rows, default=str)
+                else:
+                    lease_evidence = f"lease rows unreadable: {lease_read_note}"
                 logger.critical(
-                    "Runner | lease-refusal Discord alert suppressed; "
-                    f"environment={RUNNER_ENVIRONMENT}; reason={reason}; "
-                    f"lease_evidence={lease_evidence}"
+                    "Runner | LIVE STARTUP ABORTED — lease preparation failed; "
+                    f"reason={reason}; lease_evidence={lease_evidence}"
                 )
-            exit_code = EXIT_REFUSAL
-            return exit_code
+                _send_lease_refusal_alert(reason, lease_rows, lease_evidence)
+
+                exit_code = EXIT_REFUSAL
+                return exit_code
 
         logger.info("=" * 60)
         logger.info("KRAKEN-BOT RUNNER — multiplexed strategy host")
@@ -1107,15 +1227,9 @@ def main() -> int:
             exit_code = EXIT_REFUSAL
             return exit_code
 
-        runner_loop_count = 0
-        if not _record_runner_heartbeat(runner_loop_count, "starting"):
-            logger.critical(
-                "Runner heartbeat | startup write failed; "
-                "continuing without presenting process aliveness as healthy"
-            )
-
-        # Start health server BEFORE bot threads so port binds fast
-        _start_health_server()
+        # Start the health server after successful startup checks, unless it was
+        # already started to serve a published runner waiting for leases.
+        start_health_server_once()
         threading.Thread(
             target=_probe_trading_api,
             daemon=True,

@@ -1,10 +1,12 @@
 ---
-name: Alpaca cancel pending behavior
-description: A successful cancel request can leave an Alpaca order pending_cancel and must not be treated as canceled.
+name: Alpaca cancel and order-list consistency
+description: Cancel acknowledgements and immediate open-order listings can lag the broker's terminal order status.
 ---
 
 Alpaca can return HTTP 204 for a cancel request while the order remains `pending_cancel` across subsequent polls, including 90- and 120-second recovery windows. The order is not safe to treat as canceled until a later status read is actually `canceled`.
 
-**Why:** A GLD stop cancel acknowledged with 204 but remained pending through short, 90-second, and 120-second polling windows, so proceeding with a buy would have violated the cancel-first safety gate.
+Separately, an order-specific GET can report `canceled` while an immediate `open_orders()` response still includes that same order. Do not let a stale collection snapshot override the terminal status returned for the specific order.
 
-**How to apply:** Poll the specific order status after DELETE, stop on timeout, and do not submit an add-on buy while the prior opposite-side stop is unresolved.
+**Why:** In two published Bot 3 rebalance cycles, order-specific state showed cancellation while the subsequent open-order listing still triggered an abort. The first case proves that a cancel request alone is insufficient; the second shows that a single stale collection response is not conclusive either.
+
+**How to apply:** Poll the specific order status after DELETE and stop on timeout. Once terminal cancellation is confirmed, allow for bounded collection-view lag rather than treating one stale listing as proof the order remains live. Preserve protective coverage and fail closed if the specific order state is still unresolved; do not submit conflicting orders.

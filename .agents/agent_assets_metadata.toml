@@ -380,3 +380,17 @@ mtime_ms = 1789078271346
 storage_uri = "gcs://replit-rams-assets-worf/rams/assets/repl:479b9041-b193-4ed4-a556-02be48b883b3/43d5a70d-cce1-4c98-aa4c-ef49c219cd3d/1e811027-e841-4819-b1d1-5bd0efafc8d6"
 storage_version_token = "1789078278612076"
 content_type = "application/octet-stream"
+
+[[outputs]]
+id = "CU6d2BhpD81G6LXkee6cz"
+uri = "file://attached_assets/jerome-macro-btc-diagnostic-2026-10-01.html"
+type = "html"
+title = "Bot 3 BTC safety and cycle diagnostic"
+description = "Full broker order readback, cancellation diagnosis, line-numbered source excerpt, health status, and all matching published log lines from 2026-10-01 13:30–19:40 UTC."
+logical_id = "2b5a2d83-b64d-4480-821e-ba1cfbf4c55c"
+content_hash = "sha256:4d8840663c0627a74293d20aaf3d6d83f8de7d8e1617fbfe5a82783a4cd0344c"
+size = 210862
+mtime_ms = 1790883671050
+storage_uri = "gcs://replit-rams-assets-worf/rams/assets/repl:479b9041-b193-4ed4-a556-02be48b883b3/2b5a2d83-b64d-4480-821e-ba1cfbf4c55c/df29eece-d549-4ca0-bfbb-9339a9183e85"
+storage_version_token = "1790883679134766"
+content_type = "text/html"

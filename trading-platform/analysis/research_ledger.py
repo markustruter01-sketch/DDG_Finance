@@ -467,7 +467,7 @@ def snapshot_daily_returns(*, snapshot_date: date | None = None) -> dict[str, An
                          source, calculation_method, source_timestamp,
                          vault_excluded_value, backfilled, computed_at, is_canonical)
                     VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,
-                            %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                            %s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                     ON CONFLICT (date, bot_id) DO UPDATE SET
                         equity_open=EXCLUDED.equity_open,
                         equity_close=EXCLUDED.equity_close,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
+import re
 
 import pytest
 
@@ -40,6 +41,12 @@ class _SnapshotCursor:
         return False
 
     def execute(self, query, params=()):
+        placeholders = query.count("%s")
+        if placeholders != len(params):
+            raise AssertionError(
+                f"SQL placeholder mismatch: {placeholders} placeholders "
+                f"for {len(params)} parameters: {query!r}"
+            )
         self.executed.append((query, params))
         normalised = " ".join(query.lower().split())
         if "from bot_portfolio" in normalised:
@@ -148,6 +155,33 @@ def test_fresh_portfolio_writes_provenance_and_computes_return(monkeypatch):
     assert oracle[18] is False
     assert oracle[17] >= now - timedelta(seconds=5)
     assert degradation_calls == []
+
+
+def test_daily_returns_insert_columns_placeholders_and_params_match(monkeypatch):
+    cursor = _SnapshotCursor(
+        _portfolio_rows(),
+        {bot_id: 99_000.0 for bot_id in BOT_IDS},
+    )
+    degradation_calls = []
+
+    _run_snapshot(monkeypatch, cursor, degradation_calls)
+
+    inserts = [
+        (query, params)
+        for query, params in cursor.executed
+        if "insert into bot_daily_returns" in query.lower()
+    ]
+    assert len(inserts) == len(BOT_IDS)
+    for query, params in inserts:
+        match = re.search(
+            r"INSERT\s+INTO\s+bot_daily_returns\s*\((.*?)\)\s*VALUES\s*\((.*?)\)",
+            query,
+            re.IGNORECASE | re.DOTALL,
+        )
+        assert match is not None
+        columns = [column.strip() for column in match.group(1).split(",")]
+        placeholders = match.group(2).count("%s")
+        assert len(columns) == placeholders == len(params)
 
 
 def test_stale_portfolio_writes_null_return_and_records_degradation(monkeypatch):

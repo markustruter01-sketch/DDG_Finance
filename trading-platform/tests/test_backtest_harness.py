@@ -126,6 +126,44 @@ def test_margin_interest_and_borrow_fees_use_exact_calendar_day_accrual() -> Non
     assert borrow_result.metrics["total_borrow_fees"] == pytest.approx(0.1)
 
 
+def test_leverage_is_negative_cash_and_accrues_margin_interest() -> None:
+    days = [date(2022, 1, 3), date(2022, 1, 4), date(2022, 1, 6)]
+    panel = _panel({"AAA": [10, 10, 10]}, days=days)
+    result = _run(
+        panel,
+        _signal_on(days[0], {"AAA": 1.5}),
+        margin_rate=0.365,
+        max_gross=1.5,
+        starting_equity=100,
+    )
+
+    assert result.equity_curve[1]["cash"] == pytest.approx(-50)
+    assert result.metrics["total_interest"] == pytest.approx(0.1)
+
+
+def test_borrow_fees_apply_to_short_etfs_not_long_bil() -> None:
+    days = [date(2022, 1, 3), date(2022, 1, 4), date(2022, 1, 6)]
+    panel = _panel(
+        {"AAA": [10, 10, 10], "BIL": [10, 10, 10]},
+        days=days,
+    )
+    result = _run(
+        panel,
+        _signal_on(days[0], {"AAA": -0.5, "BIL": 1.0}),
+        borrow_fee_rate=0.365,
+        max_gross=1.5,
+        starting_equity=100,
+    )
+
+    assert result.metrics["total_borrow_fees"] == pytest.approx(0.1)
+    assert result.metrics["total_interest"] == pytest.approx(0)
+    assert all(
+        event["quantity_after"] >= 0
+        for event in result.events
+        if event.get("type") == "trade" and event.get("symbol") == "BIL"
+    )
+
+
 def test_gross_exposure_is_scaled_to_the_configured_cap() -> None:
     days = _days(3)
     panel = _panel(
@@ -255,6 +293,53 @@ def test_sleeve_stop_handles_offsetting_trend_and_passive_positions() -> None:
     assert stopped["quantity_change"] == pytest.approx(3.0)
     assert stopped["quantity_after"] == pytest.approx(2.0)
     assert stopped["cash_adjustment_quantity"] == pytest.approx(-2.7)
+
+
+def test_covering_stopped_short_sleeve_never_shorts_bil() -> None:
+    days = _days(5)
+    panel = _panel(
+        {
+            "AAA": [10, 10, 11, 21, 21],
+            "BBB": [10, 10, 10, 30, 30],
+            "BIL": [10, 10, 10, 10, 10],
+        },
+        days=days,
+    )
+
+    def portfolio_signal(_history, current_day):
+        return (
+            {"AAA": -0.9, "BBB": 0.9, "BIL": 1.0}
+            if current_day == days[0]
+            else None
+        )
+
+    def trend_sleeve_signal(_history, current_day):
+        return {"AAA": -0.9} if current_day == days[0] else None
+
+    result = _run(
+        panel,
+        portfolio_signal,
+        trail_pct=0.10,
+        trailing_stop_signal=trend_sleeve_signal,
+        trailing_stop_cash_asset="BIL",
+        margin_rate=0.365,
+        max_gross=3.0,
+        starting_equity=100,
+    )
+
+    bil_trades = [
+        event
+        for event in result.events
+        if event.get("type") == "trade" and event.get("symbol") == "BIL"
+    ]
+    stop_exit = next(
+        event for event in result.events if event.get("type") == "trailing_stop_exit"
+    )
+    assert bil_trades
+    assert all(event["quantity_after"] >= 0 for event in bil_trades)
+    assert stop_exit["cash_adjustment_quantity"] == pytest.approx(-10.0)
+    assert result.equity_curve[-2]["cash"] == pytest.approx(-89.0)
+    assert result.metrics["total_interest"] == pytest.approx(0.089)
 
 
 def test_sleeve_stop_cash_transfer_tracks_rounded_share_exit() -> None:

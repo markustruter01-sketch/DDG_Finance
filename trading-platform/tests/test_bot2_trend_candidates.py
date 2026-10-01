@@ -144,6 +144,54 @@ def test_candidate_c_uses_one_entry_then_ignores_later_trend_signals() -> None:
     assert seen[2:] == [None, None]
 
 
+def test_candidate_c_rebalances_every_five_sessions_without_timing_signal() -> None:
+    returns = [0.001, -0.002] * 115
+    history = _history(count=231, risk_returns=returns)
+    sessions = sorted(history["RISK"])[200:]
+    signal = candidates.CandidateSignal("C", sessions, universe=("RISK",))
+    seen: list[dict[str, float] | None] = []
+
+    for day in sessions[:7]:
+        as_of = {
+            symbol: {
+                close_day: value
+                for close_day, value in values.items()
+                if close_day <= day
+            }
+            for symbol, values in history.items()
+        }
+        seen.append(signal(as_of, day))
+
+    assert seen[0] == {"BIL": 1.0}
+    assert seen[1] is not None and seen[1]["RISK"] > 0
+    assert seen[2:6] == [None, None, None, None]
+    assert seen[6] is not None and seen[6]["RISK"] > 0
+
+
+@pytest.mark.parametrize("candidate", ["A", "B", "C", "D"])
+def test_candidate_targets_never_short_bil_when_volatility_scaling_levers(
+    candidate: str,
+) -> None:
+    history = _history(
+        count=220,
+        risk_returns=[
+            0.0001 if index % 2 == 0 else -0.0001
+            for index in range(219)
+        ],
+    )
+    target = candidates.build_candidate_targets(
+        candidate,
+        history,
+        {"RISK": 1},
+        universe=("RISK",),
+    )
+
+    assert target.get("BIL", 0.0) >= 0.0
+    assert target["RISK"] > 0.0
+    if candidate != "A":
+        assert target["RISK"] > 1.0
+
+
 def test_candidate_d_is_a_fifty_fifty_signed_weight_blend() -> None:
     blended = candidates.blend_half_weights(
         {"AAA": 0.4, "BBB": -0.2},
@@ -324,7 +372,7 @@ def test_exploration_insert_writes_eight_rows_and_checks_placeholders(
     assert run_ids == list(range(701, 709))
     assert connection.last_cursor.insert_count == 8
     assert "INSERT INTO exploration_runs" in connection.last_cursor.last_query
-    assert connection.last_cursor.last_params[0] == "bot2_trend_v1"
+    assert connection.last_cursor.last_params[0] == "bot2_trend_v1.1"
     assert connection.last_cursor.last_params[4] == "backtest_harness f7ff08e8"
     assert connection.last_cursor.last_params[3] == candidates.spec_hash()
     assert len(

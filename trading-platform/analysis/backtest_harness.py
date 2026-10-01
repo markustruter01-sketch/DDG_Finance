@@ -666,7 +666,10 @@ def _exit_due_sleeve_stops(
                 exited_quantity * prices[symbol] / prices[cash_asset]
             )
             cash_target = _rounded_quantity(
-                book.quantities[cash_asset] + requested_cash_quantity,
+                max(
+                    0.0,
+                    book.quantities[cash_asset] + requested_cash_quantity,
+                ),
                 whole_shares,
             )
             cash_adjustment_quantity = cash_target - book.quantities[cash_asset]

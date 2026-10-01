@@ -62,7 +62,7 @@ RISK_FREE_RATE = 0.0
 GROSS_CAP = 1.5
 CASH_GROSS_CAP = 1.0
 SOURCE = "backtest_harness f7ff08e8"
-STRATEGY_FAMILY = "bot2_trend_v1"
+STRATEGY_FAMILY = "bot2_trend_v1.1"
 EVALUATION_WINDOWS = (
     ("2008-09-01", "2009-03-31"),
     ("2009-04-01", "2013-06-30"),
@@ -104,22 +104,30 @@ SPEC: dict[str, Any] = {
         "annualization_trading_days": TRADING_DAYS_PER_YEAR,
         "A_B_risk_budget": "active position count divided by 12",
         "C_risk_budget": "gross 1.0 across all 12 eligible instruments",
-        "cash_weight": "BIL balances the signed risky weights to net 1.0",
+        "cash_weight": (
+            "BIL residual weight is max(0, 1 minus signed risky weights); "
+            "excess leverage is funded by negative cash"
+        ),
     },
     "rebalance": {
         "A_B_D": f"every {REBALANCE_EVERY} common trading sessions",
-        "C": "one initial allocation after all 12 instruments are eligible; then buy-and-hold",
+        "C": (
+            f"after all 12 instruments are eligible, rebalance every "
+            f"{REBALANCE_EVERY} common trading sessions to inverse-volatility "
+            f"equal-risk weights scaled to {TARGET_ANNUAL_VOLATILITY:.0%}; "
+            f"gross <= {GROSS_CAP}"
+        ),
         "execution": "next common valid close, by backtest_harness",
     },
     "trailing_stop": {
         "fraction": TRAILING_STOP,
         "applies_to": (
-            "A, B, and D ETF holdings; C is buy-and-hold without stops; "
-            "D's blended holdings use one symbol-level stop"
+            "A and B ETF holdings; C has no stops; D's 8% stop applies only "
+            "to its trend sleeve, retaining the passive risk-parity sleeve"
         ),
         "cash_asset": (
-            "BIL is a cash leg; preflight aborts if its loaded history could "
-            "trigger the global harness stop"
+            "BIL is a non-negative residual cash leg, never part of a "
+            "stop-managed sleeve; preflight checks its loaded history"
         ),
     },
     "portfolio_constraints": {
@@ -131,13 +139,23 @@ SPEC: dict[str, Any] = {
         "margin_rate": MARGIN_RATE,
         "risk_free_rate": RISK_FREE_RATE,
         "cost_model": "cost_bps is charged per side on absolute traded notional",
+        "financing_model": (
+            "negative cash is charged margin_rate; borrow fees apply only "
+            "to short ETF positions; BIL weight is floored at zero"
+        ),
     },
     "volatility_targeting": {
         "annual_target": TARGET_ANNUAL_VOLATILITY,
         "estimator": "sample covariance of the trailing 60 common daily returns",
-        "cash_treatment": "BIL is included as the residual net-1.0 allocation",
+        "cash_treatment": (
+            "BIL is a non-negative residual weight; leverage beyond net "
+            "cash is negative cash, not a short BIL position"
+        ),
         "gross_limit": GROSS_CAP,
-        "D": "blend half of B and half of C risky target weights, then retarget the blend",
+        "D": (
+            "blend half of B and half of C risky target weights; recalculate "
+            "the C sleeve every 5 common sessions, then retarget the blend"
+        ),
     },
     "cost_bps_scenarios": [5, 10],
     "reporting": {
@@ -163,10 +181,24 @@ SPEC: dict[str, Any] = {
         ],
     },
     "candidates": {
-        "A": "long uptrends only; remaining net allocation in BIL; gross <= 1.0",
-        "B": "long uptrends and short downtrends; 10% annual volatility target; gross <= 1.5",
-        "C": "inverse-volatility long-only risk parity; one allocation then buy-and-hold; 10% target",
-        "D": "50/50 blend of B and C risky target weights; retarget to 10%; gross <= 1.5",
+        "A": (
+            "long uptrends only; non-negative residual allocation in BIL; "
+            "gross <= 1.0"
+        ),
+        "B": (
+            "long uptrends and short downtrends; 10% annual volatility "
+            "target; BIL weight >= 0; gross <= 1.5"
+        ),
+        "C": (
+            "no timing signal; inverse-volatility long-only risk parity "
+            "rebalanced every 5 common sessions to a 10% volatility target; "
+            "gross <= 1.5"
+        ),
+        "D": (
+            "50/50 blend of B and C risky target weights; C sleeve recalculated "
+            "every 5 common sessions; retarget blend to 10%; gross <= 1.5; "
+            "8% stop applies only to trend sleeve"
+        ),
     },
     "quality_and_calendar": {
         "flagged_rows": "drop; never fill",
@@ -180,6 +212,31 @@ SPEC: dict[str, Any] = {
         "never_write_research_ledger_results": True,
     },
 }
+
+SPEC_CHANGES = [
+    {
+        "item": "1a",
+        "change": (
+            "Floor BIL weight at zero; fund excess leverage with negative "
+            "cash charged at margin_rate; assess borrow fees only on short ETFs."
+        ),
+        "why": "The memo requires margin interest on borrowed money.",
+    },
+    {
+        "item": "1b",
+        "change": (
+            "Rebalance C every five common trading sessions to equal-risk "
+            "weights scaled to 10% volatility with a 1.5 gross cap; D recalculates "
+            "its C sleeve on the same schedule."
+        ),
+        "why": "C's volatility target requires rebalancing.",
+    },
+    {
+        "item": "1c",
+        "change": "Describe D's 8% stop as applying only to its trend sleeve.",
+        "why": "This makes the text match the code.",
+    },
+]
 
 
 @dataclass(frozen=True)
@@ -206,8 +263,12 @@ def spec_hash(spec: Mapping[str, Any] = SPEC) -> str:
 
 
 def print_spec() -> dict[str, Any]:
-    """Print the complete frozen spec and its SHA-256 before any run."""
-    payload = {"spec": SPEC, "spec_hash": spec_hash()}
+    """Print the corrected spec, its SHA-256, and the precise corrections."""
+    payload = {
+        "spec": SPEC,
+        "spec_hash": spec_hash(),
+        "changes_from_dd977b3c": SPEC_CHANGES,
+    }
     print(json.dumps(payload, sort_keys=True, indent=2, allow_nan=False), flush=True)
     return payload
 
@@ -356,8 +417,8 @@ def _sample_covariance(left: Sequence[float], right: Sequence[float]) -> float:
 
 def _gross_at_scale(risky_weights: Mapping[str, float], scale: float) -> float:
     risky_gross = math.fsum(abs(scale * weight) for weight in risky_weights.values())
-    cash_weight = 1.0 - scale * math.fsum(risky_weights.values())
-    return risky_gross + abs(cash_weight)
+    cash_weight = max(0.0, 1.0 - scale * math.fsum(risky_weights.values()))
+    return risky_gross + cash_weight
 
 
 def _portfolio_volatility_at_scale(
@@ -368,20 +429,20 @@ def _portfolio_volatility_at_scale(
 ) -> float:
     cash_returns = aligned_returns[cash_asset]
     risky_net = math.fsum(risky_weights.values())
-    differential_returns = [
-        math.fsum(
+    cash_weight = max(0.0, 1.0 - scale * risky_net)
+    portfolio_returns = [
+        scale
+        * math.fsum(
             risky_weights[symbol] * aligned_returns[symbol][index]
             for symbol in risky_weights
         )
-        - risky_net * cash_returns[index]
+        + cash_weight * cash_returns[index]
         for index in range(len(cash_returns))
     ]
-    variance = (
-        _sample_variance(cash_returns)
-        + 2.0 * scale * _sample_covariance(cash_returns, differential_returns)
-        + scale * scale * _sample_variance(differential_returns)
+    return math.sqrt(
+        max(0.0, _sample_variance(portfolio_returns))
+        * TRADING_DAYS_PER_YEAR
     )
-    return math.sqrt(max(0.0, variance) * TRADING_DAYS_PER_YEAR)
 
 
 def _scale_to_target_volatility_with_factor(
@@ -392,10 +453,12 @@ def _scale_to_target_volatility_with_factor(
     target_annual_volatility: float = TARGET_ANNUAL_VOLATILITY,
     max_gross: float = GROSS_CAP,
 ) -> tuple[dict[str, float], float]:
-    """Scale a signed risky sleeve to target volatility, balancing with BIL.
+    """Scale a signed risky sleeve; BIL is floored at zero when leveraged.
 
     The scalar is solved against the trailing 60-session covariance of the
-    risky sleeve and BIL. The feasible scalar is capped by the gross limit.
+    risky sleeve and any non-negative BIL balance. Excess leverage is negative
+    cash in the harness, not a short BIL holding. The feasible scalar is capped
+    by the gross limit.
     """
     if not math.isfinite(target_annual_volatility) or target_annual_volatility <= 0:
         raise ValueError("target_annual_volatility must be finite and positive")
@@ -431,8 +494,8 @@ def _scale_to_target_volatility_with_factor(
             high = midpoint
     max_scale = low
 
-    cash_returns = aligned[cash_asset]
     risky_net = math.fsum(nonzero.values())
+    cash_returns = aligned[cash_asset]
     differential = [
         math.fsum(
             nonzero[symbol] * aligned[symbol][index]
@@ -451,25 +514,56 @@ def _scale_to_target_volatility_with_factor(
     quadratic_b = twice_covariance
     quadratic_c = variance_cash - target_variance
 
-    candidates = [0.0, max_scale]
-    if abs(quadratic_a) <= 1e-18:
-        if abs(quadratic_b) > 1e-18:
-            candidates.append(-quadratic_c / quadratic_b)
-    else:
-        discriminant = quadratic_b**2 - 4.0 * quadratic_a * quadratic_c
-        if discriminant >= 0:
-            root = math.sqrt(discriminant)
-            candidates.extend(
-                (
-                    (-quadratic_b - root) / (2.0 * quadratic_a),
-                    (-quadratic_b + root) / (2.0 * quadratic_a),
+    cash_segment_max = max_scale
+    if risky_net > 0:
+        cash_segment_max = min(max_scale, 1.0 / risky_net)
+
+    # While BIL remains positive, variance is a quadratic in the scale.
+    # Include its target crossings and vertex so the closest attainable
+    # volatility is selected even when the target lies outside the range.
+    candidates = [0.0, max_scale, cash_segment_max]
+    if cash_segment_max > 0:
+        cash_segment_candidates: list[float] = []
+        if abs(quadratic_a) <= 1e-18:
+            if abs(quadratic_b) > 1e-18:
+                cash_segment_candidates.append(-quadratic_c / quadratic_b)
+        else:
+            discriminant = quadratic_b**2 - 4.0 * quadratic_a * quadratic_c
+            if discriminant >= 0:
+                root = math.sqrt(discriminant)
+                cash_segment_candidates.extend(
+                    (
+                        (-quadratic_b - root) / (2.0 * quadratic_a),
+                        (-quadratic_b + root) / (2.0 * quadratic_a),
+                    )
                 )
+            cash_segment_candidates.append(-quadratic_b / (2.0 * quadratic_a))
+        candidates.extend(
+            value
+            for value in cash_segment_candidates
+            if math.isfinite(value) and 0.0 <= value <= cash_segment_max
+        )
+
+    # Once BIL reaches zero, leverage is funded by negative cash. With
+    # constant target weights, the risky-sleeve variance scales quadratically.
+    if max_scale > cash_segment_max:
+        risky_portfolio_returns = [
+            math.fsum(
+                nonzero[symbol] * aligned[symbol][index]
+                for symbol in nonzero
             )
-        candidates.append(-quadratic_b / (2.0 * quadratic_a))
+            for index in range(len(cash_returns))
+        ]
+        risky_variance = _sample_variance(risky_portfolio_returns)
+        if risky_variance > 0:
+            leveraged_target_scale = math.sqrt(target_variance / risky_variance)
+            if cash_segment_max <= leveraged_target_scale <= max_scale:
+                candidates.append(leveraged_target_scale)
+
     candidates = [
-        min(max_scale, max(0.0, value))
+        value
         for value in candidates
-        if math.isfinite(value)
+        if math.isfinite(value) and 0.0 <= value <= max_scale
     ]
     scale = min(
         candidates,
@@ -488,7 +582,7 @@ def _scale_to_target_volatility_with_factor(
     )
 
     result = {symbol: scale * weight for symbol, weight in nonzero.items()}
-    result[cash_asset] = 1.0 - scale * risky_net
+    result[cash_asset] = max(0.0, 1.0 - scale * risky_net)
     if _gross_at_scale(nonzero, scale) > max_gross + 1e-9:
         raise RuntimeError("Volatility scaling exceeded the gross cap")
     return (
@@ -626,7 +720,7 @@ def _build_candidate_targets_and_stop_weights(
         long_symbols = {
             symbol: weight for symbol, weight in b_base.items() if weight > 0
         }
-        cash_weight = 1.0 - math.fsum(long_symbols.values())
+        cash_weight = max(0.0, 1.0 - math.fsum(long_symbols.values()))
         result = {**long_symbols, cash_asset: cash_weight}
         target = {
             symbol: weight
@@ -745,6 +839,7 @@ class CandidateSignal:
         self._close_counts = {symbol: 0 for symbol in self.universe}
         self._cash_parked = False
         self._c_entered = False
+        self._c_last_rebalance_index: int | None = None
         self._last_signal_day: date | None = None
         self._last_stop_weights: dict[str, float] | None = None
 
@@ -815,7 +910,11 @@ class CandidateSignal:
             if not self._cash_parked:
                 self._cash_parked = True
                 return self._record_targets(day, {self.cash_asset: 1.0}, {})
-            if self._c_entered:
+            if (
+                self._c_entered
+                and self._c_last_rebalance_index is not None
+                and index - self._c_last_rebalance_index < REBALANCE_EVERY
+            ):
                 return None
             if not all(
                 self._close_counts[symbol] >= MINIMUM_HISTORY
@@ -830,6 +929,7 @@ class CandidateSignal:
                 cash_asset=self.cash_asset,
             )
             self._c_entered = True
+            self._c_last_rebalance_index = index
             return self._record_targets(day, target, stop_weights)
 
         if index % REBALANCE_EVERY:
@@ -984,6 +1084,39 @@ def _common_sessions(panel: PricePanel) -> list[date]:
     ]
 
 
+def buy_and_hold_metrics(
+    panel: PricePanel,
+    symbol: str = CASH_ASSET,
+) -> dict[str, Any]:
+    """Calculate buy-and-hold return and CAGR on the strategy's shared sessions."""
+    if symbol not in panel.closes:
+        raise ValueError(f"Price panel is missing buy-and-hold symbol {symbol}")
+    sessions = _common_sessions(panel)
+    if len(sessions) < 2:
+        raise ValueError("At least two common sessions are required for buy-and-hold")
+    start_day, end_day = sessions[0], sessions[-1]
+    start_price = panel.closes[symbol][start_day]
+    end_price = panel.closes[symbol][end_day]
+    total_return = end_price / start_price - 1.0
+    elapsed_days = (end_day - start_day).days
+    if elapsed_days <= 0:
+        raise ValueError("Buy-and-hold CAGR requires a positive evaluation period")
+    cagr = (end_price / start_price) ** (
+        365.0 / elapsed_days
+    ) - 1.0
+    if not math.isfinite(total_return) or not math.isfinite(cagr):
+        raise ValueError("Buy-and-hold metrics must be finite")
+    return {
+        "symbol": symbol,
+        "requested_start": START_DATE.isoformat(),
+        "requested_end": END_DATE.isoformat(),
+        "actual_start": start_day.isoformat(),
+        "actual_end": end_day.isoformat(),
+        "total_return": total_return,
+        "cagr": cagr,
+    }
+
+
 def _check_cash_asset_stop_compatibility(panel: PricePanel) -> None:
     """Fail before any run if a global harness stop could exit the BIL cash leg."""
     closes = panel.closes[CASH_ASSET]
@@ -1129,7 +1262,7 @@ def run_exploratory_candidates(
     strategy_panel: PricePanel | None = None,
     spy_panel: PricePanel | None = None,
 ) -> dict[str, Any]:
-    """Run the frozen in-sample scenarios once, then append all eight rows."""
+    """Run the corrected in-sample scenarios once, then append all eight rows."""
     print_spec()
     if strategy_panel is None or spy_panel is None:
         loaded_strategy, loaded_spy = load_research_panels()
@@ -1137,6 +1270,7 @@ def run_exploratory_candidates(
         spy_panel = spy_panel or loaded_spy
     _check_cash_asset_stop_compatibility(strategy_panel)
     matrix = in_sample_correlation_matrix(strategy_panel)
+    bil_metrics = buy_and_hold_metrics(strategy_panel)
     records = [
         _make_result_record(candidate, cost_bps, strategy_panel, spy_panel)
         for candidate, cost_bps in RUN_PLAN
@@ -1156,12 +1290,16 @@ def run_exploratory_candidates(
         "flagged_rows_dropped": strategy_panel.flagged_rows_dropped,
         "session_count": len(_common_sessions(strategy_panel)),
         "instrument_correlation_matrix": matrix,
+        "bil_buy_and_hold": bil_metrics,
         "runs": [
             {
                 "candidate": record.candidate,
                 "cost_bps": record.cost_bps,
                 "run_id": run_id_map[(record.candidate, record.cost_bps)],
                 "metrics": record.result.metrics,
+                "cagr_minus_bil": (
+                    float(record.result.metrics["cagr"]) - bil_metrics["cagr"]
+                ),
                 **record.diagnostics,
             }
             for record in records

@@ -51,6 +51,8 @@ def _run(
     starting_equity: float = 100.0,
     whole_shares: bool = False,
     trail_pct: float | None = None,
+    trailing_stop_signal=None,
+    trailing_stop_cash_asset: str | None = None,
 ) -> harness.BacktestResult:
     available_dates = sorted(
         set.intersection(*(set(prices) for prices in panel.closes.values()))
@@ -68,6 +70,8 @@ def _run(
         starting_equity=starting_equity,
         whole_shares=whole_shares,
         trail_pct=trail_pct,
+        trailing_stop_signal=trailing_stop_signal,
+        trailing_stop_cash_asset=trailing_stop_cash_asset,
     )
 
 
@@ -177,6 +181,150 @@ def test_trailing_stops_trigger_on_close_and_exit_at_next_close(
     assert exited["date"] == days[exit_index].isoformat()
     assert result.equity_curve[trigger_index]["gross_exposure"] > 0
     assert result.equity_curve[exit_index]["gross_exposure"] == pytest.approx(0)
+
+
+def test_sleeve_stop_exits_only_the_trend_shares_and_reallocates_to_cash_asset() -> None:
+    days = _days(5)
+    panel = _panel(
+        {"AAA": [10, 10, 12, 10, 10], "BIL": [10, 10, 10, 10, 10]},
+        days=days,
+    )
+
+    def portfolio_signal(_history, current_day):
+        return {"AAA": 0.8, "BIL": 0.2} if current_day == days[0] else None
+
+    def trend_sleeve_signal(_history, current_day):
+        return {"AAA": 0.4} if current_day == days[0] else None
+
+    result = _run(
+        panel,
+        portfolio_signal,
+        trail_pct=0.10,
+        trailing_stop_signal=trend_sleeve_signal,
+        trailing_stop_cash_asset="BIL",
+    )
+
+    triggered = next(
+        event for event in result.events
+        if event["type"] == "trailing_stop_triggered"
+    )
+    stopped = next(
+        event for event in result.events
+        if event["type"] == "trailing_stop_exit"
+    )
+    assert triggered["sleeve"] == "trend"
+    assert stopped["quantity"] == pytest.approx(4.0)
+    assert stopped["quantity_change"] == pytest.approx(-4.0)
+    assert stopped["quantity_after"] == pytest.approx(4.0)
+    assert stopped["cash_asset"] == "BIL"
+    assert stopped["cash_adjustment_quantity"] == pytest.approx(4.0)
+    assert result.equity_curve[-1]["gross_exposure"] == pytest.approx(100.0)
+
+
+def test_sleeve_stop_handles_offsetting_trend_and_passive_positions() -> None:
+    days = _days(5)
+    panel = _panel(
+        {"AAA": [10, 10, 8, 9, 9], "BIL": [10, 10, 10, 10, 10]},
+        days=days,
+    )
+
+    def portfolio_signal(_history, current_day):
+        return {"AAA": -0.1, "BIL": 1.1} if current_day == days[0] else None
+
+    def trend_sleeve_signal(_history, current_day):
+        return {"AAA": -0.3} if current_day == days[0] else None
+
+    result = _run(
+        panel,
+        portfolio_signal,
+        trail_pct=0.10,
+        trailing_stop_signal=trend_sleeve_signal,
+        trailing_stop_cash_asset="BIL",
+    )
+
+    triggered = next(
+        event for event in result.events
+        if event["type"] == "trailing_stop_triggered"
+    )
+    stopped = next(
+        event for event in result.events
+        if event["type"] == "trailing_stop_exit"
+    )
+    assert triggered["side"] == "short"
+    assert stopped["quantity"] == pytest.approx(-3.0)
+    assert stopped["quantity_change"] == pytest.approx(3.0)
+    assert stopped["quantity_after"] == pytest.approx(2.0)
+    assert stopped["cash_adjustment_quantity"] == pytest.approx(-2.7)
+
+
+def test_sleeve_stop_cash_transfer_tracks_rounded_share_exit() -> None:
+    days = _days(5)
+    panel = _panel(
+        {"AAA": [10, 10, 12, 10, 10], "BIL": [3, 3, 3, 3, 3]},
+        days=days,
+    )
+
+    def portfolio_signal(_history, current_day):
+        return {"AAA": 0.8, "BIL": 0.2} if current_day == days[0] else None
+
+    def trend_sleeve_signal(_history, current_day):
+        return {"AAA": 0.45} if current_day == days[0] else None
+
+    result = _run(
+        panel,
+        portfolio_signal,
+        whole_shares=True,
+        trail_pct=0.10,
+        trailing_stop_signal=trend_sleeve_signal,
+        trailing_stop_cash_asset="BIL",
+    )
+
+    stopped = next(
+        event for event in result.events
+        if event["type"] == "trailing_stop_exit"
+    )
+    assert stopped["quantity"] == pytest.approx(4.5)
+    assert stopped["quantity_change"] == pytest.approx(-5.0)
+    assert stopped["cash_adjustment_quantity"] == pytest.approx(16.0)
+
+
+def test_stop_trigger_blocks_same_close_trend_sleeve_reentry() -> None:
+    days = _days(5)
+    panel = _panel(
+        {"AAA": [10, 10, 12, 10, 10], "BIL": [10, 10, 10, 10, 10]},
+        days=days,
+    )
+
+    def portfolio_signal(_history, current_day):
+        return (
+            {"AAA": 0.8, "BIL": 0.2}
+            if current_day in {days[0], days[3]}
+            else None
+        )
+
+    def trend_sleeve_signal(_history, current_day):
+        return {"AAA": 0.4} if current_day in {days[0], days[3]} else None
+
+    result = _run(
+        panel,
+        portfolio_signal,
+        trail_pct=0.10,
+        trailing_stop_signal=trend_sleeve_signal,
+        trailing_stop_cash_asset="BIL",
+    )
+
+    stop_exit = next(
+        event for event in result.events
+        if event["type"] == "trailing_stop_exit"
+    )
+    assert stop_exit["quantity_after"] == pytest.approx(4.0)
+    assert not any(
+        event.get("type") == "trade"
+        and event.get("date") == days[4].isoformat()
+        and event.get("symbol") == "AAA"
+        and event.get("quantity_change", 0) > 0
+        for event in result.events
+    )
 
 
 def test_signal_on_day_t_executes_at_next_close_and_gets_no_future_history() -> None:

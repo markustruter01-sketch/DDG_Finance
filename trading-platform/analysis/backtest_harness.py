@@ -422,13 +422,14 @@ def _enforce_gross_cap(
     day: date,
     reason: str,
     events: list[dict[str, Any]],
-) -> None:
+) -> float:
+    total_scale = 1.0
     for _ in range(32):
         equity = _equity(book, prices)
         gross, _ = _gross_and_net(book, prices)
         allowed = max_gross * max(equity, 0.0)
         if gross <= allowed + 1e-9:
-            return
+            return total_scale
         if gross <= _EPSILON or equity <= 0:
             scale = 0.0
         else:
@@ -442,6 +443,8 @@ def _enforce_gross_cap(
             for symbol in book.quantities
         ):
             target = {symbol: 0.0 for symbol in book.quantities}
+            scale = 0.0
+        total_scale *= scale
         _trade_to_quantities(
             book,
             target,
@@ -632,6 +635,131 @@ def _update_trailing_stops(
             )
 
 
+def _exit_due_sleeve_stops(
+    book: _Book,
+    stopped_sleeves: Mapping[str, float],
+    sleeve_quantities: dict[str, float],
+    prices: Mapping[str, float],
+    *,
+    cost_rate: float,
+    whole_shares: bool,
+    max_gross: float,
+    cash_asset: str | None,
+    day: date,
+    events: list[dict[str, Any]],
+) -> None:
+    """Exit only the stopped virtual sleeve, retaining other sleeve exposure."""
+    for symbol, stopped_quantity in sorted(stopped_sleeves.items()):
+        if abs(stopped_quantity) <= _EPSILON:
+            continue
+        targets = dict(book.quantities)
+        symbol_quantity_before = book.quantities[symbol]
+        targets[symbol] = _rounded_quantity(
+            symbol_quantity_before - stopped_quantity, whole_shares
+        )
+        cash_adjustment_quantity = 0.0
+        if cash_asset is not None:
+            if cash_asset == symbol:
+                raise ValueError("trailing_stop_cash_asset cannot be the stopped symbol")
+            exited_quantity = book.quantities[symbol] - targets[symbol]
+            requested_cash_quantity = (
+                exited_quantity * prices[symbol] / prices[cash_asset]
+            )
+            cash_target = _rounded_quantity(
+                book.quantities[cash_asset] + requested_cash_quantity,
+                whole_shares,
+            )
+            cash_adjustment_quantity = cash_target - book.quantities[cash_asset]
+            targets[cash_asset] = _rounded_quantity(
+                cash_target,
+                whole_shares,
+            )
+        _trade_to_quantities(
+            book,
+            targets,
+            prices,
+            cost_rate=cost_rate,
+            whole_shares=whole_shares,
+            day=day,
+            reason="trailing_stop_sleeve_exit",
+            events=events,
+        )
+        _enforce_gross_cap(
+            book,
+            prices,
+            cost_rate=cost_rate,
+            max_gross=max_gross,
+            whole_shares=whole_shares,
+            day=day,
+            reason="post_stop_gross_cap",
+            events=events,
+        )
+        sleeve_quantities[symbol] = 0.0
+        book.high_water.pop(symbol, None)
+        book.low_water.pop(symbol, None)
+        events.append(
+            {
+                "type": "trailing_stop_exit",
+                "date": day.isoformat(),
+                "symbol": symbol,
+                "sleeve": "trend",
+                "quantity": stopped_quantity,
+                "quantity_change": targets[symbol] - symbol_quantity_before,
+                "price": prices[symbol],
+                "quantity_after": book.quantities[symbol],
+                "cash_asset": cash_asset,
+                "cash_adjustment_quantity": cash_adjustment_quantity,
+            }
+        )
+
+
+def _update_sleeve_trailing_stops(
+    sleeve_quantities: Mapping[str, float],
+    high_water: dict[str, float],
+    low_water: dict[str, float],
+    prices: Mapping[str, float],
+    *,
+    trail_pct: float,
+    day: date,
+    next_close_available: bool,
+    pending_stops: dict[str, float],
+    events: list[dict[str, Any]],
+) -> None:
+    """Schedule stops against sleeve quantities, not net symbol quantities."""
+    for symbol, quantity in sleeve_quantities.items():
+        if abs(quantity) <= _EPSILON or symbol in pending_stops:
+            continue
+        if quantity > 0:
+            high = max(high_water.get(symbol, prices[symbol]), prices[symbol])
+            high_water[symbol] = high
+            stop_price = high * (1.0 - trail_pct)
+            breached = prices[symbol] <= stop_price
+            side = "long"
+        else:
+            low = min(low_water.get(symbol, prices[symbol]), prices[symbol])
+            low_water[symbol] = low
+            stop_price = low * (1.0 + trail_pct)
+            breached = prices[symbol] >= stop_price
+            side = "short"
+        if not breached:
+            continue
+        if next_close_available:
+            pending_stops[symbol] = quantity
+        events.append(
+            {
+                "type": "trailing_stop_triggered",
+                "date": day.isoformat(),
+                "symbol": symbol,
+                "sleeve": "trend",
+                "side": side,
+                "quantity": quantity,
+                "stop_price": stop_price,
+                "close": prices[symbol],
+                "next_close_available": next_close_available,
+            }
+        )
+
+
 def _rebalance_to_weights(
     book: _Book,
     target_weights: Mapping[str, float],
@@ -642,10 +770,11 @@ def _rebalance_to_weights(
     whole_shares: bool,
     day: date,
     events: list[dict[str, Any]],
-) -> None:
+) -> tuple[float, float]:
     equity = _equity(book, prices)
     if equity <= 0:
         targets = {symbol: 0.0 for symbol in book.quantities}
+        scale = 0.0
     else:
         target_values = {
             symbol: target_weights.get(symbol, 0.0) * equity
@@ -672,7 +801,7 @@ def _rebalance_to_weights(
         reason="signal_rebalance",
         events=events,
     )
-    _enforce_gross_cap(
+    enforced_scale = _enforce_gross_cap(
         book,
         prices,
         cost_rate=cost_rate,
@@ -682,6 +811,7 @@ def _rebalance_to_weights(
         reason="post_cost_gross_cap",
         events=events,
     )
+    return equity, scale * enforced_scale
 
 
 def _normalise_signal(
@@ -820,6 +950,8 @@ def run_backtest(
     starting_equity: float = 100_000.0,
     whole_shares: bool = False,
     trail_pct: float | None = None,
+    trailing_stop_signal: SignalFunction | None = None,
+    trailing_stop_cash_asset: str | None = None,
     registered_experiment_id: int | None = None,
 ) -> BacktestResult:
     """Run a generic signed-target-weight strategy over a synchronized close panel.
@@ -829,9 +961,16 @@ def run_backtest(
     fractions of equity; it trades on the next common valid close. Missing
     symbol dates are excluded from the common session calendar, never forward-
     filled. Financing accrues over actual calendar days between closes.
+
+    ``trailing_stop_signal`` can identify one virtual sleeve inside a net
+    symbol position. Its signed target weights must be emitted alongside each
+    portfolio target. A triggered stop exits only that sleeve; when supplied,
+    ``trailing_stop_cash_asset`` receives the stopped sleeve's marked notional.
     """
     if not callable(signal_function):
         raise TypeError("signal_function must be callable")
+    if trailing_stop_signal is not None and not callable(trailing_stop_signal):
+        raise TypeError("trailing_stop_signal must be callable when provided")
     start = _coerce_date(start)
     end = _coerce_date(end)
     if start > end:
@@ -863,9 +1002,24 @@ def run_backtest(
     )
     if not isinstance(whole_shares, bool):
         raise ValueError("whole_shares must be a boolean")
+    if trailing_stop_signal is not None and trail_pct is None:
+        raise ValueError(
+            "trail_pct is required when trailing_stop_signal is provided"
+        )
+    if trailing_stop_signal is None and trailing_stop_cash_asset is not None:
+        raise ValueError(
+            "trailing_stop_cash_asset requires trailing_stop_signal"
+        )
 
     panel = _coerce_panel(data)
     symbols = tuple(sorted(panel.closes))
+    if (
+        trailing_stop_cash_asset is not None
+        and trailing_stop_cash_asset not in symbols
+    ):
+        raise ValueError(
+            "trailing_stop_cash_asset must be present in the price panel"
+        )
     common_dates = set.intersection(
         *(set(series) for series in panel.closes.values())
     )
@@ -886,7 +1040,12 @@ def run_backtest(
     previous_day: date | None = None
     previous_prices: dict[str, float] | None = None
     pending_signal: dict[str, float] | None = None
+    pending_sleeve_signal: dict[str, float] | None = None
     pending_stops: set[str] = set()
+    pending_sleeve_stops: dict[str, float] = {}
+    sleeve_quantities = {symbol: 0.0 for symbol in symbols}
+    sleeve_high_water: dict[str, float] = {}
+    sleeve_low_water: dict[str, float] = {}
     ordered_dates = {
         symbol: tuple(sorted(series))
         for symbol, series in panel.closes.items()
@@ -910,7 +1069,8 @@ def run_backtest(
             )
 
         # Check maintenance against the marked portfolio before scheduled trades.
-        _check_maintenance_margin(
+        quantities_before_margin_check = dict(book.quantities)
+        margin_called = _check_maintenance_margin(
             book,
             current_prices,
             cost_rate=cost_rate,
@@ -919,6 +1079,13 @@ def run_backtest(
             day=day,
             events=events,
         )
+        if margin_called and trailing_stop_signal is not None:
+            for symbol in symbols:
+                before = quantities_before_margin_check[symbol]
+                if abs(before) > _EPSILON:
+                    sleeve_quantities[symbol] *= (
+                        book.quantities[symbol] / before
+                    )
 
         stopped_today = set(pending_stops)
         pending_stops.clear()
@@ -932,21 +1099,88 @@ def run_backtest(
             events=events,
         )
 
+        stopped_sleeves_today = dict(pending_sleeve_stops)
+        pending_sleeve_stops.clear()
+        _exit_due_sleeve_stops(
+            book,
+            stopped_sleeves_today,
+            sleeve_quantities,
+            current_prices,
+            cost_rate=cost_rate,
+            whole_shares=whole_shares,
+            max_gross=max_gross,
+            cash_asset=trailing_stop_cash_asset,
+            day=day,
+            events=events,
+        )
+        for symbol in stopped_sleeves_today:
+            sleeve_high_water.pop(symbol, None)
+            sleeve_low_water.pop(symbol, None)
+
         if pending_signal is not None:
             targets = dict(pending_signal)
-            for symbol in stopped_today:
-                targets[symbol] = 0.0
-            _rebalance_to_weights(
-                book,
-                targets,
-                current_prices,
-                cost_rate=cost_rate,
-                max_gross=max_gross,
-                whole_shares=whole_shares,
-                day=day,
-                events=events,
-            )
+            if trailing_stop_signal is None:
+                for symbol in stopped_today:
+                    targets[symbol] = 0.0
+                _rebalance_to_weights(
+                    book,
+                    targets,
+                    current_prices,
+                    cost_rate=cost_rate,
+                    max_gross=max_gross,
+                    whole_shares=whole_shares,
+                    day=day,
+                    events=events,
+                )
+            else:
+                if pending_sleeve_signal is None:
+                    raise RuntimeError(
+                        "A sleeve-aware portfolio target is missing its stop-sleeve target"
+                    )
+                sleeve_targets = dict(pending_sleeve_signal)
+                for symbol in stopped_sleeves_today:
+                    stopped_weight = sleeve_targets.get(symbol, 0.0)
+                    targets[symbol] = targets.get(symbol, 0.0) - stopped_weight
+                    if trailing_stop_cash_asset is not None:
+                        targets[trailing_stop_cash_asset] = (
+                            targets.get(trailing_stop_cash_asset, 0.0)
+                            + stopped_weight
+                        )
+                    sleeve_targets[symbol] = 0.0
+                equity_before_trade, effective_scale = _rebalance_to_weights(
+                    book,
+                    targets,
+                    current_prices,
+                    cost_rate=cost_rate,
+                    max_gross=max_gross,
+                    whole_shares=whole_shares,
+                    day=day,
+                    events=events,
+                )
+                for symbol in symbols:
+                    old_quantity = sleeve_quantities[symbol]
+                    target_quantity = (
+                        sleeve_targets.get(symbol, 0.0)
+                        * equity_before_trade
+                        * effective_scale
+                        / current_prices[symbol]
+                    )
+                    sleeve_quantities[symbol] = target_quantity
+                    if abs(target_quantity) <= _EPSILON:
+                        sleeve_high_water.pop(symbol, None)
+                        sleeve_low_water.pop(symbol, None)
+                    elif (
+                        abs(old_quantity) <= _EPSILON
+                        or old_quantity * target_quantity < 0
+                    ):
+                        sleeve_high_water.pop(symbol, None)
+                        sleeve_low_water.pop(symbol, None)
+                        if target_quantity > 0:
+                            sleeve_high_water[symbol] = current_prices[symbol]
+                        else:
+                            sleeve_low_water[symbol] = current_prices[symbol]
         pending_signal = None
+        pending_sleeve_signal = None
 
         equity = _equity(book, current_prices)
         gross_exposure, net_exposure = _gross_and_net(book, current_prices)
@@ -960,25 +1194,68 @@ def run_backtest(
             }
         )
 
-        _update_trailing_stops(
-            book,
-            current_prices,
-            trail_pct=trail_pct,
-            day=day,
-            next_close_available=index + 1 < len(sessions),
-            pending_stops=pending_stops,
-            events=events,
-        )
+        if trailing_stop_signal is None:
+            _update_trailing_stops(
+                book,
+                current_prices,
+                trail_pct=trail_pct,
+                day=day,
+                next_close_available=index + 1 < len(sessions),
+                pending_stops=pending_stops,
+                events=events,
+            )
+        elif trail_pct is not None:
+            _update_sleeve_trailing_stops(
+                sleeve_quantities,
+                sleeve_high_water,
+                sleeve_low_water,
+                current_prices,
+                trail_pct=trail_pct,
+                day=day,
+                next_close_available=index + 1 < len(sessions),
+                pending_stops=pending_sleeve_stops,
+                events=events,
+            )
 
         as_of_history = _AsOfPanel(panel, day, ordered_dates)
         raw_signal = signal_function(as_of_history, day)
         normalized_signal = _normalise_signal(raw_signal, symbols)
+        raw_sleeve_signal = (
+            trailing_stop_signal(as_of_history, day)
+            if trailing_stop_signal is not None
+            else None
+        )
+        normalized_sleeve_signal = (
+            (
+                {symbol: 0.0 for symbol in symbols}
+                if not raw_sleeve_signal
+                else _normalise_signal(raw_sleeve_signal, symbols)
+            )
+            if trailing_stop_signal is not None and raw_sleeve_signal is not None
+            else None
+        )
+        if (
+            normalized_signal is None
+            and normalized_sleeve_signal is not None
+            and not any(
+                abs(weight) > _EPSILON
+                for weight in normalized_sleeve_signal.values()
+            )
+        ):
+            normalized_sleeve_signal = None
+        if trailing_stop_signal is not None and (
+            (normalized_signal is None) != (normalized_sleeve_signal is None)
+        ):
+            raise ValueError(
+                "Portfolio and trailing-stop sleeve signals must be emitted together"
+            )
         if normalized_signal is not None:
             if index + 1 >= len(sessions):
                 raise ValueError(
                     f"Signal on final session {day} has no next close for execution"
                 )
             pending_signal = normalized_signal
+            pending_sleeve_signal = normalized_sleeve_signal
 
         previous_day = day
         previous_prices = current_prices
@@ -999,6 +1276,14 @@ def run_backtest(
         "starting_equity": starting_equity,
         "whole_shares": whole_shares,
         "trail_pct": trail_pct,
+        "trailing_stop_mode": (
+            "sleeve_signal"
+            if trailing_stop_signal is not None
+            else "portfolio"
+            if trail_pct is not None
+            else "disabled"
+        ),
+        "trailing_stop_cash_asset": trailing_stop_cash_asset,
         "registered_experiment_id": registered_experiment_id,
     }
     data_window = {

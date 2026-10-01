@@ -121,11 +121,12 @@ def test_candidate_c_ignores_trend_signal_and_remains_long_only() -> None:
 
 
 def test_candidate_c_uses_one_entry_then_ignores_later_trend_signals() -> None:
-    risk_returns = [0.001] * 219
+    risk_returns = [0.003 if i % 2 == 0 else -0.001 for i in range(219)]
+    cash_returns = [0.0002 if i % 2 == 0 else -0.0001 for i in range(219)]
     history = _history(
         count=220,
         risk_returns=risk_returns,
-        cash_returns=[0.0001] * 219,
+        cash_returns=cash_returns,
     )
     sessions = sorted(history["RISK"])[200:]
     signal = candidates.CandidateSignal("C", sessions, universe=("RISK",))
@@ -150,6 +151,45 @@ def test_candidate_d_is_a_fifty_fifty_signed_weight_blend() -> None:
     )
 
     assert blended == pytest.approx({"AAA": 0.3, "BBB": -0.1, "CCC": 0.3})
+
+
+def test_candidate_d_stop_weights_cover_only_its_scaled_trend_sleeve() -> None:
+    history = _history(count=220)
+
+    target, stop_weights = candidates._build_candidate_targets_and_stop_weights(
+        "D",
+        history,
+        {"RISK": 1},
+        universe=("RISK",),
+    )
+
+    assert target["RISK"] > 0
+    assert stop_weights["RISK"] == pytest.approx(target["RISK"] / 2)
+    assert "BIL" not in stop_weights
+
+
+def test_candidate_signal_pairs_d_portfolio_with_its_trend_sleeve() -> None:
+    risk_returns = [0.005 if i % 2 == 0 else 0.003 for i in range(219)]
+    cash_returns = [0.0002 if i % 2 == 0 else 0.0001 for i in range(219)]
+    history = _history(
+        count=220,
+        risk_returns=risk_returns,
+        cash_returns=cash_returns,
+    )
+    sessions = sorted(history["RISK"])[200:]
+    signal = candidates.CandidateSignal("D", sessions, universe=("RISK",))
+    day = sessions[0]
+    as_of = {
+        symbol: {close_day: value for close_day, value in values.items() if close_day <= day}
+        for symbol, values in history.items()
+    }
+
+    target = signal(as_of, day)
+    trend_sleeve = signal.trailing_stop_signal(as_of, day)
+
+    assert target is not None and target["RISK"] > 0
+    assert trend_sleeve is not None
+    assert trend_sleeve["RISK"] == pytest.approx(target["RISK"] / 2)
 
 
 def test_spec_hash_is_deterministic_and_covers_the_frozen_spec() -> None:

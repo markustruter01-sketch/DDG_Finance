@@ -29,6 +29,7 @@
 - [Bot 2 earnings validation result](bot2-earnings-validation-result.md) — fixed business-predictability top six beat buy-before out of sample on PEAD-20; this remains research-only.
 - [Bot 2 earnings sizing audit](bot2-earnings-sizing-audit.md) — experiment 10 compounds each overlapping event as a full book; its 268% return is not unlevered.
 - [Bot 2 v4 rotation boundary](bot2-v4-rotation-boundary.md) — keep one-book PEAD rotation research isolated; document v3 ledger discrepancies rather than changing locked results.
+- [Bot 2 blended sleeve stop](bot2-blended-sleeve-stop.md) — candidate D’s stop closes only its trend sleeve; preserve passive exposure and the frozen spec/hash.
 - [Alpaca vault position separation](alpaca-vault-position-separation.md) — client order IDs do not split net same-symbol positions; track vault ownership and guard strategy closes.
 - [Test baseline and module patching](test-baseline-and-module-patching.md) — module reloads can split package attributes from class globals; patch the exact module object and keep a dated suite baseline.
 - [Pytest collection roots](pytest-collection-roots.md) — root and subdirectory invocations need equivalent nearest pytest configs to collect the full cross-project suite.

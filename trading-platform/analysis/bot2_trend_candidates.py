@@ -208,7 +208,7 @@ def spec_hash(spec: Mapping[str, Any] = SPEC) -> str:
 def print_spec() -> dict[str, Any]:
     """Print the complete frozen spec and its SHA-256 before any run."""
     payload = {"spec": SPEC, "spec_hash": spec_hash()}
-    print(json.dumps(payload, sort_keys=True, indent=2, allow_nan=False))
+    print(json.dumps(payload, sort_keys=True, indent=2, allow_nan=False), flush=True)
     return payload
 
 
@@ -384,14 +384,14 @@ def _portfolio_volatility_at_scale(
     return math.sqrt(max(0.0, variance) * TRADING_DAYS_PER_YEAR)
 
 
-def scale_to_target_volatility(
+def _scale_to_target_volatility_with_factor(
     history: Mapping[str, Mapping[date, float]],
     risky_weights: Mapping[str, float],
     *,
     cash_asset: str = CASH_ASSET,
     target_annual_volatility: float = TARGET_ANNUAL_VOLATILITY,
     max_gross: float = GROSS_CAP,
-) -> dict[str, float]:
+) -> tuple[dict[str, float], float]:
     """Scale a signed risky sleeve to target volatility, balancing with BIL.
 
     The scalar is solved against the trailing 60-session covariance of the
@@ -409,7 +409,7 @@ def scale_to_target_volatility(
     if cash_asset in nonzero:
         raise ValueError("risky_weights must not include the cash asset")
     if not nonzero:
-        return {cash_asset: 1.0}
+        return {cash_asset: 1.0}, 0.0
 
     symbols = tuple(dict.fromkeys((cash_asset, *sorted(nonzero))))
     aligned = _returns_by_symbol(history, symbols)
@@ -491,11 +491,33 @@ def scale_to_target_volatility(
     result[cash_asset] = 1.0 - scale * risky_net
     if _gross_at_scale(nonzero, scale) > max_gross + 1e-9:
         raise RuntimeError("Volatility scaling exceeded the gross cap")
-    return {
-        symbol: weight
-        for symbol, weight in result.items()
-        if abs(weight) > 1e-14
-    }
+    return (
+        {
+            symbol: weight
+            for symbol, weight in result.items()
+            if abs(weight) > 1e-14
+        },
+        scale,
+    )
+
+
+def scale_to_target_volatility(
+    history: Mapping[str, Mapping[date, float]],
+    risky_weights: Mapping[str, float],
+    *,
+    cash_asset: str = CASH_ASSET,
+    target_annual_volatility: float = TARGET_ANNUAL_VOLATILITY,
+    max_gross: float = GROSS_CAP,
+) -> dict[str, float]:
+    """Scale a signed risky sleeve to target volatility, balancing with BIL."""
+    result, _ = _scale_to_target_volatility_with_factor(
+        history,
+        risky_weights,
+        cash_asset=cash_asset,
+        target_annual_volatility=target_annual_volatility,
+        max_gross=max_gross,
+    )
+    return result
 
 
 def _base_weights_for_directions(
@@ -562,15 +584,15 @@ def blend_half_weights(
     }
 
 
-def build_candidate_targets(
+def _build_candidate_targets_and_stop_weights(
     candidate: str,
     history: Mapping[str, Mapping[date, float]],
     trend_directions: Mapping[str, int],
     *,
     universe: Sequence[str] = UNIVERSE,
     cash_asset: str = CASH_ASSET,
-) -> dict[str, float]:
-    """Build one candidate's target weights; C deliberately ignores trend state."""
+) -> tuple[dict[str, float], dict[str, float]]:
+    """Build portfolio weights and the separately stopped trend sleeve."""
     if candidate not in {"A", "B", "C", "D"}:
         raise ValueError(f"Unknown candidate: {candidate!r}")
     if not universe or len(set(universe)) != len(universe):
@@ -580,14 +602,15 @@ def build_candidate_targets(
 
     if candidate == "C":
         if not all(len(history[symbol]) >= MINIMUM_HISTORY for symbol in universe):
-            return {cash_asset: 1.0}
+            return {cash_asset: 1.0}, {}
         c_base = _base_risk_parity_weights(history, universe=universe)
-        return scale_to_target_volatility(
+        target = scale_to_target_volatility(
             history,
             c_base,
             cash_asset=cash_asset,
             max_gross=GROSS_CAP,
         )
+        return target, {}
 
     if candidate == "A":
         long_directions = {
@@ -605,7 +628,12 @@ def build_candidate_targets(
         }
         cash_weight = 1.0 - math.fsum(long_symbols.values())
         result = {**long_symbols, cash_asset: cash_weight}
-        return {symbol: weight for symbol, weight in result.items() if abs(weight) > 1e-14}
+        target = {
+            symbol: weight
+            for symbol, weight in result.items()
+            if abs(weight) > 1e-14
+        }
+        return target, long_symbols
 
     b_base = _base_weights_for_directions(
         history,
@@ -614,13 +642,19 @@ def build_candidate_targets(
     )
     if candidate == "B":
         if not b_base:
-            return {cash_asset: 1.0}
-        return scale_to_target_volatility(
+            return {cash_asset: 1.0}, {}
+        target = scale_to_target_volatility(
             history,
             b_base,
             cash_asset=cash_asset,
             max_gross=GROSS_CAP,
         )
+        stop_weights = {
+            symbol: weight
+            for symbol, weight in target.items()
+            if symbol != cash_asset
+        }
+        return target, stop_weights
 
     # Candidate D blends B's current trend sleeve with C's current risk-parity
     # sleeve. The blended target is then independently volatility-scaled.
@@ -649,12 +683,37 @@ def build_candidate_targets(
     blended_risky = {
         symbol: weight for symbol, weight in blend.items() if symbol != cash_asset
     }
-    return scale_to_target_volatility(
+    target, retarget_scale = _scale_to_target_volatility_with_factor(
         history,
         blended_risky,
         cash_asset=cash_asset,
         max_gross=GROSS_CAP,
     )
+    stop_weights = {
+        symbol: 0.5 * weight * retarget_scale
+        for symbol, weight in b_target.items()
+        if symbol != cash_asset and abs(0.5 * weight * retarget_scale) > 1e-14
+    }
+    return target, stop_weights
+
+
+def build_candidate_targets(
+    candidate: str,
+    history: Mapping[str, Mapping[date, float]],
+    trend_directions: Mapping[str, int],
+    *,
+    universe: Sequence[str] = UNIVERSE,
+    cash_asset: str = CASH_ASSET,
+) -> dict[str, float]:
+    """Build one candidate's target weights; C deliberately ignores trend state."""
+    target, _ = _build_candidate_targets_and_stop_weights(
+        candidate,
+        history,
+        trend_directions,
+        universe=universe,
+        cash_asset=cash_asset,
+    )
+    return target
 
 
 class CandidateSignal:
@@ -686,6 +745,8 @@ class CandidateSignal:
         self._close_counts = {symbol: 0 for symbol in self.universe}
         self._cash_parked = False
         self._c_entered = False
+        self._last_signal_day: date | None = None
+        self._last_stop_weights: dict[str, float] | None = None
 
     def _update_ema(self, symbol: str, close: float) -> None:
         if not math.isfinite(close) or close <= 0:
@@ -743,6 +804,8 @@ class CandidateSignal:
     ) -> Mapping[str, float] | None:
         if day not in self.session_index:
             raise ValueError(f"Signal date {day} is outside the session calendar")
+        self._last_signal_day = None
+        self._last_stop_weights = None
         self._ingest_as_of_history(history, day)
         index = self.session_index[day]
         if index == len(self.sessions) - 1:
@@ -751,7 +814,7 @@ class CandidateSignal:
         if self.candidate == "C":
             if not self._cash_parked:
                 self._cash_parked = True
-                return {self.cash_asset: 1.0}
+                return self._record_targets(day, {self.cash_asset: 1.0}, {})
             if self._c_entered:
                 return None
             if not all(
@@ -759,7 +822,7 @@ class CandidateSignal:
                 for symbol in self.universe
             ):
                 return None
-            target = build_candidate_targets(
+            target, stop_weights = _build_candidate_targets_and_stop_weights(
                 "C",
                 history,
                 self._trend_directions(),
@@ -767,17 +830,38 @@ class CandidateSignal:
                 cash_asset=self.cash_asset,
             )
             self._c_entered = True
-            return target
+            return self._record_targets(day, target, stop_weights)
 
         if index % REBALANCE_EVERY:
             return None
-        return build_candidate_targets(
+        target, stop_weights = _build_candidate_targets_and_stop_weights(
             self.candidate,
             history,
             self._trend_directions(),
             universe=self.universe,
             cash_asset=self.cash_asset,
         )
+        return self._record_targets(day, target, stop_weights)
+
+    def _record_targets(
+        self,
+        day: date,
+        target: dict[str, float],
+        stop_weights: dict[str, float],
+    ) -> dict[str, float]:
+        self._last_signal_day = day
+        self._last_stop_weights = stop_weights
+        return target
+
+    def trailing_stop_signal(
+        self,
+        _history: Mapping[str, Mapping[date, float]],
+        day: date,
+    ) -> Mapping[str, float] | None:
+        """Return the stop-managed sleeve paired with this day's target."""
+        if self._last_signal_day != day:
+            return None
+        return dict(self._last_stop_weights or {})
 
 
 def _pearson(left: Sequence[float], right: Sequence[float]) -> float:
@@ -939,6 +1023,10 @@ def _make_result_record(
         starting_equity=STARTING_EQUITY,
         whole_shares=True,
         trail_pct=None if candidate == "C" else TRAILING_STOP,
+        trailing_stop_signal=(
+            None if candidate == "C" else signal.trailing_stop_signal
+        ),
+        trailing_stop_cash_asset=None if candidate == "C" else CASH_ASSET,
     )
     diagnostics = {
         "window_returns": window_returns(result),
@@ -1042,6 +1130,7 @@ def run_exploratory_candidates(
     spy_panel: PricePanel | None = None,
 ) -> dict[str, Any]:
     """Run the frozen in-sample scenarios once, then append all eight rows."""
+    print_spec()
     if strategy_panel is None or spy_panel is None:
         loaded_strategy, loaded_spy = load_research_panels()
         strategy_panel = strategy_panel or loaded_strategy
@@ -1097,10 +1186,6 @@ def main() -> None:
     if args.print_spec:
         print_spec()
         return
-    print_spec()
-    import sys
-
-    sys.stdout.flush()
     report = run_exploratory_candidates()
     print(json.dumps(report, sort_keys=True, indent=2, allow_nan=False))
 

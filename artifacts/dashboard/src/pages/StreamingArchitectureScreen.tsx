@@ -10,7 +10,7 @@ const SVG_PADDING_X = 18;
 const SVG_PADDING_TOP = 14;
 const COL_COUNT = 5;
 const NATURAL_W = 1040;
-const COLUMN_TEXT_COLORS = ["#9a3412", "#0e7490", "#6d28d9", "#166534", "#92400e"] as const;
+const COLUMN_TEXT_COLORS = ["#ffd2ae", "#b7eef1", "#d4c3ff", "#b9f0cf", "#ffe1a4"] as const;
 
 function getColX(col: number): number {
   const usable = NATURAL_W - SVG_PADDING_X * 2;
@@ -145,18 +145,19 @@ function ArchNodeBox({
     ? nodeColor
     : highlighted
     ? nodeColor
-    : "rgba(71,85,105,0.35)";
+    : "rgba(227,240,228,0.2)";
   const bgColor = selected
     ? `${nodeColor}22`
     : highlighted
     ? `${nodeColor}18`
-    : "rgba(255,255,255,0.48)";
+    : "rgba(13,29,27,.84)";
   const glowFilter = (highlighted || selected) ? `drop-shadow(0 0 6px ${nodeColor}55)` : "none";
 
   return (
     <g
       role="button"
       tabIndex={0}
+      data-testid={`architecture-node-${node.id}`}
       aria-label={`Inspect ${node.label}`}
       style={{ cursor: "pointer", opacity, transition: "opacity 0.25s", filter: glowFilter }}
       onClick={onClick}
@@ -186,7 +187,7 @@ function ArchNodeBox({
         cx={nx + NODE_W - 10}
         cy={ny + 10}
         r={3}
-        fill={highlighted || selected ? nodeColor : "rgba(71,85,105,0.45)"}
+        fill={highlighted || selected ? nodeColor : "rgba(215,232,218,.66)"}
       />
       {/* label via foreignObject */}
       <foreignObject x={nx + 8} y={ny + 6} width={NODE_W - 16} height={NODE_H - 12}>
@@ -204,7 +205,7 @@ function ArchNodeBox({
             style={{
               fontSize: 10,
               fontWeight: 700,
-              color: highlighted || selected ? nodeColor : "#172033",
+              color: highlighted || selected ? nodeColor : "#f1f3eb",
               letterSpacing: "0.04em",
               lineHeight: 1.2,
               whiteSpace: "nowrap",
@@ -217,7 +218,7 @@ function ArchNodeBox({
           <div
             style={{
               fontSize: 8,
-              color: "rgba(51,65,85,0.8)",
+              color: "rgba(221,232,216,.62)",
               whiteSpace: "nowrap",
               overflow: "hidden",
               textOverflow: "ellipsis",
@@ -285,7 +286,7 @@ function NodePopover({ node, onClose }: { node: ArchNode; onClose: () => void })
     <foreignObject x={px} y={py} width={popW} height={popH + 20}>
       <div
         style={{
-          background: "rgba(8,16,40,0.97)",
+          background: "rgba(10,23,22,.97)",
           border: `1px solid ${node.color}55`,
           borderRadius: 8,
           padding: "10px 12px",
@@ -304,7 +305,7 @@ function NodePopover({ node, onClose }: { node: ArchNode; onClose: () => void })
             background: "none",
             border: "none",
             cursor: "pointer",
-            color: "rgba(148,163,184,0.5)",
+            color: "rgba(223,233,220,.58)",
             padding: 0,
             lineHeight: 1,
           }}
@@ -314,7 +315,7 @@ function NodePopover({ node, onClose }: { node: ArchNode; onClose: () => void })
         <div style={{ fontSize: 10, fontWeight: 700, color: node.color, marginBottom: 4 }}>
           {node.label}
         </div>
-        <div style={{ fontSize: 8, color: "rgba(148,163,184,0.7)", lineHeight: 1.5 }}>
+        <div style={{ fontSize: 8, color: "rgba(223,233,220,.7)", lineHeight: 1.5 }}>
           {node.description}
         </div>
       </div>
@@ -336,11 +337,12 @@ function FlowsSidebar({
   return (
     <div
       className="stream-screen stream-screen-architecture"
+      data-testid="architecture-flow-sidebar"
       style={{
         width: 264,
         flexShrink: 0,
-        background: "rgba(2,6,23,0.97)",
-        borderLeft: "1px solid rgba(255,255,255,0.06)",
+        background: "linear-gradient(145deg,rgba(20,39,34,.88),rgba(12,27,24,.92))",
+        borderLeft: "1px solid rgba(223,237,221,.16)",
         display: "flex",
         flexDirection: "column",
         overflow: "hidden",
@@ -379,14 +381,16 @@ function FlowsSidebar({
           return (
             <button
               key={flow.id}
+              data-testid={`architecture-flow-${flow.id}`}
+              aria-pressed={isActive}
               onClick={() => onSelect(flow)}
               style={{
                 width: "100%",
                 textAlign: "left",
                 padding: "8px 14px",
-                background: isActive ? "rgba(99,102,241,0.12)" : "transparent",
+                 background: isActive ? "rgba(205,216,178,0.12)" : "transparent",
                 border: "none",
-                borderLeft: isActive ? "2px solid #6366f1" : "2px solid transparent",
+                 borderLeft: isActive ? "2px solid #cdd8a8" : "2px solid transparent",
                 cursor: "pointer",
                 display: "flex",
                 alignItems: "center",
@@ -394,9 +398,9 @@ function FlowsSidebar({
                 transition: "all 0.15s",
               }}
             >
-              <ChevronRight
+                <ChevronRight
                 size={10}
-                style={{ color: isActive ? "#6366f1" : "rgba(148,163,184,0.3)", flexShrink: 0 }}
+                  style={{ color: isActive ? "#d9e4c4" : "rgba(223,233,220,0.38)", flexShrink: 0 }}
               />
               <div>
                 <div
@@ -404,7 +408,7 @@ function FlowsSidebar({
                     fontSize: 10,
                     fontWeight: 700,
                     fontFamily: "'JetBrains Mono', monospace",
-                    color: isActive ? "#a5b4fc" : "rgba(226,232,240,0.7)",
+                    color: isActive ? "#e6e9d7" : "rgba(226,235,223,0.7)",
                     marginBottom: 2,
                   }}
                 >
@@ -583,29 +587,41 @@ export default function StreamingArchitectureScreen() {
   return (
     <div
       className="stream-screen stream-screen-architecture"
+      data-testid="architecture-screen"
       style={{
         height: "100%",
         width: "100%",
         display: "flex",
         flexDirection: "column",
-        background: "#020617",
+        background: "linear-gradient(105deg,rgba(8,24,22,.88),rgba(9,26,24,.8) 48%,rgba(12,25,21,.88)), url('/streaming-forest-atmosphere.jpg') center 49% / cover, #10221d",
         overflow: "hidden",
         fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
       }}
     >
+      <style>{`
+        .stream-screen-architecture[data-testid="architecture-screen"] { isolation:isolate; color:#f1f1e9; }
+        .stream-screen-architecture[data-testid="architecture-screen"] { background:linear-gradient(105deg,rgba(8,24,22,.88),rgba(9,26,24,.8) 48%,rgba(12,25,21,.88)),url('/streaming-forest-atmosphere.jpg') center 49% / cover,#10221d !important; color:#f1f1e9 !important; }
+        .stream-screen-architecture[data-testid="architecture-screen"] [style*="rgba(148,163,184"],.stream-screen-architecture[data-testid="architecture-screen"] [style*="rgba(148, 163, 184"],.stream-screen-architecture[data-testid="architecture-screen"] [class*="text-slate-"] { color:rgba(223,233,220,.7) !important; text-shadow:none !important; }
+        .stream-screen-architecture[data-testid="architecture-screen"] > div:first-of-type { background:linear-gradient(90deg,rgba(16,34,29,.88),rgba(18,37,33,.79)) !important; border-bottom-color:rgba(227,239,223,.18) !important; }
+        .stream-screen-architecture[data-testid="architecture-screen"] > div:nth-of-type(2) > div:first-child { background:radial-gradient(ellipse at 50% 40%,rgba(173,193,142,.055),transparent 68%); }
+        .stream-screen-architecture[data-testid="architecture-screen"] > div:nth-of-type(3) { background:rgba(16,31,29,.82) !important; border-top-color:rgba(225,236,218,.14) !important; }
+        .stream-screen-architecture[data-testid="architecture-flow-sidebar"] { background:linear-gradient(145deg,rgba(20,39,34,.94),rgba(12,27,24,.96)) !important; color:#e4ebdd !important; backdrop-filter:blur(18px); }
+        .stream-screen-architecture[data-testid="architecture-flow-sidebar"] [style*="rgba(148,163,184"],.stream-screen-architecture[data-testid="architecture-flow-sidebar"] [style*="rgba(148, 163, 184"] { color:rgba(223,233,220,.7) !important; }
+        .stream-screen-architecture[data-testid="architecture-flow-sidebar"] button:hover { background:rgba(233,242,225,.07) !important; }
+      `}</style>
       {/* Page title — fixed strip */}
       <div
         style={{
           flexShrink: 0,
           padding: "9px 16px 7px",
-          background: "linear-gradient(90deg, rgba(2,6,23,0.98), rgba(8,16,40,0.97))",
-          borderBottom: "1px solid rgba(255,255,255,0.05)",
+          background: "linear-gradient(90deg, rgba(16,34,29,.9), rgba(18,34,28,.82))",
+          borderBottom: "1px solid rgba(227,239,223,0.16)",
           display: "flex",
           alignItems: "baseline",
           gap: 10,
         }}
       >
-        <span style={{ fontSize: 13, fontWeight: 700, color: "#172033", letterSpacing: "0.04em" }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: "#f4f2e8", letterSpacing: "0.04em" }}>
           System Architecture & Flows
         </span>
         <span style={{ fontSize: 9, color: "rgba(148,163,184,0.35)", letterSpacing: "0.08em" }}>
@@ -702,8 +718,8 @@ export default function StreamingArchitectureScreen() {
           alignItems: "center",
           gap: 16,
           padding: "5px 16px",
-          background: "rgba(2,6,23,0.96)",
-          borderTop: "1px solid rgba(255,255,255,0.05)",
+          background: "rgba(16,31,29,0.84)",
+          borderTop: "1px solid rgba(225,236,218,0.14)",
           flexWrap: "wrap",
         }}
       >

@@ -160,7 +160,7 @@ function ArchitectureNode({ nodeKey, health }: { nodeKey: string; health: NodeHe
     : "—";
 
   return (
-    <g>
+    <g data-testid={`health-node-${nodeKey}`} aria-label={`${health.label}: ${health.level}`}>
       {health.level !== "green" && (
         <ellipse cx={pos.x} cy={pos.y} rx={W / 2 + 16} ry={H / 2 + 14}
           fill="none" stroke={colors.wire} strokeWidth={1}>
@@ -352,6 +352,7 @@ function StreamingAlertDigest({ nodes }: { nodes: Record<string, NodeHealth> }) 
 
 /* ── Full Alert Panel (right column) ─────────────────────────────────────── */
 function AlertPanel({ nodes }: { nodes: Record<string, NodeHealth> }) {
+  const [filter, setFilter] = useState<"all" | "red" | "yellow" | "unknown">("all");
   const alerts = useMemo(() => {
     return Object.entries(nodes)
       .filter(([, n]) => n.level !== "green")
@@ -364,9 +365,10 @@ function AlertPanel({ nodes }: { nodes: Record<string, NodeHealth> }) {
   const criticalCount = alerts.filter(([, n]) => n.level === "red").length;
   const degradedCount = alerts.filter(([, n]) => n.level === "yellow").length;
   const unknownCount = alerts.filter(([, n]) => n.level === "unknown").length;
+  const visibleAlerts = filter === "all" ? alerts : alerts.filter(([, node]) => node.level === filter);
 
   return (
-    <div className="flex flex-col flex-1">
+    <div className="flex flex-col flex-1" data-testid="health-alert-content">
       {/* Panel header */}
       <div className="flex items-center gap-2 px-4 py-2.5 shrink-0"
         style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(2,6,23,0.8)" }}>
@@ -385,20 +387,41 @@ function AlertPanel({ nodes }: { nodes: Record<string, NodeHealth> }) {
           {alerts.length} total
         </span>
       </div>
+      <div className="flex items-center gap-1 px-3 py-2" role="group" aria-label="Filter health alerts">
+        {(["all", "red", "yellow", "unknown"] as const).map((level) => (
+          <button
+            key={level}
+            type="button"
+            data-testid={`health-alert-filter-${level}`}
+            aria-pressed={filter === level}
+            onClick={() => setFilter(level)}
+            className="rounded-md border px-2 py-1 font-mono text-[8px] uppercase tracking-wider"
+            style={{
+              borderColor: filter === level ? "rgba(205,216,178,.32)" : "rgba(225,238,219,.1)",
+              color: filter === level ? "#e6e9d7" : "rgba(220,230,216,.55)",
+              background: filter === level ? "rgba(204,214,175,.12)" : "transparent",
+            }}
+          >
+            {level === "red" ? "Critical" : level === "yellow" ? "Degraded" : level}
+          </button>
+        ))}
+      </div>
 
-      {alerts.length === 0 ? (
+      {visibleAlerts.length === 0 ? (
         <div className="flex flex-1 items-center justify-center gap-2.5 px-5 py-6"
-          style={{ background: "rgba(34,197,94,0.04)" }}>
-          <CheckCircle2 className="h-4 w-4 text-green-400 shrink-0" />
-          <span className="text-[11px] font-mono text-green-400">All systems nominal</span>
+          style={{ background: alerts.length === 0 ? "rgba(34,197,94,0.04)" : "transparent" }}>
+          {alerts.length === 0 && filter === "all" && <CheckCircle2 className="h-4 w-4 text-green-400 shrink-0" />}
+          <span className="text-[11px] font-mono" style={{ color: alerts.length === 0 && filter === "all" ? "#4ade80" : "rgba(220,230,216,.55)" }}>
+            {alerts.length === 0 && filter === "all" ? "All reported systems nominal" : "No alerts match this filter"}
+          </span>
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto">
-          {alerts.map(([key, node]) => {
+          {visibleAlerts.map(([key, node]) => {
             const colors = LEVEL_COLORS[node.level];
             const Icon = node.level === "red" ? XCircle : AlertTriangle;
             return (
-              <div key={key} className="flex flex-col gap-1 px-4 py-3"
+              <div key={key} data-testid={`health-alert-${key}`} className="flex flex-col gap-1 px-4 py-3"
                 style={{ borderBottom: "1px solid rgba(255,255,255,0.04)", background: node.level === "red" ? "rgba(239,68,68,0.04)" : "transparent" }}>
                 {/* Top row: icon + label + badge */}
                 <div className="flex items-center gap-2.5 flex-wrap">
@@ -442,7 +465,7 @@ function AlertPanel({ nodes }: { nodes: Record<string, NodeHealth> }) {
 
 /* ── Main Screen ──────────────────────────────────────────────────────────── */
 export default function StreamingHealthScreen() {
-  const { data, isLoading } = useQuery<HealthData>({
+  const { data, isLoading, isError } = useQuery<HealthData>({
     queryKey: ["/system/health-architecture"],
     queryFn: async () => (await api.get("/system/health-architecture")).data,
     refetchInterval: 10_000,
@@ -455,27 +478,67 @@ export default function StreamingHealthScreen() {
     return () => clearInterval(t);
   }, []);
 
-  const nodes = data?.nodes ?? null;
+  const nodes = useMemo(() => {
+    if (!data?.nodes) return null;
+    return Object.fromEntries(
+      Object.keys(NODE_POSITIONS).map((key) => [
+        key,
+        data.nodes[key] ?? {
+          label: COMPONENT_LABELS[key] ?? key,
+          level: "unknown" as const,
+          latency_ms: null,
+          data_age_s: null,
+          detail: "No subsystem record was returned in the latest report.",
+        },
+      ]),
+    ) as Record<string, NodeHealth>;
+  }, [data?.nodes]);
+  const reportAge = data ? Math.max(0, Math.floor((now.getTime() - data.timestamp) / 1000)) : null;
+  const reportStale = Boolean(reportAge != null && reportAge > 60) || (isError && Boolean(data));
 
   const overallLevel: Level = useMemo(() => {
-    if (!nodes) return "unknown";
+    if (!nodes || !data) return "unknown";
     const levels = Object.values(nodes).map((n) => n.level);
     if (data?.status === "unknown") return "unknown";
     if (levels.includes("red")) return "red";
     if (data?.status === "degraded" || levels.includes("yellow")) return "yellow";
     if (levels.includes("unknown")) return "unknown";
     return "green";
-  }, [nodes]);
+  }, [nodes, data]);
 
   const overallColors = LEVEL_COLORS[overallLevel];
 
   const alertCount = nodes ? Object.values(nodes).filter(n => n.level !== "green").length : 0;
+  const nodeCounts = nodes
+    ? Object.values(nodes).reduce(
+      (counts, node) => ({ ...counts, [node.level]: counts[node.level] + 1 }),
+      { green: 0, yellow: 0, red: 0, unknown: 0 },
+    )
+    : null;
+  const freshestAge = nodes
+    ? Object.values(nodes).map((node) => node.data_age_s).filter((age): age is number => age != null).sort((a, b) => a - b)[0]
+    : null;
 
   return (
     <div
       className="stream-screen stream-screen-health h-full w-full flex flex-col relative"
-      style={{ background: "radial-gradient(ellipse at 30% 0%, rgba(8,18,38,1) 0%, rgba(2,6,18,1) 100%)" }}
+      data-testid="health-screen"
+      style={{ background: "linear-gradient(180deg, rgba(10,22,20,.72), rgba(8,20,17,.94)), url('/streaming-forest-atmosphere.jpg') center 53% / cover, #14241f" }}
     >
+      <style>{`
+        .stream-screen-health[data-testid="health-screen"] { isolation:isolate; color:#eff3eb !important; background:linear-gradient(180deg,rgba(10,22,20,.72),rgba(8,20,17,.94)),url('/streaming-forest-atmosphere.jpg') center 53% / cover,#14241f !important; font-family:"DM Sans","Avenir Next",system-ui,sans-serif; }
+        .stream-screen-health[data-testid="health-screen"] [style*="rgba(148,163,184"],.stream-screen-health[data-testid="health-screen"] [style*="rgba(148, 163, 184"],.stream-screen-health[data-testid="health-screen"] [style*="#94a3b8"],.stream-screen-health[data-testid="health-screen"] [style*="#e2e8f0"],.stream-screen-health[data-testid="health-screen"] [class*="text-slate-"] { color:rgba(223,233,220,.72) !important; text-shadow:none !important; }
+        .stream-screen-health[data-testid="health-screen"] [style*="rgba(2,6,23"] { background:rgba(11,25,22,.8) !important; border-color:rgba(229,240,226,.16) !important; }
+        .stream-screen-health[data-testid="health-screen"] [class*="text-green-"],.stream-screen-health[data-testid="health-screen"] [class*="text-emerald-"] { color:#a9d8ad !important; }
+        .stream-screen-health[data-testid="health-screen"] [class*="text-red-"],.stream-screen-health[data-testid="health-screen"] [class*="text-rose-"] { color:#ee9a8c !important; }
+        .stream-screen-health[data-testid="health-screen"] [class*="text-yellow-"],.stream-screen-health[data-testid="health-screen"] [class*="text-amber-"] { color:#e2c47d !important; }
+        .stream-screen-health [data-testid="health-topology-and-alerts"] { gap:12px; padding:12px 20px 18px; }
+        .stream-screen-health [data-testid="health-topology-and-alerts"] > div { border:1px solid rgba(229,240,226,.16); border-radius:14px; background:linear-gradient(135deg,rgba(20,38,31,.78),rgba(11,25,22,.77)) !important; box-shadow:inset 0 1px rgba(255,255,255,.06),0 14px 36px rgba(3,11,8,.2); backdrop-filter:blur(17px); }
+        .stream-screen-health [data-testid="health-topology-and-alerts"] > div:first-child { border-right:1px solid rgba(229,240,226,.16) !important; }
+        .stream-screen-health [data-testid="health-topology-and-alerts"] > div:last-child { background:rgba(11,25,22,.69) !important; }
+        .stream-screen-health svg { color-scheme:dark; }
+        @media(max-width:850px) { .stream-screen-health [data-testid="health-topology-and-alerts"] { padding:8px; gap:8px; } }
+      `}</style>
       <DDGBadge style={{ position: "absolute", bottom: 10, left: 10, zIndex: 50 }} />
       {/* Health status strip */}
       <div
@@ -503,26 +566,51 @@ export default function StreamingHealthScreen() {
               SYS / HEALTH
             </span>
             <span className="text-[9px] font-mono uppercase tracking-widest" style={{ color: "rgba(148,163,184,0.4)" }}>
-              — {overallLevel === "green" ? "All systems nominal" : overallLevel === "yellow" ? "Degraded · manual intervention required" : overallLevel === "red" ? "Critical · manual intervention required" : "Unknown · health data unavailable"}
+              — {reportStale ? "Stale report · refresh failed or timestamp aged" : overallLevel === "green" ? "All reported systems nominal" : overallLevel === "yellow" ? "Degraded · review required" : overallLevel === "red" ? "Critical · review required" : "Unknown · health data unavailable"}
             </span>
           </div>
 
         </div>
         <div className="text-right">
             <div className="text-[8px] font-mono" style={{ color: "rgba(148,163,184,0.3)" }}>
-              {now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+              {reportAge == null ? "NO REPORT" : `${reportAge}s since report`}
             </div>
+            {(isError || reportStale) && <div data-testid="health-stale-warning" className="text-[8px] font-mono text-amber-300">{isError ? "Refresh failed" : "Report is stale"}</div>}
             {alertCount > 0 && (
               <div className="text-[8px] font-mono text-yellow-400">{alertCount} alert{alertCount !== 1 ? "s" : ""}</div>
             )}
           </div>
       </div>
 
+      <section data-testid="health-summary" className="flex shrink-0 items-center gap-5 px-5 py-2.5" style={{
+        margin: "10px 20px 0",
+        border: "1px solid rgba(234,243,229,.17)",
+        borderRadius: 12,
+        background: "linear-gradient(115deg,rgba(16,34,29,.84),rgba(18,39,32,.68))",
+        boxShadow: "inset 0 1px rgba(255,255,255,.05),0 10px 28px rgba(4,12,9,.16)",
+        backdropFilter: "blur(18px)",
+      }}>
+        <div className="min-w-28">
+          <div className="text-[8px] font-mono uppercase tracking-widest text-slate-400">Overall health</div>
+          <div className="mt-1 text-xs font-semibold uppercase" style={{ color: overallColors.wire }}>{nodes ? overallLevel : "unavailable"}</div>
+        </div>
+        {(["green", "yellow", "red", "unknown"] as const).map((level) => (
+          <div key={level} className="min-w-12 border-l border-white/10 pl-4">
+            <div className="text-sm font-mono font-semibold" style={{ color: LEVEL_COLORS[level].wire }}>{nodeCounts ? nodeCounts[level] : "—"}</div>
+            <div className="mt-1 text-[8px] font-mono uppercase tracking-wider text-slate-400">{level}</div>
+          </div>
+        ))}
+        <div className="ml-auto border-l border-white/10 pl-4">
+          <div className="text-sm font-mono font-semibold text-slate-100">{freshestAge == null ? "—" : `${freshestAge.toFixed(0)}s`}</div>
+          <div className="mt-1 text-[8px] font-mono uppercase tracking-wider text-slate-400">Freshest data age</div>
+        </div>
+      </section>
+
       {/* ── 50/50 body ── */}
-      <div className="flex-1 flex min-h-0 overflow-hidden">
+      <div data-testid="health-topology-and-alerts" className="flex-1 flex min-h-0 overflow-hidden">
 
         {/* LEFT — diagram + fleet strip */}
-        <div className="flex flex-col w-1/2 min-h-0 border-r" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
+        <div data-testid="health-topology" className="flex flex-col w-1/2 min-h-0 border-r" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
           <div className="flex-1 relative overflow-hidden min-h-0">
             {isLoading ? (
               <div className="flex items-center justify-center h-full gap-3">
@@ -568,11 +656,12 @@ export default function StreamingHealthScreen() {
                   const fromNode = nodes[wire.from];
                   const toNode = nodes[wire.to];
                   if (!fromPos || !toPos) return null;
-                  const fromLevel = fromNode?.level ?? "green";
-                  const toLevel = toNode?.level ?? "green";
+                  const fromLevel = fromNode?.level ?? "unknown";
+                  const toLevel = toNode?.level ?? "unknown";
                   const worstLevel: Level =
                     fromLevel === "red" || toLevel === "red" ? "red"
                     : fromLevel === "yellow" || toLevel === "yellow" ? "yellow"
+                    : fromLevel === "unknown" || toLevel === "unknown" ? "unknown"
                     : "green";
                   return (
                     <GlowingWire key={i}
@@ -593,7 +682,7 @@ export default function StreamingHealthScreen() {
         </div>
 
         {/* RIGHT — full alert list */}
-        <div className="flex flex-col w-1/2 min-h-0 overflow-y-auto" style={{ background: "rgba(2,6,23,0.6)" }}>
+        <div data-testid="health-alert-panel" className="flex flex-col w-1/2 min-h-0 overflow-y-auto" style={{ background: "rgba(2,6,23,0.6)" }}>
           {nodes ? (
             <AlertPanel nodes={nodes} />
           ) : (

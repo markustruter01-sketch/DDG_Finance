@@ -1,406 +1,317 @@
-import { useEffect, useState } from "react";
-import { Activity, AlertTriangle, CheckCircle2, ActivitySquare, TrendingUp, Percent } from "lucide-react";
-import { useMathAuditSummary, useMathAuditRecent, useRiskMetrics } from "@/hooks/use-trading";
+import { useState } from "react";
+import {
+  Activity,
+  AlertTriangle,
+  Check,
+  CheckCircle2,
+  CircleDashed,
+  Clock3,
+  FileCheck2,
+  Fingerprint,
+  Radio,
+  ShieldCheck,
+  TrendingUp,
+  TriangleAlert,
+} from "lucide-react";
+import { useMathAuditRecent, useMathAuditSummary, useRiskMetrics } from "@/hooks/use-trading";
+
+type AuditStatus = "PASS" | "WARN" | "FAIL";
+type AuditFilter = "ALL" | AuditStatus;
+
+function relativeTime(timestamp: string): string {
+  const time = new Date(timestamp).getTime();
+  if (!Number.isFinite(time)) return "—";
+  const diff = Math.max(0, (Date.now() - time) / 1000);
+  if (diff < 60) return `${Math.round(diff)}s ago`;
+  if (diff < 3600) return `${Math.round(diff / 60)}m ago`;
+  return `${Math.round(diff / 3600)}h ago`;
+}
+
+function eventClock(timestamp: string): string {
+  const time = new Date(timestamp);
+  if (Number.isNaN(time.getTime())) return "—";
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(time);
+}
+
+function AuditMark({ status }: { status: AuditStatus }) {
+  if (status === "PASS") return <CheckCircle2 aria-hidden="true" />;
+  if (status === "WARN") return <TriangleAlert aria-hidden="true" />;
+  return <AlertTriangle aria-hidden="true" />;
+}
 
 export default function SynapticAuditScreen() {
-  const { data: summary } = useMathAuditSummary(24);
-  const { data: recentData } = useMathAuditRecent(10, "ALL");
+  const [filter, setFilter] = useState<AuditFilter>("ALL");
+  const [activeFormula, setActiveFormula] = useState<number | null>(null);
+  const summary = useMathAuditSummary(24);
+  const recent = useMathAuditRecent(30, filter);
   const riskMetrics = useRiskMetrics();
 
-  const [activeFormula, setActiveFormula] = useState<number | null>(null);
-
-  useEffect(() => {
-    const pulseInterval = setInterval(() => {
-      setActiveFormula(Math.floor(Math.random() * 2));
-      setTimeout(() => setActiveFormula(null), 1500);
-    }, 3500);
-    return () => clearInterval(pulseInterval);
-  }, []);
-
-  const auditCounts = summary == null ? null : [summary.pass, summary.warn, summary.fail];
-  const totalChecks = auditCounts?.every((count) => count != null)
-    ? auditCounts.reduce((sum, count) => sum + count, 0)
-    : null;
-  const passRate = totalChecks != null && totalChecks > 0 && summary?.pass != null
-    ? ((summary.pass / totalChecks * 100)).toFixed(1)
+  const counts = summary.data ? [summary.data.pass, summary.data.warn, summary.data.fail] : null;
+  const countTotal = counts?.reduce((sum, count) => sum + count, 0) ?? null;
+  const totalChecks = summary.data?.total_logged ?? countTotal;
+  const passRate = summary.data?.pass != null && totalChecks != null && totalChecks > 0
+    ? ((summary.data.pass / totalChecks) * 100).toFixed(1)
     : "—";
-  const checksRun = summary?.total_logged ?? null;
-  const nonPassingChecks = summary?.fail != null && summary?.warn != null ? summary.fail + summary.warn : null;
-  const hasError = summary?.fail != null && summary.fail > 0;
+  const hasFailure = (summary.data?.fail ?? 0) > 0;
+  const events = recent.data?.rows?.slice(0, 8) ?? [];
+  const feedLoading = recent.isLoading && !recent.data;
+  const feedUnavailable = recent.isError && !recent.data;
+  const summaryUnavailable = summary.isError && !summary.data;
 
-  const events = recentData?.rows?.slice(0, 8) ?? [];
   const riskValue = (value: number | null | undefined) => {
-    if (riskMetrics.isLoading) return "loading…";
-    if (riskMetrics.isError) return "unavailable";
-    return value != null ? value.toFixed(3) : "—";
+    if (value != null) return value.toFixed(3);
+    if (riskMetrics.isLoading && !riskMetrics.data) return "loading…";
+    if (riskMetrics.isError || !riskMetrics.data) return "unavailable";
+    return "—";
   };
-  const FORMULAS = [
-    { id: "sharpe", label: "Sharpe Ratio", equation: "S = (Rp − Rf) / σp", result: riskValue(riskMetrics.data?.sharpe_ratio), icon: <TrendingUp className="w-3 h-3" /> },
-    { id: "sortino", label: "Sortino Ratio", equation: "S = (Rp − MAR) / σd", result: riskValue(riskMetrics.data?.sortino_ratio), icon: <Percent className="w-3 h-3" /> },
+
+  const formulas = [
+    {
+      id: "sharpe",
+      label: "Sharpe ratio",
+      notation: "S = (Rₚ − R𝒻) / σₚ",
+      detail: "Excess return · total volatility",
+      result: riskValue(riskMetrics.data?.sharpe_ratio),
+      value: riskMetrics.data?.sharpe_ratio,
+      icon: TrendingUp,
+    },
+    {
+      id: "sortino",
+      label: "Sortino ratio",
+      notation: "S = (Rₚ − MAR) / σ𝒹",
+      detail: "Excess return · downside deviation",
+      result: riskValue(riskMetrics.data?.sortino_ratio),
+      value: riskMetrics.data?.sortino_ratio,
+      icon: Activity,
+    },
   ];
 
-  const TILE_BOTTOM = 178;
-
-  const INPUT_NODES = [
-    { x: 400, y: 230 },
-    { x: 880, y: 230 },
+  const filters: { id: AuditFilter; label: string; count?: number }[] = [
+    { id: "ALL", label: "All events" },
+    { id: "PASS", label: "Pass", count: summary.data?.pass },
+    { id: "WARN", label: "Warn", count: summary.data?.warn },
+    { id: "FAIL", label: "Fail", count: summary.data?.fail },
   ];
-  const HIDDEN1 = [
-    { x: 300, y: 370 },
-    { x: 510, y: 360 },
-    { x: 730, y: 375 },
-    { x: 950, y: 365 },
-  ];
-  const HIDDEN2 = [
-    { x: 390, y: 490 },
-    { x: 640, y: 480 },
-    { x: 870, y: 493 },
-  ];
-  const OUTPUT = { x: 640, y: 580 };
-  const PERIPHERAL = [
-    { x: 145, y: 340 },
-    { x: 1130, y: 330 },
-    { x: 260, y: 530 },
-    { x: 1015, y: 525 },
-  ];
-
-  type Pt = { x: number; y: number };
-  const connPairs: [Pt, Pt][] = [
-    [INPUT_NODES[0], HIDDEN1[0]],
-    [INPUT_NODES[0], HIDDEN1[1]],
-    [INPUT_NODES[1], HIDDEN1[0]],
-    [INPUT_NODES[1], HIDDEN1[1]],
-    [INPUT_NODES[1], HIDDEN1[2]],
-    [HIDDEN1[0], HIDDEN2[0]],
-    [HIDDEN1[0], HIDDEN2[1]],
-    [HIDDEN1[1], HIDDEN2[0]],
-    [HIDDEN1[1], HIDDEN2[1]],
-    [HIDDEN1[2], HIDDEN2[1]],
-    [HIDDEN1[2], HIDDEN2[2]],
-    [HIDDEN1[3], HIDDEN2[1]],
-    [HIDDEN1[3], HIDDEN2[2]],
-    [HIDDEN2[0], OUTPUT],
-    [HIDDEN2[1], OUTPUT],
-    [HIDDEN2[2], OUTPUT],
-    [PERIPHERAL[0], HIDDEN1[0]],
-    [PERIPHERAL[1], HIDDEN1[3]],
-    [PERIPHERAL[2], HIDDEN2[0]],
-    [PERIPHERAL[3], HIDDEN2[2]],
-  ];
-
-  function cubicPath(a: Pt, b: Pt) {
-    const mid = (a.y + b.y) / 2;
-    return `M ${a.x},${a.y} C ${a.x},${mid} ${b.x},${mid} ${b.x},${b.y}`;
-  }
-
-  const PULSE_DURATIONS = [3, 3.5, 4, 4.5, 5, 3.8, 4.2, 5.5, 3.2, 4.8, 3.6, 5.2, 4.4, 3.9, 5.1, 4.7, 3.3, 5.3, 4.1, 4.9, 3.7, 5.4, 4.6, 3.1, 5.0];
-
-  function relativeTime(ts: string): string {
-    try {
-      const diff = (Date.now() - new Date(ts).getTime()) / 1000;
-      if (diff < 60) return `${Math.round(diff)}s ago`;
-      if (diff < 3600) return `${Math.round(diff / 60)}m ago`;
-      return `${Math.round(diff / 3600)}h ago`;
-    } catch {
-      return "—";
-    }
-  }
+  const auditStatus = feedUnavailable
+    ? "Audit feed unavailable"
+    : feedLoading
+      ? "Loading audit feed"
+      : recent.isError
+        ? "Refresh failed · cached rows"
+        : "Rows returned by audit service";
 
   return (
-    <div className="stream-screen stream-screen-math w-full h-full bg-[#020617] text-slate-200 overflow-hidden relative font-mono">
-      <style dangerouslySetInnerHTML={{ __html: `
-        @keyframes synapse-pulse-travel {
-          0%   { stroke-dashoffset: 800; opacity: 0; }
-          5%   { opacity: 1; }
-          90%  { opacity: 1; }
-          100% { stroke-dashoffset: 0; opacity: 0; }
-        }
-        @keyframes synapse-glow-beat {
-          0%, 100% { filter: drop-shadow(0 0 3px rgba(6,182,212,0.5)); opacity: 0.75; }
-          50%       { filter: drop-shadow(0 0 10px rgba(6,182,212,1)); opacity: 1; }
-        }
-        @keyframes synapse-glow-slow {
-          0%, 100% { filter: drop-shadow(0 0 4px rgba(6,182,212,0.4)); opacity: 0.7; }
-          50%       { filter: drop-shadow(0 0 14px rgba(34,211,238,0.9)); opacity: 1; }
-        }
-        @keyframes synapse-error-flash {
-          0%, 100% { filter: drop-shadow(0 0 4px rgba(239,68,68,0.4)); fill: #7f1d1d; }
-          50%       { filter: drop-shadow(0 0 18px rgba(239,68,68,1)); fill: #ef4444; }
-        }
-        @keyframes synapse-formula-glow {
-          0%, 100% { box-shadow: 0 0 8px rgba(6,182,212,0.15), inset 0 0 8px rgba(6,182,212,0.03); }
-          50%       { box-shadow: 0 0 20px rgba(6,182,212,0.4), inset 0 0 12px rgba(6,182,212,0.08); }
-        }
-        @keyframes synapse-formula-active {
-          0%, 100% { box-shadow: 0 0 20px rgba(34,211,238,0.6), inset 0 0 15px rgba(34,211,238,0.1); border-color: rgba(34,211,238,0.8); }
-          50%       { box-shadow: 0 0 35px rgba(34,211,238,0.9), inset 0 0 20px rgba(34,211,238,0.15); }
-        }
-        @keyframes synapse-cable-pulse {
-          0%   { stroke-dashoffset: 300; opacity: 0; }
-          8%   { opacity: 1; }
-          88%  { opacity: 1; }
-          100% { stroke-dashoffset: 0; opacity: 0; }
-        }
-        .synapse-path-pulse {
-          stroke-dasharray: 8 600;
-          animation: synapse-pulse-travel linear infinite;
-        }
-        .synapse-cable-pulse {
-          stroke-dasharray: 6 300;
-          animation: synapse-cable-pulse linear infinite;
-        }
-        .synapse-node-glow      { animation: synapse-glow-beat 3s ease-in-out infinite; }
-        .synapse-node-glow-slow { animation: synapse-glow-slow 4.5s ease-in-out infinite; }
-        .synapse-node-error     { animation: synapse-error-flash 0.5s ease-in-out infinite; }
-        .synapse-formula-idle   { animation: synapse-formula-glow 3s ease-in-out infinite; }
-        .synapse-formula-active { animation: synapse-formula-active 0.6s ease-in-out infinite; }
-      `}} />
-
-      {/* Background radial glow */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{ background: "radial-gradient(ellipse 80% 60% at 50% 55%, rgba(8,145,178,0.07) 0%, transparent 70%)" }}
-      />
-
-      {/* Full-screen SVG: cables + network */}
-      <svg
-        className="absolute inset-0 pointer-events-none"
-        width="1280" height="800"
-        viewBox="0 0 1280 800"
-        preserveAspectRatio="xMidYMid meet"
-        style={{ width: "100%", height: "100%" }}
-      >
-        {/* Formula → Input node cables (static dim) */}
-        {INPUT_NODES.map((n, i) => (
-          <path
-            key={`cable-static-${i}`}
-            d={`M ${n.x},${TILE_BOTTOM} C ${n.x},${TILE_BOTTOM + 30} ${n.x},${n.y - 30} ${n.x},${n.y}`}
-            stroke="#0891b2" strokeWidth="1" fill="none" opacity="0.35"
-          />
-        ))}
-
-        {/* Formula → Input node cables (animated pulses) */}
-        {INPUT_NODES.map((n, i) => (
-          <path
-            key={`cable-pulse-${i}`}
-            d={`M ${n.x},${TILE_BOTTOM} C ${n.x},${TILE_BOTTOM + 30} ${n.x},${n.y - 30} ${n.x},${n.y}`}
-            stroke={activeFormula === i ? "#67e8f9" : "#22d3ee"}
-            strokeWidth="2.5" fill="none" strokeLinecap="round"
-            className="synapse-cable-pulse"
-            style={{ animationDuration: `${2 + i * 0.4}s`, animationDelay: `${-i * 0.6}s` }}
-          />
-        ))}
-
-        {/* Static network connections */}
-        <g stroke="#0891b2" strokeWidth="0.8" fill="none" opacity="0.25">
-          {connPairs.map(([a, b], i) => (
-            <path key={`static-${i}`} d={cubicPath(a, b)} />
-          ))}
-        </g>
-
-        {/* Animated pulse paths */}
-        {connPairs.map(([a, b], i) => (
-          <path
-            key={`pulse-${i}`}
-            d={cubicPath(a, b)}
-            stroke={hasError && (i === 6 || i === 16) ? "#f97316" : "#22d3ee"}
-            strokeWidth="1.8" strokeLinecap="round" fill="none"
-            className="synapse-path-pulse"
-            style={{ animationDuration: `${PULSE_DURATIONS[i % PULSE_DURATIONS.length]}s`, animationDelay: `${-i * 0.38}s` }}
-          />
-        ))}
-
-        {/* Input layer nodes */}
-        {INPUT_NODES.map((n, i) => (
-          <circle key={`in-${i}`} cx={n.x} cy={n.y} r="7"
-            fill={activeFormula === i ? "#67e8f9" : "#06b6d4"}
-            className={activeFormula === i ? "synapse-node-glow" : "synapse-node-glow-slow"}
-          />
-        ))}
-
-        {/* Hidden layer 1 */}
-        {HIDDEN1.map((n, i) => (
-          <circle key={`h1-${i}`} cx={n.x} cy={n.y} r="6"
-            fill={hasError && i === 2 ? "#ef4444" : "#06b6d4"}
-            className={hasError && i === 2 ? "synapse-node-error" : "synapse-node-glow"}
-          />
-        ))}
-
-        {/* Hidden layer 2 */}
-        {HIDDEN2.map((n, i) => (
-          <circle key={`h2-${i}`} cx={n.x} cy={n.y} r="8"
-            fill={hasError && i === 1 ? "#ef4444" : "#06b6d4"}
-            className={hasError && i === 1 ? "synapse-node-error" : "synapse-node-glow-slow"}
-          />
-        ))}
-
-        {/* Peripheral satellite nodes */}
-        {PERIPHERAL.map((n, i) => (
-          <circle key={`per-${i}`} cx={n.x} cy={n.y} r="4" fill="#06b6d4" opacity="0.6" className="synapse-node-glow-slow" />
-        ))}
-
-        {/* Output node */}
-        <circle cx={OUTPUT.x} cy={OUTPUT.y} r="12"
-          fill={hasError ? "#ef4444" : "#06b6d4"}
-          className={hasError ? "synapse-node-error" : "synapse-node-glow"}
-        />
-        <circle cx={OUTPUT.x} cy={OUTPUT.y} r="18" fill="none"
-          stroke={hasError ? "#ef444460" : "#22d3ee40"} strokeWidth="1"
-        />
-        <circle cx={OUTPUT.x} cy={OUTPUT.y} r="26" fill="none"
-          stroke={hasError ? "#ef444425" : "#22d3ee20"} strokeWidth="0.8"
-        />
-
-        {/* Layer labels */}
-        <text x="50" y="234"  fill="#0891b2" fontSize="9" fontFamily="monospace" opacity="0.7" letterSpacing="1">INPUT LAYER</text>
-        <text x="50" y="374"  fill="#0891b2" fontSize="9" fontFamily="monospace" opacity="0.7" letterSpacing="1">HIDDEN L1</text>
-        <text x="50" y="494"  fill="#0891b2" fontSize="9" fontFamily="monospace" opacity="0.7" letterSpacing="1">HIDDEN L2</text>
-        <text x="50" y="584"  fill="#0891b2" fontSize="9" fontFamily="monospace" opacity="0.7" letterSpacing="1">OUTPUT</text>
-
-        {/* Output label */}
-        <text x={OUTPUT.x} y={OUTPUT.y + 30} fill="#67e8f9" fontSize="10" fontFamily="monospace" textAnchor="middle" opacity="0.9" letterSpacing="1">PASS RATE</text>
-        <text x={OUTPUT.x} y={OUTPUT.y + 43} fill="#22d3ee" fontSize="13" fontFamily="monospace" textAnchor="middle" fontWeight="bold">
-          {passRate !== "—" ? `${passRate}%` : "—"}
-        </text>
-      </svg>
-
-      {/* Header */}
-      <header className="absolute top-0 left-0 right-0 h-[60px] px-6 z-30 flex items-center border-b border-cyan-900/30 bg-[#020617]/70 backdrop-blur-md" style={{ backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)" }}>
-        <div className="flex items-center gap-3">
-          <div className="relative flex h-2.5 w-2.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-cyan-500" />
-          </div>
-          <h1 className="text-xs font-semibold tracking-[0.22em] text-cyan-50">Risk metric audit</h1>
+    <div className="stream-screen stream-screen-math synaptic-audit">
+      <style>{`
+        .synaptic-audit,.synaptic-audit *{box-sizing:border-box}
+        .synaptic-audit{--ink:#edf2e9;--muted:#a4b0a6;--faint:#78877e;--edge:rgba(218,232,216,.13);height:100%;min-height:700px;position:relative;isolation:isolate;overflow:auto;color:var(--ink);background:#172522 url("/streaming-forest-atmosphere.jpg") center 54%/cover;font-family:"DM Sans","Avenir Next",ui-sans-serif,system-ui,sans-serif;letter-spacing:-.01em}
+        .sa-backdrop{position:fixed;inset:0;z-index:-1;pointer-events:none;background:linear-gradient(90deg,rgba(8,18,17,.82),rgba(10,21,19,.67) 54%,rgba(8,18,17,.8)),linear-gradient(180deg,rgba(9,20,18,.43),rgba(8,18,17,.27) 38%,rgba(8,18,17,.85))}
+        .sa-topbar{height:62px;padding:0 clamp(18px,3vw,34px);display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(229,239,225,.12);background:rgba(10,22,19,.55);backdrop-filter:blur(22px)}
+        .sa-brand,.sa-top-meta,.sa-title-copy,.sa-title-side,.sa-section-title,.sa-filterbar,.sa-event-name,.sa-event-bot,.sa-event-status,.sa-event-time,.sa-value-status{display:flex;align-items:center}
+        .sa-brand{gap:11px}.sa-brand-symbol{width:33px;height:33px;display:grid;place-items:center;border:1px solid rgba(193,231,202,.22);border-radius:10px;color:#c3e8ca;background:rgba(184,223,194,.09)}
+        .sa-brand-name{color:#edf3e9;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase}.sa-breadcrumb{margin-left:7px;color:#9ead9f;font-size:11px}.sa-breadcrumb strong{margin-left:8px;color:#e6eee3;font-weight:550}
+        .sa-top-meta{gap:11px;color:#aab7aa;font-size:9px}.sa-state{display:flex;align-items:center;gap:7px}.sa-state-dot{width:6px;height:6px;border-radius:50%;background:#9fb39f}.sa-state.is-error{color:#e4c891}.sa-state.is-error .sa-state-dot{background:#e4c891}
+        .sa-top-divider{height:16px;width:1px;background:rgba(218,232,216,.18)}.sa-range{display:flex;align-items:center;gap:7px;padding:7px 9px;border:1px solid rgba(225,238,224,.13);border-radius:8px;background:rgba(226,239,223,.06);color:#c9d6c7}
+        .sa-main{height:calc(100% - 62px);min-height:650px;padding:20px clamp(18px,3vw,34px);display:flex;flex-direction:column;gap:13px}
+        .sa-title-row{min-height:54px;display:flex;align-items:center;justify-content:space-between;gap:18px}.sa-title-copy{gap:13px}.sa-title-icon{width:39px;height:39px;display:grid;place-items:center;border:1px solid rgba(209,230,206,.18);border-radius:12px;color:#c8e6c9;background:rgba(204,227,201,.095)}
+        .sa-eyebrow{color:#b3d0b4;font-size:8px;font-weight:700;letter-spacing:.16em;text-transform:uppercase}.sa-heading{margin:4px 0 0;color:#f1f4ec;font-size:22px;font-weight:550;line-height:1;letter-spacing:-.045em}.sa-subtitle{margin-top:5px;color:#aab6aa;font-size:10px}
+        .sa-title-side{gap:8px;color:#90a092;font-size:8px;letter-spacing:.09em}.sa-window{display:flex;align-items:center;gap:7px;padding:8px 10px;border:1px solid rgba(225,238,224,.12);border-radius:8px;background:rgba(13,26,22,.5);color:#c3d0c2;font-size:9px}
+        .sa-panel{border:1px solid var(--edge);background:linear-gradient(135deg,rgba(31,48,41,.77),rgba(14,27,24,.76));backdrop-filter:blur(22px) saturate(115%);box-shadow:0 14px 36px rgba(2,12,10,.18),inset 0 1px rgba(245,255,244,.05)}
+        .sa-summary{min-height:78px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) minmax(240px,1.35fr);overflow:hidden;border-radius:13px}
+        .sa-stat{padding:12px 15px;display:flex;align-items:center;gap:11px;border-right:1px solid rgba(218,232,216,.1)}.sa-stat-icon{width:29px;height:29px;display:grid;place-items:center;flex:0 0 auto;border-radius:9px}.sa-stat-icon svg{width:14px;height:14px}
+        .sa-stat.pass .sa-stat-icon{color:#b9e5c5;background:rgba(126,183,141,.14)}.sa-stat.warn .sa-stat-icon{color:#e7c88e;background:rgba(197,160,95,.14)}.sa-stat.fail .sa-stat-icon{color:#e6a29a;background:rgba(193,106,96,.14)}
+        .sa-stat-label{color:#a7b4a8;font-size:9px}.sa-stat-value{margin-top:4px;font:500 19px/1 "IBM Plex Mono",monospace;letter-spacing:-.06em}.sa-stat.pass .sa-stat-value{color:#d5ead7}.sa-stat.warn .sa-stat-value{color:#ecd5a8}.sa-stat.fail .sa-stat-value{color:#edb5ae}
+        .sa-rate{padding:12px 17px;display:flex;justify-content:space-between;align-items:center;background:linear-gradient(100deg,rgba(170,207,171,.055),rgba(170,207,171,.015))}
+        .sa-rate-label{color:#a7b7a7;font-size:9px;letter-spacing:.1em;text-transform:uppercase}.sa-rate-value{margin-top:3px;color:#e5f0e1;font:500 24px/1 "IBM Plex Mono",monospace;letter-spacing:-.075em}.sa-rate-foot{margin-top:4px;color:#8c9d8e;font-size:8px}.sa-rate-mark{width:39px;height:39px;display:grid;place-items:center;border:1px solid rgba(182,223,187,.28);border-radius:50%;color:#c4e5c9;background:radial-gradient(circle,rgba(182,223,187,.13),rgba(182,223,187,.015))}
+        .sa-notice{padding:7px 11px;border:1px solid rgba(218,232,216,.12);border-radius:8px;color:#d9c593;background:rgba(35,31,20,.45);font-size:9px}
+        .sa-workbench{min-height:197px;display:grid;grid-template-columns:minmax(0,1.62fr) minmax(280px,.88fr);gap:13px}.sa-formula-panel,.sa-integrity-panel,.sa-events-panel{border-radius:13px}.sa-formula-panel{padding:14px 15px 12px}
+        .sa-section-title{justify-content:space-between;gap:10px}.sa-section-label{color:#e1e9df;font-size:11px;font-weight:600}.sa-section-kicker{margin-top:3px;color:#8f9f92;font-size:8px}
+        .sa-source{display:inline-flex;align-items:center;gap:6px;padding:6px 8px;border:1px solid rgba(183,219,187,.13);border-radius:7px;color:#a8c5ad;background:rgba(181,216,185,.06);font:8px "IBM Plex Mono",monospace}.sa-source-dot{width:5px;height:5px;border-radius:50%;background:#a9d8b3}
+        .sa-formula-list{margin-top:10px;display:grid;gap:7px}.sa-formula{width:100%;min-height:60px;padding:8px 10px;display:grid;grid-template-columns:minmax(138px,.87fr) minmax(155px,1.15fr) minmax(108px,.68fr);align-items:center;gap:9px;border:1px solid rgba(221,236,219,.1);border-radius:9px;background:rgba(5,17,15,.28);color:inherit;text-align:left;cursor:pointer;transition:background .2s,border-color .2s}
+        .sa-formula:hover,.sa-formula.is-active{border-color:rgba(187,227,192,.38);background:rgba(183,222,189,.08)}.sa-formula-name{display:flex;align-items:center;gap:8px}.sa-formula-icon{width:25px;height:25px;display:grid;place-items:center;flex:0 0 auto;border-radius:8px;color:#bfdfc0;background:rgba(184,218,185,.1)}.sa-formula-icon svg{width:12px;height:12px}
+        .sa-formula-title{color:#e2ebe0;font-size:10px;font-weight:600}.sa-formula-detail{display:block;margin-top:3px;color:#89998d;font-size:7px}.sa-equation{color:#dbe4da;font:500 12px "IBM Plex Mono",monospace;letter-spacing:-.045em;white-space:nowrap}
+        .sa-value{padding-left:9px;border-left:1px solid rgba(220,236,217,.1);text-align:right}.sa-value-status{justify-content:flex-end;gap:4px;color:#9eb5a0;font-size:7px;letter-spacing:.07em;text-transform:uppercase}.sa-value-status svg{width:10px;height:10px;color:#b7ddbd}.sa-value-status.is-unavailable,.sa-value-status.is-empty{color:#d5b37c}
+        .sa-number{margin-top:3px;color:#cbe7ce;font:500 16px/1 "IBM Plex Mono",monospace;letter-spacing:-.07em}
+        .sa-integrity-panel{padding:15px 16px;position:relative;overflow:hidden}.sa-integrity-panel:after{content:"";position:absolute;width:170px;height:170px;right:-80px;bottom:-110px;border:1px solid rgba(193,220,185,.1);border-radius:50%;box-shadow:0 0 0 20px rgba(193,220,185,.018),0 0 0 42px rgba(193,220,185,.014);pointer-events:none}
+        .sa-right-head{display:flex;align-items:center;justify-content:space-between}.sa-integrity-tag{display:inline-flex;align-items:center;gap:6px;color:#c7e4c9;font-size:8px;letter-spacing:.085em;text-transform:uppercase}.sa-integrity-tag svg{width:13px;height:13px}.sa-total-mini{color:#94a596;font-size:8px}
+        .sa-big-rate{margin-top:13px;display:flex;align-items:baseline;gap:7px}.sa-big-rate strong{color:#e5f0e1;font:500 37px/.95 "IBM Plex Mono",monospace;letter-spacing:-.095em}.sa-big-rate span{color:#93a697;font-size:9px}
+        .sa-rate-track{height:4px;margin-top:10px;overflow:hidden;border-radius:4px;background:rgba(230,241,224,.1)}.sa-rate-track span{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#8fbf98,#c4e5c6)}
+        .sa-integrity-copy{margin-top:8px;max-width:280px;color:#a8b6a8;font-size:9px;line-height:1.5}.sa-integrity-footer{margin-top:10px;padding-top:8px;display:flex;justify-content:space-between;gap:6px;border-top:1px solid rgba(218,232,216,.1);color:#92a193;font-size:8px}.sa-integrity-footer strong{color:#c9ddc8;font:500 9px "IBM Plex Mono",monospace}
+        .sa-events-panel{min-height:180px;flex:1;display:flex;flex-direction:column;padding:11px 15px 8px}.sa-events-top{display:flex;justify-content:space-between;align-items:center;gap:10px;min-height:28px}.sa-events-heading{display:flex;align-items:center;gap:8px}.sa-events-icon{width:13px;height:13px;color:#bbd9bd}.sa-events-title{color:#e2eae0;font-size:11px;font-weight:600}.sa-events-count{color:#8fa091;font:8px "IBM Plex Mono",monospace}
+        .sa-filterbar{gap:3px}.sa-filter{display:flex;align-items:center;gap:5px;padding:5px 7px;border:1px solid transparent;border-radius:6px;background:transparent;color:#9eac9f;cursor:pointer;font:500 8px "DM Sans",sans-serif;transition:color .18s,background .18s,border-color .18s}
+        .sa-filter:hover{color:#e6eee2}.sa-filter.is-selected{border-color:rgba(218,234,215,.15);color:#dceadc;background:rgba(208,229,204,.085)}.sa-filter-count{color:#758678;font:7px "IBM Plex Mono",monospace}
+        .sa-table-head,.sa-event-row{display:grid;grid-template-columns:minmax(210px,1.45fr) minmax(170px,1fr) 75px 110px;align-items:center;column-gap:10px}.sa-table-head{min-height:25px;margin-top:5px;border-bottom:1px solid rgba(220,234,217,.1);color:#819183;font-size:7px;text-transform:uppercase;letter-spacing:.11em}
+        .sa-event-list{min-height:0;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(190,215,189,.23) transparent}.sa-event-row{min-height:31px;border-bottom:1px solid rgba(220,234,217,.075);color:#d1dbd0;font-size:9px}.sa-event-row:last-child{border-bottom:0}
+        .sa-event-name{min-width:0;gap:7px}.sa-event-mark{width:14px;height:14px;display:grid;place-items:center;flex:0 0 auto}.sa-event-mark svg{width:11px;height:11px}.sa-event-mark.pass,.sa-event-status.pass{color:#b9ddbf}.sa-event-mark.warn,.sa-event-status.warn{color:#e6ca94}.sa-event-mark.fail,.sa-event-status.fail{color:#e8aaa1}
+        .sa-event-formula{overflow:hidden;color:#dce5da;font-weight:520;text-overflow:ellipsis;white-space:nowrap}.sa-event-bot{gap:5px;color:#a9b6a8;font:8px "IBM Plex Mono",monospace}.sa-event-bot svg{width:10px;height:10px;color:#809482}
+        .sa-event-status{gap:5px;font-size:8px;font-weight:650;letter-spacing:.07em}.sa-status-dot{width:5px;height:5px;border-radius:50%;background:currentColor}.sa-event-time{display:flex;justify-content:space-between;color:#c1cec0;font:8px "IBM Plex Mono",monospace}.sa-event-time span{color:#829184;font-family:"DM Sans",sans-serif}
+        .sa-empty{min-height:94px;display:flex;align-items:center;justify-content:center;gap:8px;color:#c9b482;font-size:10px}.sa-empty svg{width:13px;height:13px}
+        .sa-feed-note{padding-top:6px;display:flex;align-items:center;justify-content:space-between;gap:8px;color:#829084;font-size:7px}.sa-feed-note svg{width:10px;height:10px;color:#a4c4a8}
+        .sa-button-focus:focus-visible{outline:2px solid #c4e5c6;outline-offset:2px}
+        @media(max-width:900px){.synaptic-audit{min-height:740px}.sa-main{height:auto;min-height:650px;padding:16px}.sa-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.sa-workbench{grid-template-columns:1fr}.sa-integrity-panel{min-height:170px}.sa-events-panel{min-height:260px}.sa-topbar{padding:0 16px}.sa-table-head,.sa-event-row{grid-template-columns:minmax(150px,1.2fr) minmax(120px,1fr) 65px 90px;gap:7px}}
+        @media(max-width:600px){.sa-main{padding:13px}.sa-title-row{align-items:flex-start}.sa-title-side{display:none}.sa-top-meta{gap:7px;font-size:8px}.sa-range{padding:6px}.sa-brand-name{display:none}.sa-formula{grid-template-columns:minmax(110px,.9fr) minmax(115px,1fr) minmax(90px,.7fr);gap:5px;padding:8px}.sa-equation{font-size:9px}.sa-formula-detail{font-size:6px}.sa-events-panel{padding:9px}.sa-events-top{align-items:flex-start;flex-direction:column}.sa-table-head,.sa-event-row{grid-template-columns:minmax(100px,1.2fr) minmax(85px,1fr) 56px 74px;gap:5px}.sa-table-head{font-size:6px}.sa-event-row{font-size:8px}.sa-event-bot{font-size:7px}.sa-event-time{font-size:7px}}
+        @media(prefers-reduced-motion:reduce){.sa-formula,.sa-filter{transition:none}}
+      `}</style>
+      <div className="sa-backdrop" aria-hidden="true" />
+      <header className="sa-topbar">
+        <div className="sa-brand">
+          <span className="sa-brand-symbol"><Fingerprint size={16} strokeWidth={1.6} /></span>
+          <span className="sa-brand-name">Synaptic</span>
+          <span className="sa-breadcrumb">/ <strong>Audit</strong></span>
+        </div>
+        <div className="sa-top-meta">
+          <span className={`sa-state ${feedUnavailable ? "is-error" : ""}`} data-testid="audit-feed-status" aria-live="polite">
+            <i className="sa-state-dot" />{auditStatus}
+          </span>
+          <span className="sa-top-divider" />
+          <span className="sa-range"><Clock3 size={11} /> Rolling 24 hours</span>
         </div>
       </header>
 
-      {/* Formula Input Row */}
-      <div className="absolute top-[60px] left-0 right-0 h-[120px] z-20 px-10 flex flex-col justify-center gap-2">
-        <div>
-          <span className="text-[13px] font-semibold text-white tracking-wider">Service-reported risk metrics</span>
-        </div>
-        <div className="flex items-center gap-4">
-        {FORMULAS.map((f, i) => (
-          <div
-            key={f.id}
-            className={`flex-1 h-[84px] rounded-lg border bg-black/50 backdrop-blur-sm px-3 py-2 flex flex-col justify-between transition-all duration-500 ${
-              activeFormula === i ? "border-cyan-400/80 synapse-formula-active" : "border-cyan-500/15 synapse-formula-idle"
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5 text-[9px] uppercase tracking-widest text-cyan-400">
-                <span className="text-cyan-400">{f.icon}</span>
-                {f.label}
-              </div>
-              <span className={`text-[9px] font-semibold ${
-                riskMetrics.isLoading
-                  ? "text-slate-600"
-                  : riskMetrics.isError || f.result === "—" || f.result === "unavailable"
-                    ? "text-amber-800"
-                    : "text-emerald-800"
-              }`}>
-                {riskMetrics.isLoading
-                  ? "● AWAITING DATA"
-                  : riskMetrics.isError || f.result === "unavailable"
-                    ? "● UNAVAILABLE"
-                    : f.result === "—"
-                      ? "● NO VALUE"
-                      : "● VALUE RECEIVED"}
-              </span>
-            </div>
-            <div className={`text-[12px] font-mono font-semibold tracking-wide ${activeFormula === i ? "text-white" : "text-slate-100"}`}>
-              {f.equation}
-            </div>
-            <div className="flex items-center justify-between">
-               <span className="text-[9px] text-slate-400 font-mono font-medium">Live /performance/risk-metrics</span>
-              <span className={`text-[10px] font-bold font-mono ${activeFormula === i ? "text-cyan-200" : "text-cyan-300"}`}>
-                {f.result}
-              </span>
+      <main className="sa-main">
+        <div className="sa-title-row">
+          <div className="sa-title-copy">
+            <div className="sa-title-icon"><FileCheck2 size={19} strokeWidth={1.5} /></div>
+            <div>
+              <div className="sa-eyebrow">Fleet integrity · quantitative checks</div>
+              <h1 className="sa-heading">Metric audit</h1>
+              <div className="sa-subtitle">Reported audit events and risk metric values, with source availability made explicit.</div>
             </div>
           </div>
-        ))}
+          <div className="sa-title-side">
+            <span>LAST AUDIT</span>
+            <span className="sa-window"><Radio size={11} />{summary.data?.last_audit_ts ? eventClock(summary.data.last_audit_ts) : summaryUnavailable ? "Unavailable" : "—"}</span>
+          </div>
         </div>
-      </div>
 
-      {/* Floating stat cards */}
-      <div className="absolute inset-0 z-20 pointer-events-none" style={{ top: 160 }}>
-        <div className="relative w-full h-full">
-          <div className="absolute" style={{ top: "28%", left: "20px" }}>
-            <MiniStat
-              label="Checks Run"
-               value={checksRun == null ? "—" : checksRun.toLocaleString()}
-              icon={<ActivitySquare className="w-3.5 h-3.5 text-cyan-400" />}
-            />
-          </div>
-          <div className="absolute" style={{ top: "28%", right: "20px" }}>
-            <MiniStat
-              label="Passing Checks"
-               value={summary?.pass == null ? "—" : summary.pass.toLocaleString()}
-              icon={<Activity className="w-3.5 h-3.5 text-cyan-400" />}
-            />
-          </div>
-          <div className="absolute" style={{ bottom: "22%", right: "20px" }}>
-            <MiniStat
-              label="Warnings + Failures"
-               value={nonPassingChecks == null ? "—" : nonPassingChecks.toLocaleString()}
-              error={summary?.fail != null && summary.fail > 0}
-              icon={<AlertTriangle className={`w-3.5 h-3.5 ${hasError ? "text-red-400" : "text-cyan-400"}`} />}
-            />
-          </div>
-        </div>
-      </div>
+        {summary.isError && summary.data && <div className="sa-notice" role="status">Audit summary refresh failed · showing the last response</div>}
+        {summaryUnavailable && <div className="sa-notice" role="status">Audit summary unavailable · counts and pass rate are not inferred</div>}
 
-      {/* Bottom event stream */}
-      <div className="absolute bottom-0 left-0 right-0 h-[100px] z-30 px-6 flex flex-col justify-center border-t border-cyan-900/30 bg-[#020617]/80 backdrop-blur-md" style={{ backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)" }}>
-        <h3 className="text-[9px] uppercase tracking-widest text-cyan-700 mb-2.5 font-semibold">Live Event Stream</h3>
-        <div className="flex items-center gap-3 overflow-hidden">
-          {events.length > 0
-            ? events.map((ev, i) => (
-                <div
-                  key={i}
-                  className={`flex flex-col gap-0.5 border-l-2 pl-2.5 py-1 shrink-0 ${
-                    ev.status === "PASS" ? "border-cyan-500/40" : ev.status === "WARN" ? "border-amber-500/70" : "border-red-500/80"
-                  }`}
-                >
-                  <div className="flex items-center gap-1.5">
-                    {ev.status === "PASS"
-                      ? <CheckCircle2 className="w-2.5 h-2.5 text-cyan-500" />
-                      : ev.status === "WARN"
-                        ? <AlertTriangle className="w-2.5 h-2.5 text-amber-400" />
-                        : <AlertTriangle className="w-2.5 h-2.5 text-red-500" />}
-                    <span className={`text-[10px] font-medium truncate max-w-[80px] ${
-                      ev.status === "PASS" ? "text-cyan-100" : ev.status === "WARN" ? "text-amber-100" : "text-red-100"
-                    }`}>
-                      {ev.formula_name ?? ev.bot_id}
+        <section className="sa-summary sa-panel" aria-label="Audit totals">
+          <div className="sa-stat pass"><div className="sa-stat-icon"><Check size={16} /></div><div><div className="sa-stat-label">Passed</div><div className="sa-stat-value" data-testid="audit-pass-count">{summary.data?.pass?.toLocaleString() ?? (summary.isLoading ? "Loading…" : "—")}</div></div></div>
+          <div className="sa-stat warn"><div className="sa-stat-icon"><TriangleAlert size={15} /></div><div><div className="sa-stat-label">Warnings</div><div className="sa-stat-value" data-testid="audit-warn-count">{summary.data?.warn?.toLocaleString() ?? (summary.isLoading ? "Loading…" : "—")}</div></div></div>
+          <div className="sa-stat fail"><div className="sa-stat-icon"><AlertTriangle size={15} /></div><div><div className="sa-stat-label">Failed</div><div className="sa-stat-value" data-testid="audit-fail-count">{summary.data?.fail?.toLocaleString() ?? (summary.isLoading ? "Loading…" : "—")}</div></div></div>
+          <div className="sa-rate">
+            <div><div className="sa-rate-label">Checks passing</div><div className="sa-rate-value" data-testid="audit-pass-rate">{passRate}<span style={{ fontSize: 12, letterSpacing: "-.02em" }}> {passRate === "—" ? "" : "%"}</span></div><div className="sa-rate-foot">{summary.data?.total_logged?.toLocaleString() ?? "—"} checks logged in this window</div></div>
+            <div className="sa-rate-mark"><ShieldCheck size={20} strokeWidth={1.5} /></div>
+          </div>
+        </section>
+
+        <section className="sa-workbench" aria-label="Formula references and risk metrics">
+          <div className="sa-formula-panel sa-panel">
+            <div className="sa-section-title">
+              <div><div className="sa-section-label">Reference formulas</div><div className="sa-section-kicker">Canonical definitions · values from the risk metric service</div></div>
+              <div className="sa-source"><span className="sa-source-dot" /> /performance/risk-metrics</div>
+            </div>
+            <div className="sa-formula-list">
+              {formulas.map((formula, index) => {
+                const FormulaIcon = formula.icon;
+                const unavailable = formula.result === "unavailable";
+                const empty = formula.result === "—";
+                const stale = riskMetrics.isError && formula.value != null;
+                const valueStatus = riskMetrics.isLoading && !riskMetrics.data
+                  ? "AWAITING DATA"
+                  : unavailable
+                    ? "UNAVAILABLE"
+                    : stale
+                      ? "CACHED RESPONSE"
+                      : empty
+                        ? "NO VALUE"
+                        : "VALUE RECEIVED";
+                return (
+                  <button
+                    type="button"
+                    key={formula.id}
+                    onClick={() => setActiveFormula(activeFormula === index ? null : index)}
+                    className={`sa-formula sa-button-focus ${activeFormula === index ? "is-active" : ""}`}
+                    aria-pressed={activeFormula === index}
+                    aria-label={`Inspect ${formula.label}`}
+                    data-testid={`audit-formula-${formula.id}`}
+                  >
+                    <span className="sa-formula-name"><span className="sa-formula-icon"><FormulaIcon /></span><span><span className="sa-formula-title">{formula.label}</span><span className="sa-formula-detail">{formula.detail}</span></span></span>
+                    <span className="sa-equation">{formula.notation}</span>
+                    <span className="sa-value">
+                      <span className={`sa-value-status ${unavailable || empty ? "is-unavailable" : ""}`}>
+                        {riskMetrics.isLoading && !riskMetrics.data ? <CircleDashed /> : unavailable || empty ? <AlertTriangle /> : <CheckCircle2 />}
+                        {valueStatus}
+                      </span>
+                      <span className="sa-number">{formula.result}</span>
                     </span>
-                  </div>
-                  <span className="text-[9px] text-slate-600 font-mono">{relativeTime(ev.audit_timestamp)}</span>
-                </div>
-              ))
-            : (
-              <div className="flex items-center gap-2 text-[10px] font-mono text-amber-300">
-                <AlertTriangle className="w-3 h-3 shrink-0" />
-                <span>Audit feed unavailable</span>
-              </div>
-            )}
-          <div className="flex-1 h-px bg-gradient-to-r from-cyan-900/40 to-transparent" />
-        </div>
-      </div>
-    </div>
-  );
-}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
-function MiniStat({ label, value, icon, error }: { label: string; value: string; icon: React.ReactNode; error?: boolean }) {
-  return (
-    <div className={`p-3 rounded-xl border bg-black/50 backdrop-blur-md w-44 transition-all duration-300 ${
-      error ? "border-red-500/40 shadow-[0_0_12px_rgba(239,68,68,0.15)]" : "border-cyan-500/15 shadow-[0_0_12px_rgba(6,182,212,0.07)]"
-    }`}>
-      <div className="flex items-center gap-1.5 mb-1.5">
-        {icon}
-        <span className="text-[9px] font-medium text-slate-500 uppercase tracking-wider">{label}</span>
-      </div>
-      <div className={`text-2xl font-light tracking-tight ${error ? "text-red-100" : "text-cyan-50"}`}>{value}</div>
+          <aside className="sa-integrity-panel sa-panel">
+            <div className="sa-right-head"><span className="sa-integrity-tag"><ShieldCheck />Reported audit ratio</span><span className="sa-total-mini">ROLLING 24H</span></div>
+            <div className="sa-big-rate"><strong>{passRate}{passRate === "—" ? "" : "%"}</strong><span>checks passed</span></div>
+            <div className="sa-rate-track"><span style={{ width: passRate === "—" ? "0%" : `${passRate}%` }} /></div>
+            <div className="sa-integrity-copy">
+              {summaryUnavailable
+                ? "Audit summary unavailable. No pass rate or check counts are inferred."
+                : summary.isLoading && !summary.data
+                  ? "Awaiting the audit summary response. Formula references remain visible while data loads."
+                  : summary.isError
+                    ? "The audit summary refresh failed. This ratio is calculated only from the last reported summary."
+                    : hasFailure
+                      ? `${summary.data?.fail.toLocaleString()} failed checks were reported. Risk metric values are displayed beside definitions, not recalculated here.`
+                      : riskMetrics.isError
+                        ? "Risk metric service unavailable. Audit events remain independently available below."
+                        : "Risk metric service values are shown beside their canonical formula references; this view does not recompute them."}
+            </div>
+            <div className="sa-integrity-footer"><span>Checks logged</span><strong>{totalChecks?.toLocaleString() ?? "—"}</strong><span>Window <strong>24h</strong></span></div>
+          </aside>
+        </section>
+
+        <section className="sa-events-panel sa-panel" aria-label="Recent audit events">
+          <div className="sa-events-top">
+            <div className="sa-events-heading"><Activity className="sa-events-icon" /><span className="sa-events-title">Recent audit events</span><span className="sa-events-count">{feedUnavailable || feedLoading ? "—" : `${events.length} shown`}</span></div>
+            <div className="sa-filterbar" role="group" aria-label="Filter audit events">
+              {filters.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setFilter(item.id)}
+                  className={`sa-filter sa-button-focus ${filter === item.id ? "is-selected" : ""}`}
+                  aria-pressed={filter === item.id}
+                  data-testid={`audit-filter-${item.id.toLowerCase()}`}
+                >
+                  {item.label}{item.count != null && <span className="sa-filter-count">{item.count.toLocaleString()}</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="sa-table-head"><span>Audit check</span><span>Bot</span><span>Status</span><span>Recorded</span></div>
+          {feedLoading ? (
+            <div className="sa-empty" role="status"><CircleDashed />Loading audit events…</div>
+          ) : feedUnavailable ? (
+            <div className="sa-empty" role="status"><AlertTriangle />Audit event feed unavailable</div>
+          ) : events.length === 0 ? (
+            <div className="sa-empty"><CircleDashed />No {filter.toLowerCase()} events in this window</div>
+          ) : (
+            <div className="sa-event-list">
+              {events.map((event, index) => {
+                const status = event.status as AuditStatus;
+                return (
+                  <div className="sa-event-row" key={`${event.audit_timestamp}-${event.bot_id}-${index}`} data-testid={`audit-event-${status.toLowerCase()}-${index}`}>
+                    <div className="sa-event-name"><span className={`sa-event-mark ${status.toLowerCase()}`}><AuditMark status={status} /></span><span className="sa-event-formula">{event.formula_name}</span></div>
+                    <span className="sa-event-bot"><Fingerprint />{event.bot_id || "Unattributed"}</span>
+                    <span className={`sa-event-status ${status.toLowerCase()}`}><i className="sa-status-dot" />{status}</span>
+                    <span className="sa-event-time">{eventClock(event.audit_timestamp)}<span>{relativeTime(event.audit_timestamp)}</span></span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <div className="sa-feed-note"><span><Radio /> Recent rows returned by the math audit service</span><span>{recent.isError && recent.data ? "Refresh failed · showing cached rows" : "/admin/math-audit/recent"}</span></div>
+        </section>
+      </main>
     </div>
   );
 }

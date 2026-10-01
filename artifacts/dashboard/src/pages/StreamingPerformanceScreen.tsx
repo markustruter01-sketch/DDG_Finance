@@ -9,7 +9,7 @@ import {
   useFleetEquity,
   useBotRegistry,
 } from "@/hooks/use-trading";
-import { getFleetBotCount, getFleetStartingCapital, formatCapitalShort } from "@/lib/fleet-capital";
+import { Activity } from "lucide-react";
 import { getBotIdentity } from "@/lib/bot-identity";
 import { DDGBadge } from "@/components/DDGBadge";
 import {
@@ -26,19 +26,19 @@ import type { ValueType, NameType } from "recharts/types/component/DefaultToolti
 
 /* ── palette ─────────────────────────────────────────────── */
 const C = {
-  bg:     "#020617",
-  panel:  "rgba(15,23,42,0.88)",
-  border: "rgba(255,255,255,0.07)",
-  dim:    "rgba(148,163,184,0.45)",
-  label:  "rgba(148,163,184,0.7)",
-  text:   "rgba(226,232,240,0.9)",
-  green:  "#34d399",
-  red:    "#f87171",
-  amber:  "#fbbf24",
-  blue:   "#60a5fa",
-  violet: "#a78bfa",
-  cyan:   "#22d3ee",
-  orange: "#fb923c",
+  bg:     "#102322",
+  panel:  "rgba(18,39,36,0.82)",
+  border: "rgba(219,239,221,0.15)",
+  dim:    "rgba(223,233,220,0.4)",
+  label:  "rgba(223,233,220,0.63)",
+  text:   "#eff4e9",
+  green:  "#a9d8ad",
+  red:    "#ee9a8c",
+  amber:  "#e2c47d",
+  blue:   "#9cc8d2",
+  violet: "#cfb9f3",
+  cyan:   "#75cdb5",
+  orange: "#e6bc85",
 };
 
 /* ── helpers ─────────────────────────────────────────────── */
@@ -108,8 +108,8 @@ export default function StreamingPerformanceScreen() {
   const at  = attr.data;
   const sg  = sent.data;
   const st  = status.data;
-  const totalVaulted = vaultData.data?.total_vaulted_usd ?? null;
-  const { data: fleetEq } = useFleetEquity();
+  const fleetEqQuery = useFleetEquity();
+  const fleetEq = fleetEqQuery.data;
   const registryQuery = useBotRegistry();
   const registry = registryQuery.data;
 
@@ -130,7 +130,6 @@ export default function StreamingPerformanceScreen() {
 
   /* Full fleet totals from single source of truth (fleet_equity API) */
   const fleetEquity = fleetEq?.fleet_total?.equity ?? null;
-  const fleetPnL    = fleetEq?.fleet_total?.pnl ?? null;
 
   /* Fleet win rate comes from the canonical fleet equity source. */
   const fleetTrades  = j?.summary?.total ?? null;
@@ -139,6 +138,9 @@ export default function StreamingPerformanceScreen() {
 
   /* Distinct metric: attribution's all-time per-trade rate, server-computed. */
   const attributionWinRate = at?.overall.win_rate ?? null;
+  const sourceError = risk.isError || journal.isError || attr.isError || sent.isError || status.isError || vaultData.isError || vaultHistory.isError || fleetEqQuery.isError || registryQuery.isError;
+  const hasSnapshot = Boolean(rm || j || at || sg || st || fleetEq || vaultData.data);
+  const sourceState = sourceError ? (hasSnapshot ? "Partial source error" : "API unavailable") : hasSnapshot ? "API snapshot" : "Loading API data";
 
   /* ── sub-components ──────────────────────────────────────── */
 
@@ -146,7 +148,7 @@ export default function StreamingPerformanceScreen() {
     label, value, sub, accent, note,
   }: { label: string; value: string; sub?: string; accent: string; note?: string }) {
     return (
-      <div style={{
+      <div data-testid="performance-risk-card" style={{
         flex: 1,
         background: C.panel,
         border: `1px solid ${C.border}`,
@@ -175,10 +177,10 @@ export default function StreamingPerformanceScreen() {
   }
 
   return (
-    <div className="stream-screen stream-screen-performance" style={{
+    <div className="stream-screen stream-screen-performance" data-testid="performance-screen" style={{
       width: "100%",
       height: "100%",
-      background: `radial-gradient(ellipse at 20% 0%, rgba(6,18,50,1) 0%, ${C.bg} 70%)`,
+      background: `linear-gradient(90deg, rgba(8,21,23,.91), rgba(9,23,23,.79) 53%, rgba(10,25,24,.75)), linear-gradient(180deg, rgba(12,25,25,.12), rgba(8,19,21,.77) 78%, #0a1a1b), url("/streaming-forest-atmosphere.jpg") center 43% / cover`,
       overflow: "hidden",
       display: "flex",
       flexDirection: "column",
@@ -187,9 +189,45 @@ export default function StreamingPerformanceScreen() {
       boxSizing: "border-box",
       position: "relative",
     }}>
+      <style>{`
+        .stream-screen-performance[data-testid="performance-screen"] { color:${C.text} !important; background:linear-gradient(90deg,rgba(8,21,23,.91),rgba(9,23,23,.79) 53%,rgba(10,25,24,.75)),linear-gradient(180deg,rgba(12,25,25,.12),rgba(8,19,21,.77) 78%,#0a1a1b),url("/streaming-forest-atmosphere.jpg") center 43% / cover !important; font-family:"Geist","Aptos",sans-serif !important; }
+        .stream-screen-performance > header { min-height: 43px; display:flex; align-items:center; justify-content:space-between; gap:16px; border-bottom:1px solid rgba(219,239,221,.12); padding:0 3px 8px; }
+        .stream-screen-performance .perf-brand { display:flex; align-items:center; gap:11px; min-width:0; }
+        .stream-screen-performance .perf-mark { width:32px;height:32px;display:grid;place-items:center;border:1px solid rgba(190,222,196,.3);border-radius:10px;background:rgba(201,231,205,.08);color:#c1e3bb; }
+        .stream-screen-performance .perf-brand small { display:block;color:rgba(208,225,207,.55);font:600 8px/1.2 "Geist Mono",monospace;letter-spacing:.16em; }
+        .stream-screen-performance .perf-brand h1 { margin:3px 0 0;color:#f2f3e8;font:600 18px/1 "Geist",sans-serif;letter-spacing:-.04em; }
+        .stream-screen-performance .perf-meta { display:flex;align-items:center;gap:7px;flex-wrap:wrap;justify-content:flex-end; }
+        .stream-screen-performance .perf-pill { display:flex;align-items:center;gap:6px;padding:6px 9px;border:1px solid rgba(199,221,201,.16);border-radius:99px;background:rgba(12,31,29,.58);color:rgba(232,239,225,.8);font:600 8px "Geist Mono",monospace;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap; }
+        .stream-screen-performance .perf-pill-dot { width:5px;height:5px;border-radius:50%;background:${sourceError ? "#e2c47d" : hasSnapshot ? "#a9d8ad" : "#9cc8d2"}; }
+        .stream-screen-performance [data-testid="performance-risk-card"] { border-color:rgba(214,232,211,.16) !important; border-radius:12px !important; background:linear-gradient(145deg,rgba(27,48,45,.72),rgba(11,27,27,.74)) !important; box-shadow:inset 0 1px rgba(255,255,255,.07),0 10px 25px rgba(0,0,0,.12); }
+        .stream-screen-performance [data-testid="performance-panel"] { border-color:rgba(219,239,221,.15) !important; border-radius:14px !important; background:linear-gradient(145deg,rgba(22,42,40,.79),rgba(11,27,28,.80)) !important; box-shadow:inset 0 1px rgba(255,255,255,.08),0 14px 35px rgba(0,0,0,.14); }
+        @media(max-width:900px) {
+          .stream-screen-performance { height:auto !important; min-height:100dvh; overflow:auto !important; }
+          .stream-screen-performance > [data-testid="performance-risk-metrics"] { display:grid !important; grid-template-columns:repeat(3,minmax(0,1fr)); }
+          .stream-screen-performance > [data-testid="performance-overview"] { grid-template-columns:1fr !important; }
+          .stream-screen-performance > header { align-items:flex-start; }
+        }
+        @media(max-width:700px) {
+          .stream-screen-performance { padding:12px !important; }
+          .stream-screen-performance > [data-testid="performance-risk-metrics"] { grid-template-columns:repeat(2,minmax(0,1fr)); }
+          .stream-screen-performance .perf-meta .perf-pill:nth-child(2) { display:none; }
+        }
+      `}</style>
+
+      <header data-testid="performance-header">
+        <div className="perf-brand">
+          <div className="perf-mark"><Activity size={16} /></div>
+          <div><small>STREAMING / FLEET</small><h1>Performance</h1></div>
+        </div>
+        <div className="perf-meta">
+          <div className="perf-pill"><span className="perf-pill-dot" />{sourceState}</div>
+          <div className="perf-pill">{st?.market_open == null ? "Market unknown" : st.market_open ? "Market open" : "Market closed"}</div>
+          <div className="perf-pill">90 day view</div>
+        </div>
+      </header>
 
       {/* ══ ROW 1: RISK RATIO CARDS ══════════════════════════════ */}
-      <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+      <div data-testid="performance-risk-metrics" style={{ display: "flex", gap: 8, flexShrink: 0 }}>
         <RiskCard
           label="Sharpe Ratio"
           value={fmt(rm?.sharpe_ratio)}
@@ -230,10 +268,10 @@ export default function StreamingPerformanceScreen() {
       </div>
 
       {/* ══ ROW 2: MAIN CONTENT ══════════════════════════════════ */}
-      <div style={{ display: "grid", gridTemplateColumns: "1.1fr 1fr", gap: 8, flex: 1, minHeight: 0 }}>
+      <div data-testid="performance-overview" style={{ display: "grid", gridTemplateColumns: "1.1fr 1fr", gap: 8, flex: 1, minHeight: 0 }}>
 
         {/* ── LEFT: BOT PERFORMANCE MATRIX ─────────────────────── */}
-        <div style={{
+        <div data-testid="performance-panel" style={{
           background: C.panel,
           border: `1px solid ${C.border}`,
           borderRadius: 12,
@@ -322,7 +360,7 @@ export default function StreamingPerformanceScreen() {
         <div style={{ display: "flex", flexDirection: "column", gap: 8, minHeight: 0 }}>
 
           {/* Trade stats — big numbers */}
-          <div style={{
+          <div data-testid="performance-panel" style={{
             background: C.panel,
             border: `1px solid ${C.border}`,
             borderRadius: 12,
@@ -349,7 +387,7 @@ export default function StreamingPerformanceScreen() {
           </div>
 
           {/* Sentiment */}
-          <div style={{
+          <div data-testid="performance-panel" style={{
             background: C.panel,
             border: `1px solid ${C.border}`,
             borderRadius: 12,
@@ -381,7 +419,7 @@ export default function StreamingPerformanceScreen() {
           </div>
 
           {/* System Status */}
-          <div style={{
+          <div data-testid="performance-panel" style={{
             background: C.panel,
             border: `1px solid ${C.border}`,
             borderRadius: 12,
@@ -451,7 +489,7 @@ export default function StreamingPerformanceScreen() {
         }
 
         return (
-          <div style={{
+          <div data-testid="performance-panel" style={{
             background: C.panel,
             border: `1px solid ${C.border}`,
             borderRadius: 12,

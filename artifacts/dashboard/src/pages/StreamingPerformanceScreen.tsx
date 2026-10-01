@@ -68,10 +68,10 @@ function ratioColor(v: number | null | undefined, goodThreshold = 1): string {
 }
 
 /* ── bot config ──────────────────────────────────────────── */
-const BOT_META: Record<string, { icon: string; color: string; startCap: number; label: string }> = {
-  "oracle":         { icon: getBotIdentity("oracle").icon,         color: "#a78bfa", startCap: 100_000, label: getBotIdentity("oracle").displayName },
-  "spy_qqq_trend":  { icon: getBotIdentity("spy_qqq_trend").icon,  color: C.cyan,    startCap: 100_000, label: getBotIdentity("spy_qqq_trend").displayName },
-  "jerome_macro":   { icon: getBotIdentity("jerome_macro").icon,   color: C.orange,  startCap: 100_000, label: getBotIdentity("jerome_macro").displayName },
+const BOT_META: Record<string, { icon: string; color: string; label: string }> = {
+  "oracle":         { icon: getBotIdentity("oracle").icon,         color: "#a78bfa", label: getBotIdentity("oracle").displayName },
+  "spy_qqq_trend":  { icon: getBotIdentity("spy_qqq_trend").icon,  color: C.cyan,    label: getBotIdentity("spy_qqq_trend").displayName },
+  "jerome_macro":   { icon: getBotIdentity("jerome_macro").icon,   color: C.orange,  label: getBotIdentity("jerome_macro").displayName },
   // buck_futures retired May 2026 — removed from performance view
 };
 
@@ -140,7 +140,12 @@ export default function StreamingPerformanceScreen() {
   const attributionWinRate = at?.overall.win_rate ?? null;
   const sourceError = risk.isError || journal.isError || attr.isError || sent.isError || status.isError || vaultData.isError || vaultHistory.isError || fleetEqQuery.isError || registryQuery.isError;
   const hasSnapshot = Boolean(rm || j || at || sg || st || fleetEq || vaultData.data);
-  const sourceState = sourceError ? (hasSnapshot ? "Partial source error" : "API unavailable") : hasSnapshot ? "API snapshot" : "Loading API data";
+  const sourceLoading = risk.isLoading || journal.isLoading || attr.isLoading || sent.isLoading || status.isLoading || vaultData.isLoading || vaultHistory.isLoading || fleetEqQuery.isLoading || registryQuery.isLoading;
+  const sourceState = hasSnapshot
+    ? sourceError ? "Partial source error" : "API snapshot"
+    : sourceLoading ? "Loading API data"
+    : sourceError ? "API unavailable"
+    : "No API snapshot";
 
   /* ── sub-components ──────────────────────────────────────── */
 
@@ -202,14 +207,17 @@ export default function StreamingPerformanceScreen() {
         .stream-screen-performance [data-testid="performance-risk-card"] { border-color:rgba(214,232,211,.16) !important; border-radius:12px !important; background:linear-gradient(145deg,rgba(27,48,45,.72),rgba(11,27,27,.74)) !important; box-shadow:inset 0 1px rgba(255,255,255,.07),0 10px 25px rgba(0,0,0,.12); }
         .stream-screen-performance [data-testid="performance-panel"] { border-color:rgba(219,239,221,.15) !important; border-radius:14px !important; background:linear-gradient(145deg,rgba(22,42,40,.79),rgba(11,27,28,.80)) !important; box-shadow:inset 0 1px rgba(255,255,255,.08),0 14px 35px rgba(0,0,0,.14); }
         @media(max-width:900px) {
-          .stream-screen-performance { height:auto !important; min-height:100dvh; overflow:auto !important; }
+          .stream-screen-performance { height:100% !important; min-height:0 !important; overflow-x:hidden !important; overflow-y:auto !important; }
           .stream-screen-performance > [data-testid="performance-risk-metrics"] { display:grid !important; grid-template-columns:repeat(3,minmax(0,1fr)); }
-          .stream-screen-performance > [data-testid="performance-overview"] { grid-template-columns:1fr !important; }
+          .stream-screen-performance > [data-testid="performance-overview"] { flex:0 0 auto !important; grid-template-columns:1fr !important; grid-template-rows:minmax(320px,auto) minmax(480px,auto) !important; min-height:800px !important; }
+          .stream-screen-performance > [data-testid="performance-overview"] > [data-testid="performance-panel"] { min-height:320px !important; }
+          .stream-screen-performance > [data-testid="performance-overview"] > div:nth-child(2) { min-height:480px !important; }
           .stream-screen-performance > header { align-items:flex-start; }
         }
         @media(max-width:700px) {
-          .stream-screen-performance { padding:12px !important; }
+          .stream-screen-performance { padding:12px 12px 96px !important; }
           .stream-screen-performance > [data-testid="performance-risk-metrics"] { grid-template-columns:repeat(2,minmax(0,1fr)); }
+          .stream-screen-performance [data-testid="performance-trade-stats-grid"] { grid-template-columns:repeat(2,minmax(0,1fr)) !important; }
           .stream-screen-performance .perf-meta .perf-pill:nth-child(2) { display:none; }
         }
       `}</style>
@@ -311,7 +319,7 @@ export default function StreamingPerformanceScreen() {
           {/* bot rows */}
           <div style={{ flex: 1, overflowY: "auto", padding: "6px 0" }}>
             {registryBots.length > 0 ? registryBots.map((bot) => {
-              const meta = BOT_META[bot.id] ?? { icon: "🤖", color: C.label, startCap: 100_000, label: bot.id };
+              const meta = BOT_META[bot.id] ?? { icon: "🤖", color: C.label, label: bot.id };
               const botEq = fleetEqByBotId[bot.id];
               const equity = botEq?.equity ?? null;
               const pnl    = botEq?.pnl ?? null;
@@ -371,7 +379,7 @@ export default function StreamingPerformanceScreen() {
             <div style={{ fontSize: 10, fontFamily: "monospace", letterSpacing: "0.14em", textTransform: "uppercase", color: C.dim, marginBottom: 12 }}>
               ◈ Fleet Trade Statistics
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+            <div data-testid="performance-trade-stats-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
               {[
                 { label: "Total Trades", value: fleetTrades != null ? String(fleetTrades) : "—", color: C.text },
                 { label: "All-time per-trade win rate (attribution)", value: attributionWinRate != null ? `${attributionWinRate.toFixed(0)}%` : "—", color: attributionWinRate != null ? (attributionWinRate >= 50 ? C.green : C.red) : C.dim },

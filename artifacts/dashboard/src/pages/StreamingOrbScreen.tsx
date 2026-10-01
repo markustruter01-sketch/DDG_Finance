@@ -4,7 +4,6 @@ import { useFleetEquity, useLivePositions } from "@/hooks/use-portfolio";
 import { useJournal } from "@/hooks/use-journal";
 import { getAttributedBotIdentity } from "@/lib/bot-identity";
 
-const RETIRED = new Set(["PSX", "MPC", "BAC", "FTNT", "ARM", "PANW"]);
 const SATELLITE_SLOTS = [
   { x: "18%", y: "20%" },
   { x: "82%", y: "20%" },
@@ -27,11 +26,11 @@ export default function StreamingOrbScreen() {
   const journal = useJournal();
   const [selectedPositionKey, setSelectedPositionKey] = useState<string | null>(null);
   const open = useMemo(
-    () => (positions.data?.positions ?? []).filter((position) => !RETIRED.has(position.symbol)),
+    () => positions.data?.positions ?? [],
     [positions.data?.positions],
   );
   const closed = useMemo(
-    () => (journal.data?.trades ?? []).filter((trade) => trade.status !== "Active" && !RETIRED.has(trade.ticker)).slice(0, 8),
+    () => (journal.data?.trades ?? []).filter((trade) => trade.status !== "Active").slice(0, 8),
     [journal.data?.trades],
   );
   const total = fleet.data?.fleet_total;

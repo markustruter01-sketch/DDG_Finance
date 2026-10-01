@@ -595,16 +595,26 @@ def save_performance_snapshot(
     )
 
 
-def get_performance_snapshots(limit: int = 90) -> list[dict]:
+def get_performance_snapshots(limit: int = 90, *, latest: bool = False) -> list[dict]:
     cols = ("date", "equity", "daily_pnl_pct", "cumulative_pnl_pct",
             "win_rate", "trades_placed")
     from db.postgres import get_conn
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute(f"""
-                SELECT {', '.join(cols)} FROM performance_snapshots
-                ORDER BY date ASC LIMIT %s
-            """, (limit,))
+            if latest:
+                cur.execute(f"""
+                    SELECT {', '.join(cols)}
+                    FROM (
+                        SELECT {', '.join(cols)} FROM performance_snapshots
+                        ORDER BY date DESC LIMIT %s
+                    ) recent
+                    ORDER BY date ASC
+                """, (limit,))
+            else:
+                cur.execute(f"""
+                    SELECT {', '.join(cols)} FROM performance_snapshots
+                    ORDER BY date ASC LIMIT %s
+                """, (limit,))
             rows = cur.fetchall()
     return [dict(zip(cols, r)) for r in rows]
 

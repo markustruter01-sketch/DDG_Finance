@@ -95,6 +95,8 @@ export interface RiskMetrics {
   annualised_return_pct: number | null;
   data_points: number;
   period_days: number;
+  source?: string;
+  as_of?: string;
   insufficient_data?: boolean;
   message?: string;
 }

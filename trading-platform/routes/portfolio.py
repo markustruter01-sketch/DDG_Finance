@@ -909,7 +909,7 @@ async def performance_attribution() -> dict:
 
 @portfolio_router.get("/performance/risk-metrics", tags=["Performance"])
 async def risk_metrics() -> dict:
-    snapshots = get_performance_snapshots(limit=90)
+    snapshots = get_performance_snapshots(limit=90, latest=True)
     if len(snapshots) < 2:
         try:
             import numpy as np
@@ -949,6 +949,7 @@ async def risk_metrics() -> dict:
                     "annualised_return_pct": None,
                     "data_points": 1,
                     "period_days": 1,
+                    "source": "account_snapshot",
                     "message": "Awaiting post-mortem snapshots — run a post-mortem to populate full risk metrics",
                 }
         except Exception:
@@ -962,6 +963,7 @@ async def risk_metrics() -> dict:
             "annualised_return_pct": None,
             "data_points": 0,
             "period_days": 0,
+            "source": "none",
             "message": "No performance data yet — run a post-mortem cycle to start tracking",
         }
 
@@ -971,13 +973,20 @@ async def risk_metrics() -> dict:
         return {
             "sharpe_ratio": None, "sortino_ratio": None,
             "max_drawdown_pct": None, "calmar_ratio": None,
-            "volatility_annual_pct": None, "data_points": len(daily_returns),
+            "volatility_annual_pct": None, "annualised_return_pct": None,
+            "data_points": len(daily_returns),
+            "period_days": len(snapshots),
+            "source": "performance_snapshots",
+            "as_of": str(snapshots[-1]["date"]),
+            "message": "Insufficient daily return observations to calculate risk metrics",
         }
 
     equities = [s["equity"] for s in snapshots if s.get("equity")]
     return {
         **_compute_risk_metrics(daily_returns, equity_curve=equities or None),
         "period_days": len(snapshots),
+        "source": "performance_snapshots",
+        "as_of": str(snapshots[-1]["date"]),
     }
 
 

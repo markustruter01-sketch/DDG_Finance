@@ -22,7 +22,6 @@ from typing import Any
 from analysis.backtest_harness import (
     BacktestResult,
     PricePanel,
-    append_exploration_run,
     load_adjusted_close,
     run_backtest,
 )
@@ -114,8 +113,14 @@ SPEC: dict[str, Any] = {
     },
     "trailing_stop": {
         "fraction": TRAILING_STOP,
-        "applies_to": "A, B, and D ETF holdings; C is buy-and-hold without stops",
-        "cash_asset": "BIL is a cash leg and is not expected to breach the stop in this window",
+        "applies_to": (
+            "A, B, and D ETF holdings; C is buy-and-hold without stops; "
+            "D's blended holdings use one symbol-level stop"
+        ),
+        "cash_asset": (
+            "BIL is a cash leg; preflight aborts if its loaded history could "
+            "trigger the global harness stop"
+        ),
     },
     "portfolio_constraints": {
         "gross_cap_A": CASH_GROSS_CAP,
@@ -125,6 +130,7 @@ SPEC: dict[str, Any] = {
         "borrow_fee_rate": BORROW_FEE_RATE,
         "margin_rate": MARGIN_RATE,
         "risk_free_rate": RISK_FREE_RATE,
+        "cost_model": "cost_bps is charged per side on absolute traded notional",
     },
     "volatility_targeting": {
         "annual_target": TARGET_ANNUAL_VOLATILITY,
@@ -134,6 +140,28 @@ SPEC: dict[str, Any] = {
         "D": "blend half of B and half of C risky target weights, then retarget the blend",
     },
     "cost_bps_scenarios": [5, 10],
+    "reporting": {
+        "window_returns": [list(window) for window in EVALUATION_WINDOWS],
+        "spy_correlation": "daily strategy equity returns versus SPY buy-and-hold",
+        "correlation_matrix_symbols": list(UNIVERSE),
+        "metrics": [
+            "total_return",
+            "cagr",
+            "annualised_volatility",
+            "sharpe",
+            "sortino",
+            "max_drawdown",
+            "calmar",
+            "turnover",
+            "average_gross_exposure",
+            "average_net_exposure",
+            "number_of_trades",
+            "total_costs",
+            "total_interest",
+            "total_borrow_fees",
+            "total_traded_notional",
+        ],
+    },
     "candidates": {
         "A": "long uptrends only; remaining net allocation in BIL; gross <= 1.0",
         "B": "long uptrends and short downtrends; 10% annual volatility target; gross <= 1.5",
@@ -561,12 +589,17 @@ def build_candidate_targets(
             max_gross=GROSS_CAP,
         )
 
-    b_base = _base_weights_for_directions(
-        history,
-        trend_directions,
-        universe=universe,
-    )
     if candidate == "A":
+        long_directions = {
+            symbol: 1
+            for symbol in universe
+            if trend_directions.get(symbol, 0) == 1
+        }
+        b_base = _base_weights_for_directions(
+            history,
+            long_directions,
+            universe=universe,
+        )
         long_symbols = {
             symbol: weight for symbol, weight in b_base.items() if weight > 0
         }
@@ -574,6 +607,11 @@ def build_candidate_targets(
         result = {**long_symbols, cash_asset: cash_weight}
         return {symbol: weight for symbol, weight in result.items() if abs(weight) > 1e-14}
 
+    b_base = _base_weights_for_directions(
+        history,
+        trend_directions,
+        universe=universe,
+    )
     if candidate == "B":
         if not b_base:
             return {cash_asset: 1.0}

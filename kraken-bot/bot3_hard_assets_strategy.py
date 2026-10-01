@@ -440,6 +440,7 @@ class AlpacaBot3:
                 "entry_price": float(position["avg_entry_price"]),
                 "current_price": float(position["current_price"]),
                 "market_value": float(position["market_value"]),
+                "asset_class": position["asset_class"],
             })
         return result
 
@@ -654,10 +655,17 @@ def _fresh_buy_guard(
     return allowed, projection
 
 
-def _arm_stop(client: AlpacaBot3, symbol: str, qty: float, entry_price: float) -> dict[str, Any]:
-    stop_price = entry_price * (
-        1.0 - CRYPTO_STOP_PCT if symbol in CRYPTO else 1.0 - METAL_STOP_PCT
-    )
+def _arm_stop(
+    client: AlpacaBot3,
+    symbol: str,
+    qty: float,
+    entry_price: float,
+    stop_price: float | None = None,
+) -> dict[str, Any]:
+    if stop_price is None:
+        stop_price = entry_price * (
+            1.0 - CRYPTO_STOP_PCT if symbol in CRYPTO else 1.0 - METAL_STOP_PCT
+        )
     if symbol in CRYPTO:
         return client.submit(
             symbol, "sell", qty, "stop_limit",
@@ -885,6 +893,324 @@ def _place_confirmed_entry(
         context={"stop_order_id": stop_order_id},
     )
     return fill
+
+
+def _rebalance_existing_holding(
+    client: AlpacaBot3,
+    item: dict[str, Any],
+    position: dict[str, Any],
+    cycle_id: str,
+) -> int:
+    """Replace the protective stop around a fill-confirmed rebalance of a holding."""
+    symbol = _canonical_symbol(item["symbol"])
+    side = str(item["side"]).lower()
+    if side not in {"buy", "sell"}:
+        raise ValueError(f"unsupported rebalance side for {symbol}: {side!r}")
+
+    old_entry_price = float(position["entry_price"])
+    old_stop_price = float(position["stop_price"])
+    planned_qty = float(item.get("qty") or 0.0)
+    if not math.isfinite(planned_qty) or planned_qty <= 0:
+        return 0
+
+    order_qty = (
+        math.floor(planned_qty) if side == "buy" and symbol in METALS else planned_qty
+    )
+    if order_qty <= 0:
+        return 0
+
+    def close_open_row(exit_reason: str) -> None:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE bot3_positions
+                    SET status='closed', closed_at=NOW(), exit_reason=%s
+                    WHERE bot_id=%s AND symbol=%s AND status='open'
+                    """,
+                    (exit_reason, BOT_ID, symbol),
+                )
+                if cur.rowcount != 1:
+                    raise RuntimeError(
+                        f"expected one open Bot 3 row to close for {symbol}; "
+                        f"updated {cur.rowcount}"
+                    )
+
+    def update_open_row(
+        settled_qty: float,
+        entry_price: float,
+        stop_price: float,
+        stop_order_id: str,
+    ) -> None:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE bot3_positions
+                    SET qty=%s, entry_price=%s, notional_usd=%s,
+                        stop_price=%s, stop_order_id=%s
+                    WHERE bot_id=%s AND symbol=%s AND status='open'
+                    """,
+                    (
+                        settled_qty,
+                        entry_price,
+                        settled_qty * entry_price,
+                        stop_price,
+                        stop_order_id,
+                        BOT_ID,
+                        symbol,
+                    ),
+                )
+                if cur.rowcount != 1:
+                    logger.critical(
+                        "Bot 3 | expected exactly one open position row after rebalance | "
+                        f"symbol={symbol} updated_rows={cur.rowcount}"
+                    )
+                    raise RuntimeError(
+                        f"expected one open Bot 3 row to update for {symbol}; "
+                        f"updated {cur.rowcount}"
+                    )
+
+    try:
+        symbol_orders = [
+            order
+            for order in client.open_orders()
+            if _canonical_symbol(order.get("symbol", "")) == symbol
+        ]
+        for order in symbol_orders:
+            order_id = order.get("id")
+            if not order_id:
+                raise RuntimeError("open order is missing its broker order ID")
+            client._request("DELETE", f"/v2/orders/{order_id}")
+            confirmed = False
+            last_status = "unknown"
+            for attempt in range(10):
+                current = client._request("GET", f"/v2/orders/{order_id}")
+                last_status = str(current.get("status", "")).lower()
+                if last_status in {"canceled", "cancelled"}:
+                    confirmed = True
+                    break
+                if last_status in {"filled", "rejected", "expired"}:
+                    break
+                if attempt < 9:
+                    import time as _time
+                    _time.sleep(1)
+            if not confirmed:
+                raise RuntimeError(
+                    f"cancel not confirmed for order {order_id}; status={last_status}"
+                )
+
+        remaining_orders = [
+            order
+            for order in client.open_orders()
+            if _canonical_symbol(order.get("symbol", "")) == symbol
+        ]
+        if remaining_orders:
+            raise RuntimeError(
+                "symbol still has open orders after cancel confirmation: "
+                + ",".join(str(order.get("id", "unknown")) for order in remaining_orders)
+            )
+    except Exception as exc:
+        logger.critical(
+            "Bot 3 | existing-position cancel not confirmed; refusing rebalance | "
+            f"symbol={symbol} error={type(exc).__name__}: {exc}"
+        )
+        raise RuntimeError(
+            f"Bot 3 aborted rebalance for {symbol}: existing order cancellation "
+            "was not confirmed"
+        ) from exc
+
+    if side == "sell":
+        broker_qty_before = _broker_position_qty(client, symbol)
+        order_qty = min(order_qty, broker_qty_before)
+        if order_qty <= 0:
+            close_open_row("rebalance_full_exit")
+            return 0
+
+    trade_error: Exception | None = None
+    try:
+        market_order = client.submit(symbol, side, order_qty, "market")
+        market_order_id = market_order.get("id")
+        if not market_order_id:
+            raise RuntimeError(f"market order for {symbol} returned no order ID")
+        fill = client.wait_for_fill(market_order_id)
+        fill_status = str(fill.get("status", "")).lower()
+        if fill_status not in {"filled", "partially_filled"}:
+            trade_error = RuntimeError(
+                f"market order {market_order_id} ended with status={fill_status or 'unknown'}"
+            )
+            logger.critical(
+                "Bot 3 | held-position market order was not fill-confirmed; "
+                "restoring protection from broker state | "
+                f"symbol={symbol} side={side} status={fill_status or 'unknown'}"
+            )
+    except Exception as exc:
+        trade_error = exc
+        logger.critical(
+            "Bot 3 | held-position rebalance order/fill failed; reconciling and "
+            "restoring protection | "
+            f"symbol={symbol} side={side} qty={order_qty} error={exc}"
+        )
+        fill = {}
+
+    settled_snapshot: tuple[float, float] | None = None
+    previous_snapshot: tuple[float, float] | None = None
+    for attempt in range(10):
+        try:
+            broker_positions = [
+                live
+                for live in client.positions()
+                if _canonical_symbol(live["symbol"]) == symbol
+            ]
+        except Exception as exc:
+            logger.critical(
+                "Bot 3 | position read failed while confirming rebalance; retrying | "
+                f"symbol={symbol} attempt={attempt + 1} error={exc}"
+            )
+            previous_snapshot = None
+            if attempt < 9:
+                import time as _time
+                _time.sleep(1)
+            continue
+        settled_qty = sum(float(live["qty"]) for live in broker_positions)
+        average_entry = (
+            sum(float(live["qty"]) * float(live["entry_price"]) for live in broker_positions)
+            / settled_qty
+            if settled_qty > 0
+            else 0.0
+        )
+        current_snapshot = (settled_qty, average_entry)
+        if previous_snapshot is not None and all(
+            math.isclose(previous, current, rel_tol=0.0, abs_tol=1e-9)
+            for previous, current in zip(previous_snapshot, current_snapshot)
+        ):
+            settled_snapshot = current_snapshot
+            break
+        previous_snapshot = current_snapshot
+        if attempt < 9:
+            import time as _time
+            _time.sleep(1)
+
+    if settled_snapshot is None:
+        logger.critical(
+            "Bot 3 | held-position quantity did not settle; flattening without guessing | "
+            f"symbol={symbol}"
+        )
+        _flatten_position(client, symbol)
+        remaining_qty = _broker_position_qty(client, symbol)
+        if remaining_qty <= 1e-9:
+            close_open_row("rebalance_unsettled_flatten")
+        raise RuntimeError(f"Bot 3 aborted: unsettled position for {symbol}")
+
+    settled_qty, broker_entry_price = settled_snapshot
+    if settled_qty <= 1e-9:
+        close_open_row("rebalance_full_exit")
+        _log_decision(
+            cycle_id,
+            "REBALANCE_FULL_EXIT",
+            symbol=symbol,
+            planned_qty=order_qty,
+            order_id=fill.get("id"),
+            outcome="CLOSED",
+        )
+        if trade_error is not None:
+            raise RuntimeError(
+                f"Bot 3 reconciled {symbol} flat after an uncertain rebalance order"
+            ) from trade_error
+        return 1
+
+    if not math.isfinite(broker_entry_price) or broker_entry_price <= 0:
+        if side == "sell" and math.isfinite(old_entry_price) and old_entry_price > 0:
+            broker_entry_price = old_entry_price
+        else:
+            logger.critical(
+                "Bot 3 | broker returned invalid average entry after rebalance; "
+                f"flattening | symbol={symbol} entry_price={broker_entry_price}"
+            )
+            _flatten_position(client, symbol)
+            remaining_qty = _broker_position_qty(client, symbol)
+            if remaining_qty <= 1e-9:
+                close_open_row("rebalance_invalid_average_flatten")
+            raise RuntimeError(f"Bot 3 aborted: invalid average entry for {symbol}")
+
+    stop_price = (
+        old_stop_price
+        if side == "sell"
+        else broker_entry_price * (
+            1.0 - CRYPTO_STOP_PCT if symbol in CRYPTO else 1.0 - METAL_STOP_PCT
+        )
+    )
+    stop_order: dict[str, Any] | None = None
+    stop_error: Exception | None = None
+    for attempt in range(2):
+        try:
+            candidate = _arm_stop(
+                client,
+                symbol,
+                settled_qty,
+                broker_entry_price,
+                stop_price=stop_price,
+            )
+            stop_status = str(candidate.get("status", "")).lower()
+            if stop_status in {
+                "rejected", "failed", "error", "canceled", "cancelled",
+            }:
+                raise RuntimeError(
+                    f"broker rejected protective stop with status={stop_status}"
+                )
+            if not candidate.get("id"):
+                raise RuntimeError("broker response did not include a stop order ID")
+            stop_order = candidate
+            break
+        except Exception as exc:
+            stop_error = exc
+            logger.critical(
+                "Bot 3 | protective stop failed after held-position rebalance; "
+                "retrying once | "
+                f"symbol={symbol} qty={settled_qty} attempt={attempt + 1} error={exc}"
+            )
+
+    if stop_order is None:
+        logger.critical(
+            "Bot 3 | protective stop retry failed; flattening immediately | "
+            f"symbol={symbol} qty={settled_qty} error={stop_error}"
+        )
+        _flatten_position(client, symbol)
+        remaining_qty = _broker_position_qty(client, symbol)
+        if remaining_qty <= 1e-9:
+            close_open_row("rebalance_stop_arm_failed")
+            raise RuntimeError(
+                f"Bot 3 aborted after stop failure for {symbol}: "
+                f"{stop_error}; position was flattened"
+            ) from stop_error
+        raise RuntimeError(
+            f"Bot 3 could not arm a stop or confirm flat for {symbol}; "
+            f"remaining_qty={remaining_qty}"
+        ) from stop_error
+
+    stop_order_id = str(stop_order["id"])
+    update_open_row(settled_qty, broker_entry_price, stop_price, stop_order_id)
+    _log_decision(
+        cycle_id,
+        "REBALANCE_HELD_POSITION",
+        symbol=symbol,
+        planned_qty=order_qty,
+        current_price=broker_entry_price,
+        order_id=fill.get("id"),
+        outcome="PROTECTED",
+        context={
+            "side": side,
+            "settled_qty": settled_qty,
+            "entry_price": broker_entry_price,
+            "stop_price": stop_price,
+            "stop_order_id": stop_order_id,
+        },
+    )
+    if trade_error is not None:
+        raise RuntimeError(
+            f"Bot 3 restored protection for {symbol} after an uncertain rebalance order"
+        ) from trade_error
+    return 1
 
 
 def _plan_orders(
@@ -1126,40 +1452,54 @@ def run_bot3_cycle(
         crypto_ceiling_usd=crypto_ceiling_usd,
     )
     orders = 0
+    broker_positions_by_symbol = {
+        _canonical_symbol(position["symbol"]): position
+        for position in raw_positions
+        if _canonical_symbol(position["symbol"]) in ASSETS
+        and float(position.get("qty") or 0) > 0
+    }
+    strategy_positions_by_symbol = {
+        _canonical_symbol(position["symbol"]): position
+        for position in positions
+    }
     for item in plan:
-        if item["side"] == "sell":
-            symbol = _canonical_symbol(item["symbol"])
-            broker_qty = _broker_position_qty(client, symbol)
-            sell_qty = min(float(item["qty"]), broker_qty)
-            if sell_qty > 0:
-                sell_order = client.submit(symbol, "sell", sell_qty, "market")
-                client.wait_for_fill(sell_order["id"])
-                orders += 1
-            continue
+        symbol = _canonical_symbol(item["symbol"])
+        if item["side"] == "buy":
+            allowed, projection = _fresh_buy_guard(client, item, max_deployment)
+            if not allowed:
+                _log_decision(
+                    cycle_id,
+                    "BUY_BLOCKED",
+                    symbol=item["symbol"],
+                    planned_qty=item["qty"],
+                    current_price=item.get("price"),
+                    reason="cash_or_deployment_guard",
+                    context=projection,
+                )
+                logger.critical(
+                    "Bot 3 | BUY BLOCKED by cash/deployment guard | "
+                    f"symbol={item['symbol']} qty={item['qty']:.8f} "
+                    f"projected_cash=${projection['projected_cash']:,.2f} "
+                    f"projected_long=${projection['projected_long_market_value']:,.2f} "
+                    f"projected_deployment={projection['projected_deployment']:.2%} "
+                    f"max_deployment={max_deployment:.2%}"
+                )
+                continue
 
-        allowed, projection = _fresh_buy_guard(client, item, max_deployment)
-        if not allowed:
-            _log_decision(
-                cycle_id,
-                "BUY_BLOCKED",
-                symbol=item["symbol"],
-                planned_qty=item["qty"],
-                current_price=item.get("price"),
-                reason="cash_or_deployment_guard",
-                context=projection,
+        if symbol in broker_positions_by_symbol:
+            stored_position = strategy_positions_by_symbol.get(symbol)
+            if stored_position is None:
+                raise RuntimeError(
+                    f"Bot 3 broker holds {symbol} but has no open strategy position row"
+                )
+            orders += _rebalance_existing_holding(
+                client, item, stored_position, cycle_id
             )
-            logger.critical(
-                "Bot 3 | BUY BLOCKED by cash/deployment guard | "
-                f"symbol={item['symbol']} qty={item['qty']:.8f} "
-                f"projected_cash=${projection['projected_cash']:,.2f} "
-                f"projected_long=${projection['projected_long_market_value']:,.2f} "
-                f"projected_deployment={projection['projected_deployment']:.2%} "
-                f"max_deployment={max_deployment:.2%}"
-            )
+        elif item["side"] == "buy":
+            _place_confirmed_entry(client, item["symbol"], item["qty"], cycle_id)
+            orders += 1
+        else:
             continue
-
-        _place_confirmed_entry(client, item["symbol"], item["qty"], cycle_id)
-        orders += 1
     return {
         "status": "complete",
         "orders": orders,

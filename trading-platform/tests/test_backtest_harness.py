@@ -186,8 +186,9 @@ def test_signal_on_day_t_executes_at_next_close_and_gets_no_future_history() -> 
 
     def signal(history, decision_day):
         assert all(day <= decision_day for day in history["AAA"])
-        with pytest.raises(KeyError):
-            _ = history["AAA"][future_day]
+        if decision_day < future_day:
+            with pytest.raises(KeyError):
+                _ = history["AAA"][future_day]
         return {"AAA": 1.0} if decision_day == days[0] else None
 
     result = _run(panel, signal)
@@ -200,7 +201,7 @@ def test_signal_on_day_t_executes_at_next_close_and_gets_no_future_history() -> 
 
 
 def test_holdout_run_requires_registered_uncompleted_experiment() -> None:
-    days = [EXPLORE_DAY := harness.EXPLORE_END, harness.EXPLORE_END + timedelta(days=1)]
+    days = [harness.EXPLORE_END, harness.EXPLORE_END + timedelta(days=1)]
     panel = _panel({"AAA": [10, 10]}, days=days)
 
     with pytest.raises(ValueError, match="registered research_ledger experiment"):
@@ -213,6 +214,62 @@ def test_holdout_run_requires_registered_uncompleted_experiment() -> None:
             borrow_fee_rate=0,
             risk_free_rate=0,
         )
+
+
+@pytest.mark.parametrize(
+    ("ledger_row", "should_raise"),
+    [
+        ((True,), False),
+        ((False,), True),
+        (None, True),
+    ],
+)
+def test_holdout_accepts_only_existing_experiments_without_results(
+    monkeypatch: pytest.MonkeyPatch,
+    ledger_row: tuple[bool] | None,
+    should_raise: bool,
+) -> None:
+    days = [harness.EXPLORE_END, harness.EXPLORE_END + timedelta(days=1)]
+    panel = _panel({"AAA": [10, 10]}, days=days)
+
+    class LedgerCursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def execute(self, query: str, params: tuple[int]) -> None:
+            assert "FROM research_ledger" in query
+            assert params == (17,)
+
+        def fetchone(self):
+            return ledger_row
+
+    class LedgerConnection:
+        def cursor(self) -> LedgerCursor:
+            return LedgerCursor()
+
+    @contextmanager
+    def fake_research_connection():
+        yield LedgerConnection()
+
+    monkeypatch.setattr(harness, "get_research_conn", fake_research_connection)
+    call = lambda: harness.run_backtest(
+        panel,
+        lambda _history, _day: None,
+        days[0],
+        days[1],
+        cost_bps=0,
+        borrow_fee_rate=0,
+        risk_free_rate=0,
+        registered_experiment_id=17,
+    )
+    if should_raise:
+        with pytest.raises(ValueError, match="exists and has no results recorded"):
+            call()
+    else:
+        assert call().data_window["requested_end"] == days[1].isoformat()
 
 
 def test_quality_flagged_rows_are_dropped_without_price_filling() -> None:
@@ -233,6 +290,23 @@ def test_quality_flagged_rows_are_dropped_without_price_filling() -> None:
         days[0], days[2], days[3]
     ]
     assert result.data_window["flagged_rows_dropped"] == 1
+
+
+def test_margin_call_is_recorded_and_position_is_reduced_to_gross_cap() -> None:
+    days = _days(3)
+    panel = _panel({"AAA": [10, 10, 4]}, days=days)
+    result = _run(
+        panel,
+        _signal_on(days[0], {"AAA": 1.5}),
+        max_gross=1.5,
+    )
+
+    margin_call = next(
+        event for event in result.events if event["type"] == "margin_call"
+    )
+    after_call = result.equity_curve[-1]
+    assert margin_call["equity_to_gross_before"] < 0.30
+    assert after_call["gross_exposure"] / after_call["equity"] == pytest.approx(1.5)
 
 
 class _CheckingCursor:

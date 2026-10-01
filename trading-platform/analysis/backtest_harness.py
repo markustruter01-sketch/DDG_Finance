@@ -4,6 +4,10 @@ Signals are computed from an as-of view containing no prices later than the
 decision date. A non-empty signal maps symbols to signed target weights of
 equity; omitted symbols are targeted to zero. It is executed at the next
 common valid close. Empty mappings and None mean "no new signal".
+
+The Bot 3 rebalanced backtest is not reused: its rebalance path assumes
+non-negative holdings, and it reads through the shared application DB rather
+than the isolated Helium research connection.
 """
 
 from __future__ import annotations
@@ -132,7 +136,12 @@ def load_adjusted_close(
     end_date: date | None = None,
 ) -> PricePanel:
     """Load adjusted closes from Helium; quality-flagged rows are dropped, not filled."""
-    selected = tuple(dict.fromkeys(symbol.strip() for symbol in symbols))
+    if isinstance(symbols, (str, bytes)):
+        raise ValueError("symbols must be a sequence of symbol names, not a string")
+    raw_symbols = tuple(symbols)
+    if any(not isinstance(symbol, str) for symbol in raw_symbols):
+        raise ValueError("Every symbol must be a string")
+    selected = tuple(dict.fromkeys(symbol.strip() for symbol in raw_symbols))
     if not selected or any(not symbol for symbol in selected):
         raise ValueError("At least one non-empty symbol is required")
     if start_date is not None:
@@ -203,13 +212,15 @@ class _AsOfSeries(Mapping[date, float]):
 class _AsOfPanel(Mapping[str, Mapping[date, float]]):
     """Read-only, lazily sliced view that rejects all future-date lookups."""
 
-    def __init__(self, panel: PricePanel, cutoff: date) -> None:
+    def __init__(
+        self,
+        panel: PricePanel,
+        cutoff: date,
+        ordered_dates: Mapping[str, tuple[date, ...]],
+    ) -> None:
         self._panel = panel
         self._cutoff = cutoff
-        self._ordered_dates = {
-            symbol: tuple(sorted(series))
-            for symbol, series in panel.closes.items()
-        }
+        self._ordered_dates = ordered_dates
 
     def __getitem__(self, symbol: str) -> Mapping[date, float]:
         series = self._panel.closes[symbol]
@@ -444,6 +455,183 @@ def _enforce_gross_cap(
     raise RuntimeError(f"Could not enforce max_gross={max_gross} on {day}")
 
 
+def _accrue_financing(
+    book: _Book,
+    previous_prices: Mapping[str, float],
+    *,
+    calendar_days: int,
+    margin_rate: float,
+    borrow_fee_rate: float,
+    day: date,
+    events: list[dict[str, Any]],
+) -> None:
+    """Charge margin interest and short borrow fees for the elapsed calendar days."""
+    if calendar_days <= 0:
+        return
+    interest = (
+        max(0.0, -book.cash)
+        * margin_rate
+        * calendar_days
+        / CALENDAR_DAYS_PER_YEAR
+    )
+    short_market_value = sum(
+        max(0.0, -book.quantities[symbol]) * previous_prices[symbol]
+        for symbol in book.quantities
+    )
+    borrow_fee = (
+        short_market_value
+        * borrow_fee_rate
+        * calendar_days
+        / CALENDAR_DAYS_PER_YEAR
+    )
+    book.cash -= interest + borrow_fee
+    book.total_interest += interest
+    book.total_borrow_fees += borrow_fee
+    if interest:
+        events.append(
+            {
+                "type": "margin_interest",
+                "date": day.isoformat(),
+                "calendar_days": calendar_days,
+                "amount": interest,
+            }
+        )
+    if borrow_fee:
+        events.append(
+            {
+                "type": "borrow_fee",
+                "date": day.isoformat(),
+                "calendar_days": calendar_days,
+                "amount": borrow_fee,
+            }
+        )
+
+
+def _check_maintenance_margin(
+    book: _Book,
+    prices: Mapping[str, float],
+    *,
+    cost_rate: float,
+    max_gross: float,
+    whole_shares: bool,
+    day: date,
+    events: list[dict[str, Any]],
+) -> bool:
+    """Record a maintenance call and de-lever the book to its gross cap."""
+    equity = _equity(book, prices)
+    gross, _ = _gross_and_net(book, prices)
+    ratio = equity / gross if gross > 0 else math.inf
+    if gross <= 0 or ratio >= MAINTENANCE_EQUITY_RATIO:
+        return False
+    events.append(
+        {
+            "type": "margin_call",
+            "date": day.isoformat(),
+            "equity_before": equity,
+            "gross_exposure_before": gross,
+            "equity_to_gross_before": ratio,
+        }
+    )
+    # The default cap (1.5x) is below the maintenance limit (3.33x).
+    # Keep both limits satisfied when callers configure a larger max_gross.
+    maintenance_cap = min(max_gross, 1.0 / MAINTENANCE_EQUITY_RATIO)
+    _enforce_gross_cap(
+        book,
+        prices,
+        cost_rate=cost_rate,
+        max_gross=maintenance_cap,
+        whole_shares=whole_shares,
+        day=day,
+        reason="margin_call_deleverage",
+        events=events,
+    )
+    return True
+
+
+def _exit_due_stops(
+    book: _Book,
+    stopped_symbols: set[str],
+    prices: Mapping[str, float],
+    *,
+    cost_rate: float,
+    whole_shares: bool,
+    day: date,
+    events: list[dict[str, Any]],
+) -> None:
+    """Exit stop-triggered positions at this close, charging normal trade costs."""
+    for symbol in sorted(stopped_symbols):
+        if abs(book.quantities[symbol]) <= _EPSILON:
+            continue
+        _trade_to_quantities(
+            book,
+            {**book.quantities, symbol: 0.0},
+            prices,
+            cost_rate=cost_rate,
+            whole_shares=whole_shares,
+            day=day,
+            reason="trailing_stop_exit",
+            events=events,
+        )
+        events.append(
+            {
+                "type": "trailing_stop_exit",
+                "date": day.isoformat(),
+                "symbol": symbol,
+                "price": prices[symbol],
+            }
+        )
+
+
+def _update_trailing_stops(
+    book: _Book,
+    prices: Mapping[str, float],
+    *,
+    trail_pct: float | None,
+    day: date,
+    next_close_available: bool,
+    pending_stops: set[str],
+    events: list[dict[str, Any]],
+) -> None:
+    """Update long/short trailing levels and schedule close breaches for next close."""
+    if trail_pct is None:
+        return
+    for symbol, quantity in book.quantities.items():
+        if quantity > 0:
+            high = max(
+                book.high_water.get(symbol, prices[symbol]),
+                prices[symbol],
+            )
+            book.high_water[symbol] = high
+            stop_price = high * (1.0 - trail_pct)
+            breached = prices[symbol] <= stop_price
+            side = "long"
+        elif quantity < 0:
+            low = min(
+                book.low_water.get(symbol, prices[symbol]),
+                prices[symbol],
+            )
+            book.low_water[symbol] = low
+            stop_price = low * (1.0 + trail_pct)
+            breached = prices[symbol] >= stop_price
+            side = "short"
+        else:
+            continue
+        if breached:
+            if next_close_available:
+                pending_stops.add(symbol)
+            events.append(
+                {
+                    "type": "trailing_stop_triggered",
+                    "date": day.isoformat(),
+                    "symbol": symbol,
+                    "side": side,
+                    "stop_price": stop_price,
+                    "close": prices[symbol],
+                    "next_close_available": next_close_available,
+                }
+            )
+
+
 def _rebalance_to_weights(
     book: _Book,
     target_weights: Mapping[str, float],
@@ -525,6 +713,7 @@ def _calculate_metrics(
     starting_equity: float,
     risk_free_rate: float,
     book: _Book,
+    number_of_trades: int,
 ) -> dict[str, float | int]:
     equities = [float(point["equity"]) for point in equity_curve]
     dates = [point["date"] for point in equity_curve]
@@ -573,9 +762,14 @@ def _calculate_metrics(
     elif equities[-1] <= 0:
         cagr = -1.0
     else:
-        cagr = (equities[-1] / starting_equity) ** (
-            CALENDAR_DAYS_PER_YEAR / elapsed_days
-        ) - 1.0
+        try:
+            cagr = (equities[-1] / starting_equity) ** (
+                CALENDAR_DAYS_PER_YEAR / elapsed_days
+            ) - 1.0
+        except OverflowError as exc:
+            raise ValueError("CAGR overflowed; check run horizon and price inputs") from exc
+        if not math.isfinite(cagr):
+            raise ValueError("CAGR is not finite; check run horizon and price inputs")
     calmar = cagr / max_drawdown if max_drawdown > 0 else 0.0
 
     gross_exposures = [
@@ -604,9 +798,7 @@ def _calculate_metrics(
         "turnover": turnover,
         "average_gross_exposure": mean(gross_exposures) if gross_exposures else 0.0,
         "average_net_exposure": mean(net_exposures) if net_exposures else 0.0,
-        "number_of_trades": sum(
-            1 for event in ()  # replaced below with the book-level total
-        ),
+        "number_of_trades": number_of_trades,
         "total_costs": book.total_costs,
         "total_interest": book.total_interest,
         "total_borrow_fees": book.total_borrow_fees,
@@ -695,6 +887,10 @@ def run_backtest(
     previous_prices: dict[str, float] | None = None
     pending_signal: dict[str, float] | None = None
     pending_stops: set[str] = set()
+    ordered_dates = {
+        symbol: tuple(sorted(series))
+        for symbol, series in panel.closes.items()
+    }
 
     for index, day in enumerate(sessions):
         current_prices = {
@@ -703,101 +899,38 @@ def run_backtest(
         }
 
         if previous_day is not None and previous_prices is not None:
-            calendar_days = (day - previous_day).days
-            if calendar_days > 0:
-                interest = (
-                    max(0.0, -book.cash)
-                    * margin_rate
-                    * calendar_days
-                    / CALENDAR_DAYS_PER_YEAR
-                )
-                short_market_value = sum(
-                    max(0.0, -book.quantities[symbol])
-                    * previous_prices[symbol]
-                    for symbol in symbols
-                )
-                borrow_fee = (
-                    short_market_value
-                    * borrow_fee_rate
-                    * calendar_days
-                    / CALENDAR_DAYS_PER_YEAR
-                )
-                book.cash -= interest + borrow_fee
-                book.total_interest += interest
-                book.total_borrow_fees += borrow_fee
-                if interest:
-                    events.append(
-                        {
-                            "type": "margin_interest",
-                            "date": day.isoformat(),
-                            "calendar_days": calendar_days,
-                            "amount": interest,
-                        }
-                    )
-                if borrow_fee:
-                    events.append(
-                        {
-                            "type": "borrow_fee",
-                            "date": day.isoformat(),
-                            "calendar_days": calendar_days,
-                            "amount": borrow_fee,
-                        }
-                    )
-
-        # Check maintenance against the marked portfolio before scheduled trades.
-        equity_before_orders = _equity(book, current_prices)
-        gross_before_orders, _ = _gross_and_net(book, current_prices)
-        maintenance_ratio = (
-            equity_before_orders / gross_before_orders
-            if gross_before_orders > 0
-            else math.inf
-        )
-        if (
-            gross_before_orders > 0
-            and maintenance_ratio < MAINTENANCE_EQUITY_RATIO
-        ):
-            events.append(
-                {
-                    "type": "margin_call",
-                    "date": day.isoformat(),
-                    "equity_before": equity_before_orders,
-                    "gross_exposure_before": gross_before_orders,
-                    "equity_to_gross_before": maintenance_ratio,
-                }
-            )
-            _enforce_gross_cap(
+            _accrue_financing(
                 book,
-                current_prices,
-                cost_rate=cost_rate,
-                max_gross=min(max_gross, 1.0 / MAINTENANCE_EQUITY_RATIO),
-                whole_shares=whole_shares,
+                previous_prices,
+                calendar_days=(day - previous_day).days,
+                margin_rate=margin_rate,
+                borrow_fee_rate=borrow_fee_rate,
                 day=day,
-                reason="margin_call_deleverage",
                 events=events,
             )
 
+        # Check maintenance against the marked portfolio before scheduled trades.
+        _check_maintenance_margin(
+            book,
+            current_prices,
+            cost_rate=cost_rate,
+            max_gross=max_gross,
+            whole_shares=whole_shares,
+            day=day,
+            events=events,
+        )
+
         stopped_today = set(pending_stops)
         pending_stops.clear()
-        for symbol in sorted(stopped_today):
-            if abs(book.quantities[symbol]) > _EPSILON:
-                _trade_to_quantities(
-                    book,
-                    {**book.quantities, symbol: 0.0},
-                    current_prices,
-                    cost_rate=cost_rate,
-                    whole_shares=whole_shares,
-                    day=day,
-                    reason="trailing_stop_exit",
-                    events=events,
-                )
-                events.append(
-                    {
-                        "type": "trailing_stop_exit",
-                        "date": day.isoformat(),
-                        "symbol": symbol,
-                        "price": current_prices[symbol],
-                    }
-                )
+        _exit_due_stops(
+            book,
+            stopped_today,
+            current_prices,
+            cost_rate=cost_rate,
+            whole_shares=whole_shares,
+            day=day,
+            events=events,
+        )
 
         if pending_signal is not None:
             targets = dict(pending_signal)
@@ -827,42 +960,17 @@ def run_backtest(
             }
         )
 
-        if trail_pct is not None and index + 1 < len(sessions):
-            for symbol, quantity in book.quantities.items():
-                if quantity > 0:
-                    high = max(book.high_water.get(symbol, current_prices[symbol]), current_prices[symbol])
-                    book.high_water[symbol] = high
-                    stop_price = high * (1.0 - trail_pct)
-                    if current_prices[symbol] <= stop_price:
-                        pending_stops.add(symbol)
-                        events.append(
-                            {
-                                "type": "trailing_stop_triggered",
-                                "date": day.isoformat(),
-                                "symbol": symbol,
-                                "side": "long",
-                                "stop_price": stop_price,
-                                "close": current_prices[symbol],
-                            }
-                        )
-                elif quantity < 0:
-                    low = min(book.low_water.get(symbol, current_prices[symbol]), current_prices[symbol])
-                    book.low_water[symbol] = low
-                    stop_price = low * (1.0 + trail_pct)
-                    if current_prices[symbol] >= stop_price:
-                        pending_stops.add(symbol)
-                        events.append(
-                            {
-                                "type": "trailing_stop_triggered",
-                                "date": day.isoformat(),
-                                "symbol": symbol,
-                                "side": "short",
-                                "stop_price": stop_price,
-                                "close": current_prices[symbol],
-                            }
-                        )
+        _update_trailing_stops(
+            book,
+            current_prices,
+            trail_pct=trail_pct,
+            day=day,
+            next_close_available=index + 1 < len(sessions),
+            pending_stops=pending_stops,
+            events=events,
+        )
 
-        as_of_history = _AsOfPanel(panel, day)
+        as_of_history = _AsOfPanel(panel, day, ordered_dates)
         raw_signal = signal_function(as_of_history, day)
         normalized_signal = _normalise_signal(raw_signal, symbols)
         if normalized_signal is not None:
@@ -880,9 +988,7 @@ def run_backtest(
         starting_equity=starting_equity,
         risk_free_rate=risk_free_rate,
         book=book,
-    )
-    metrics["number_of_trades"] = sum(
-        event["type"] == "trade" for event in events
+        number_of_trades=sum(event["type"] == "trade" for event in events),
     )
     parameters: dict[str, Any] = {
         "cost_bps": cost_bps,

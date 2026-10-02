@@ -9,22 +9,24 @@ The research signal is deliberately mechanical:
    * 252 prior sessions, top 500 by trailing 60-session median dollar volume
   * trailing 60-session median close > $5
   * 12-1 momentum, with the most recent 21 sessions skipped
-  * top 20, equal weight, monthly first-trading-day rebalance
+  * top 50, equal weight, monthly first-trading-day rebalance
 """
 
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import logging
 import math
 import os
+import statistics
 import sys
 import time
 import uuid
 from datetime import date, datetime, time as dt_time, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 import requests
 
@@ -52,11 +54,27 @@ except Exception:  # pragma: no cover - only relevant to a broken deployment
 
 logger = logging.getLogger("bot2.momentum")
 
+
+def _load_bot2_profile() -> dict[str, Any]:
+    """Load Bot 2's profile without confusing it with trading-platform/config."""
+    config_path = _ROOT / "kraken-bot" / "config.py"
+    spec = importlib.util.spec_from_file_location("_bot2_profile_config", config_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Bot 2 profile could not be loaded from {config_path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    try:
+        return module.BOT_PROFILES["bot2_spy_qqq"]
+    except (AttributeError, KeyError) as exc:
+        raise RuntimeError("Bot 2 profile is missing from kraken-bot/config.py") from exc
+
+
+BOT2_PROFILE = _load_bot2_profile()
 BOT_ID = "spy_qqq_trend"
 BOT_PAUSED = True
 ALPACA_BASE_URL = "https://paper-api.alpaca.markets"
 ALPACA_DATA_BASE_URL = "https://data.alpaca.markets"
-MAX_POSITIONS = 20
+MAX_POSITIONS = int(BOT2_PROFILE["MAX_POSITIONS"])
 SLIPPAGE_BPS = 10
 MIN_PRIOR_SESSIONS = 252
 SKIP_RECENT_SESSIONS = 21
@@ -72,6 +90,13 @@ SECTOR_CACHE_FILE = _ROOT / "trading-platform" / ".local" / "bot2_fullmarket_sec
 STRATEGY_TABLE = "bot2_momentum_positions"
 EQUITY_SESSION_OPEN = dt_time(9, 30)
 EQUITY_SESSION_CLOSE = dt_time(16, 0)
+VOLATILITY_TARGET_ANNUAL = 0.12
+VOLATILITY_LOOKBACK_SESSIONS = 126
+VOLATILITY_ANNUALIZATION_SESSIONS = 252
+COOLDOWN_SESSIONS = 63
+STOP_FILLED_EXIT_REASONS = frozenset({"stop_filled"})
+SGOV_QTY_DUST = 1e-6
+_NYSE_HOLIDAY_CACHE: dict[int, set[date]] = {}
 
 CREATE_TABLE_SQL = f"""
 CREATE TABLE IF NOT EXISTS {STRATEGY_TABLE} (
@@ -417,6 +442,9 @@ class AlpacaMomentumClient:
         response.setdefault("client_order_id", client_order_id)
         return response
 
+    def get_order(self, order_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/v2/orders/{order_id}") or {}
+
     def wait_for_fill(self, order_id: str, attempts: int = 30) -> dict[str, Any]:
         terminal = {"filled", "partially_filled", "canceled", "rejected", "expired", "done_for_day"}
         latest: dict[str, Any] = {}
@@ -488,6 +516,247 @@ def load_open_positions(bot_id: str = BOT_ID) -> list[dict[str, Any]]:
                 }
                 for row in cur.fetchall()
             ]
+
+
+def load_closed_position_history(
+    bot_id: str = BOT_ID,
+) -> tuple[list[tuple[Any, Any, Any]], bool]:
+    """Read closed strategy rows for stop cooldowns; never create the table here."""
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    SELECT symbol, closed_at, exit_reason
+                    FROM {STRATEGY_TABLE}
+                    WHERE bot_id=%s AND status='closed' AND closed_at IS NOT NULL
+                    ORDER BY closed_at DESC
+                    """,
+                    (bot_id,),
+                )
+                return list(cur.fetchall()), True
+    except Exception as exc:
+        if getattr(exc, "pgcode", None) == "42P01":
+            logger.warning(
+                "Bot 2 | cooldown history table is not initialized; "
+                "no closed strategy rows are available"
+            )
+            return [], False
+        raise
+
+
+def load_bot2_daily_equity_points(as_of: date) -> list[tuple[date, float]]:
+    """Read Bot 2's latest per-session equity marks strictly before as_of."""
+    cutoff = datetime.combine(as_of, dt_time.min, tzinfo=_eastern())
+    start = cutoff - timedelta(days=500)
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT session_date, equity_usd
+                    FROM (
+                        SELECT
+                            (snapshot_ts AT TIME ZONE 'America/New_York')::date AS session_date,
+                            equity_usd,
+                            ROW_NUMBER() OVER (
+                                PARTITION BY (snapshot_ts AT TIME ZONE 'America/New_York')::date
+                                ORDER BY snapshot_ts DESC
+                            ) AS session_rank
+                        FROM fleet_equity_snapshots
+                        WHERE bot_id=%s AND snapshot_ts >= %s AND snapshot_ts < %s
+                    ) daily
+                    WHERE session_rank=1
+                    ORDER BY session_date DESC
+                    """,
+                    (BOT_ID, start, cutoff),
+                )
+                return [
+                    (row[0], float(row[1]))
+                    for row in cur.fetchall()
+                ]
+    except Exception as exc:
+        if getattr(exc, "pgcode", None) == "42P01":
+            logger.warning("Bot 2 | equity snapshot history is unavailable")
+            return []
+        raise
+
+
+def _nyse_holidays(year: int) -> set[date]:
+    cached = _NYSE_HOLIDAY_CACHE.get(year)
+    if cached is not None:
+        return cached
+    try:
+        import holidays
+
+        result = set(holidays.NYSE(years=year).keys())
+    except Exception as exc:
+        raise RuntimeError(
+            f"Bot 2 requires the NYSE holiday calendar for {year}"
+        ) from exc
+    _NYSE_HOLIDAY_CACHE[year] = result
+    return result
+
+
+def _is_nyse_session(day: date) -> bool:
+    return day.weekday() < 5 and day not in _nyse_holidays(day.year)
+
+
+def _nyse_sessions_before(as_of: date, count: int) -> list[date]:
+    """Return the latest count NYSE sessions before as_of, oldest first."""
+    if count <= 0:
+        return []
+    sessions: list[date] = []
+    day = as_of - timedelta(days=1)
+    while len(sessions) < count:
+        if _is_nyse_session(day):
+            sessions.append(day)
+        day -= timedelta(days=1)
+    sessions.reverse()
+    return sessions
+
+
+def nyse_sessions_after(close_date: date, count: int) -> list[date]:
+    """Return the first count NYSE sessions strictly after a close date."""
+    if count <= 0:
+        return []
+    sessions: list[date] = []
+    day = close_date + timedelta(days=1)
+    while len(sessions) < count:
+        if _is_nyse_session(day):
+            sessions.append(day)
+        day += timedelta(days=1)
+    return sessions
+
+
+def _closed_at_session_date(closed_at: Any) -> date:
+    if isinstance(closed_at, datetime):
+        value = closed_at
+    else:
+        value = datetime.fromisoformat(str(closed_at).replace("Z", "+00:00"))
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(_eastern()).date()
+
+
+def _is_stop_filled_exit_reason(exit_reason: Any) -> bool:
+    normalized = str(exit_reason or "").strip().lower().replace("-", "_").replace(" ", "_")
+    return normalized in STOP_FILLED_EXIT_REASONS
+
+
+def build_stop_cooldowns(
+    closed_rows: Sequence[tuple[Any, Any, Any]],
+    as_of: date,
+) -> dict[str, dict[str, Any]]:
+    """Keep only stop-filled exits through session 63; session 64 is eligible."""
+    cooldowns: dict[str, dict[str, Any]] = {}
+    release_session = COOLDOWN_SESSIONS + 1
+    for symbol, closed_at, exit_reason in closed_rows:
+        normalized_symbol = canonical_symbol(symbol)
+        if (
+            not normalized_symbol
+            or closed_at is None
+            or not _is_stop_filled_exit_reason(exit_reason)
+        ):
+            continue
+        close_date = _closed_at_session_date(closed_at)
+        release_date = nyse_sessions_after(close_date, release_session)[-1]
+        if as_of >= release_date:
+            continue
+        current = cooldowns.get(normalized_symbol)
+        if current is None or release_date > current["release_date"]:
+            cooldowns[normalized_symbol] = {
+                "closed_at": closed_at,
+                "exit_reason": str(exit_reason),
+                "release_date": release_date,
+            }
+    return cooldowns
+
+
+def daily_returns_from_equity_points(
+    points: Sequence[tuple[date, float]],
+    as_of: date,
+) -> list[float]:
+    """Return only consecutive NYSE-session returns within the 126-session window."""
+    sessions = _nyse_sessions_before(as_of, VOLATILITY_LOOKBACK_SESSIONS + 1)
+    expected = set(sessions)
+    equity_by_session: dict[date, float] = {}
+    for session_date, equity in points:
+        value = float(equity)
+        if session_date in expected and math.isfinite(value) and value > 0:
+            equity_by_session[session_date] = value
+    returns = []
+    for previous, current in zip(sessions, sessions[1:]):
+        if previous in equity_by_session and current in equity_by_session:
+            returns.append(equity_by_session[current] / equity_by_session[previous] - 1.0)
+    return returns
+
+
+def calculate_volatility_multiplier(daily_returns: Sequence[float]) -> dict[str, Any]:
+    """Apply run-106's annualized-volatility sizing rule to 126 daily returns."""
+    values = [float(value) for value in daily_returns]
+    if any(not math.isfinite(value) for value in values):
+        raise ValueError("Bot 2 daily returns must be finite")
+    if len(values) < VOLATILITY_LOOKBACK_SESSIONS:
+        return {
+            "multiplier": 1.0,
+            "annualized_volatility": None,
+            "return_count": len(values),
+            "reason": "insufficient_returns",
+        }
+    annualized_volatility = (
+        statistics.stdev(values[-VOLATILITY_LOOKBACK_SESSIONS:])
+        * math.sqrt(VOLATILITY_ANNUALIZATION_SESSIONS)
+    )
+    if not math.isfinite(annualized_volatility) or annualized_volatility <= 0:
+        return {
+            "multiplier": 1.0,
+            "annualized_volatility": annualized_volatility,
+            "return_count": VOLATILITY_LOOKBACK_SESSIONS,
+            "reason": "zero_volatility",
+        }
+    return {
+        "multiplier": min(1.0, VOLATILITY_TARGET_ANNUAL / annualized_volatility),
+        "annualized_volatility": annualized_volatility,
+        "return_count": VOLATILITY_LOOKBACK_SESSIONS,
+        "reason": "calculated",
+    }
+
+
+def load_bot2_volatility(as_of: date) -> dict[str, Any]:
+    points = load_bot2_daily_equity_points(as_of)
+    return calculate_volatility_multiplier(
+        daily_returns_from_equity_points(points, as_of)
+    )
+
+
+def build_target_allocation_plan(
+    equity: float,
+    vault_market_value: float,
+    ranked: Sequence[dict[str, Any]],
+    multiplier: float,
+    benched_symbols: set[str] | frozenset[str] = frozenset(),
+) -> dict[str, Any]:
+    """Keep original rank slots fixed; benched/unused allocation remains in SGOV."""
+    if not math.isfinite(float(multiplier)) or not 0.0 <= float(multiplier) <= 1.0:
+        raise ValueError("Bot 2 volatility multiplier must be between zero and one")
+    base = allocation_plan(equity, vault_market_value, len(ranked))
+    slot_notional = base["equal_weight_notional"]
+    scaled_notional = slot_notional * float(multiplier)
+    targets: dict[str, float] = {}
+    for item in ranked:
+        symbol = canonical_symbol(item["symbol"])
+        targets[symbol] = 0.0 if symbol in benched_symbols else scaled_notional
+    stock_target = sum(targets.values())
+    sgov_target = max(0.0, base["target_base"] - stock_target)
+    return {
+        **base,
+        "slot_notional": slot_notional,
+        "scaled_position_notional": scaled_notional,
+        "target_allocations": targets,
+        "stock_target": stock_target,
+        "sgov_target": sgov_target,
+    }
 
 
 def record_open(
@@ -637,14 +906,63 @@ def _place_confirmed_entry(
     return True
 
 
+def _filled_stop_exit(
+    order: dict[str, Any], position: dict[str, Any]
+) -> tuple[int, float | None] | None:
+    if (
+        str(order.get("status", "")).lower() != "filled"
+        or str(order.get("side", "")).lower() != "sell"
+        or str(order.get("type", "")).lower() not in {"stop", "stop_limit"}
+    ):
+        return None
+    try:
+        quantity = min(
+            int(position["qty"]),
+            math.floor(float(order.get("filled_qty") or position["qty"])),
+        )
+        fill_price = float(order.get("filled_avg_price") or 0)
+    except (KeyError, TypeError, ValueError):
+        return None
+    if quantity < 1:
+        return None
+    realised_pnl = (
+        (fill_price - float(position["entry_price"])) * quantity
+        if fill_price > 0
+        else None
+    )
+    return quantity, realised_pnl
+
+
 def _reconcile_protective_stops(
     client: AlpacaMomentumClient,
     db_positions: list[dict[str, Any]],
-) -> None:
+) -> list[dict[str, Any]]:
     """Re-arm only this strategy's missing stops before rebalance sells."""
+    stop_closed_symbols: set[str] = set()
     for position in db_positions:
         symbol = canonical_symbol(position["symbol"])
         if _broker_qty(client, symbol) < 1:
+            stop_order_id = position.get("stop_order_id")
+            if stop_order_id:
+                try:
+                    stop_order = client.get_order(str(stop_order_id))
+                except Exception as exc:
+                    logger.warning(
+                        "Bot 2 | could not verify stop order for flat position "
+                        "symbol=%s order_id=%s error=%s",
+                        symbol, stop_order_id, exc,
+                    )
+                    continue
+                filled_exit = _filled_stop_exit(stop_order, position)
+                if filled_exit is not None:
+                    _, realised_pnl = filled_exit
+                    record_close(symbol, "stop_filled", realised_pnl)
+                    stop_closed_symbols.add(symbol)
+                    logger.info(
+                        "Bot 2 | stop fill recorded symbol=%s exit_reason=stop_filled "
+                        "realised_pnl=%s",
+                        symbol, realised_pnl,
+                    )
             continue
         if _owned_stop(client, symbol, position.get("stop_order_id")):
             continue
@@ -669,6 +987,10 @@ def _reconcile_protective_stops(
                 f"{symbol}: restart stop reconciliation failed: {first_error}"
             )
         record_stop_order(symbol, str(stop["id"]))
+    return [
+        position for position in db_positions
+        if canonical_symbol(position["symbol"]) not in stop_closed_symbols
+    ]
 
 
 def _sell_confirmed(
@@ -732,34 +1054,69 @@ def _build_book(
     )
     ranked = rank_momentum(screened, bars, as_of)
     logger.info(
-        "Bot 2 | LIVE_FUNNEL %s ranked_top20=%d",
+        "Bot 2 | LIVE_FUNNEL %s ranked_top50=%d",
         " ".join(f"{key}={value}" for key, value in sorted(funnel.items())),
         len(ranked),
     )
     print(
         "LIVE_FUNNEL | "
         + " | ".join(f"{key}={value}" for key, value in sorted(funnel.items()))
-        + f" | ranked_top20={len(ranked)}"
+        + f" | ranked_top50={len(ranked)}"
     )
     return ranked, screened, bars
 
 
-def _park_idle_cash(client: AlpacaMomentumClient, vault_symbols: set[str]) -> None:
+def _park_idle_cash(
+    client: AlpacaMomentumClient, vault_symbols: set[str]
+) -> dict[str, float]:
     """Park residual cash in SGOV only after stock work is complete."""
     positions = client.positions()
-    if any(canonical_symbol(p["symbol"]) == PARK_SYMBOL for p in positions):
-        return
     account = client.account()
     price = client.latest_price(PARK_SYMBOL)
-    qty = math.floor(float(account["cash"]) / price)
+    if not math.isfinite(price) or price <= 0:
+        raise RuntimeError("Bot 2 cannot park idle cash without a valid SGOV price")
+    held_qty = sum(
+        max(0.0, float(position.get("qty", 0) or 0))
+        for position in positions
+        if canonical_symbol(position.get("symbol")) == PARK_SYMBOL
+    )
+    if held_qty < SGOV_QTY_DUST:
+        held_qty = 0.0
+    idle_cash = max(0.0, float(account["cash"]))
+    target_qty = math.floor((held_qty * price + idle_cash) / price)
+    qty = min(
+        max(0, target_qty - math.floor(held_qty)),
+        math.floor(idle_cash / price),
+    )
     if qty < 1:
-        return
+        return {
+            "held_qty": held_qty,
+            "target_qty": float(target_qty),
+            "buy_qty": 0.0,
+            "idle_cash": idle_cash,
+        }
     allowed, projection = fresh_buy_guard(
         account, positions, qty * price,
         excluded_symbols=set(vault_symbols) | {PARK_SYMBOL},
     )
     if allowed:
         client.submit(PARK_SYMBOL, "buy", qty, "market")
+        return {
+            "held_qty": held_qty,
+            "target_qty": float(target_qty),
+            "buy_qty": float(qty),
+            "idle_cash": idle_cash,
+        }
+    logger.warning(
+        "Bot 2 | SGOV parking blocked qty=%s projected_cash=%.2f deployment=%.2f",
+        qty, projection["projected_cash"], projection["projected_deployment"],
+    )
+    return {
+        "held_qty": held_qty,
+        "target_qty": float(target_qty),
+        "buy_qty": 0.0,
+        "idle_cash": idle_cash,
+    }
 
 
 def run_bot2_cycle(
@@ -790,7 +1147,7 @@ def run_bot2_cycle(
     vault_symbols = load_vault_symbols()
     broker_positions = client.positions()
     db_positions = load_open_positions()
-    _reconcile_protective_stops(client, db_positions)
+    db_positions = _reconcile_protective_stops(client, db_positions)
     strategy_symbols = {row["symbol"] for row in db_positions}
     live_strategy = [
         position for position in broker_positions
@@ -800,12 +1157,20 @@ def run_bot2_cycle(
     if not initial_entry and not is_first_trading_day(now):
         _park_idle_cash(client, vault_symbols)
         return {"status": "complete", "orders": 0, "reason": "not_first_trading_day"}
-    ranked, screened, bars = _build_book(client, now.astimezone(_eastern()).date())
-    desired = {str(item["symbol"]) for item in ranked}
+    as_of = now.astimezone(_eastern()).date()
+    ranked, screened, bars = _build_book(client, as_of)
+    closed_rows, history_available = load_closed_position_history()
+    cooldowns = build_stop_cooldowns(closed_rows, as_of)
+    eligible_ranked = [
+        item for item in ranked
+        if canonical_symbol(item["symbol"]) not in cooldowns
+    ]
+    volatility = load_bot2_volatility(as_of)
+    desired = {str(item["symbol"]) for item in eligible_ranked}
     orders = 0
     for position in db_positions:
         if position["symbol"] not in desired:
-            if _sell_confirmed(client, position, "fell_out_of_top_20"):
+            if _sell_confirmed(client, position, "fell_out_of_top_50"):
                 orders += 1
     account = client.account()
     broker_positions = client.positions()
@@ -814,18 +1179,45 @@ def run_bot2_cycle(
         for p in broker_positions
         if canonical_symbol(p["symbol"]) in vault_symbols
     )
-    plan = allocation_plan(account["equity"], vault_market_value, len(ranked))
+    plan = build_target_allocation_plan(
+        account["equity"],
+        vault_market_value,
+        ranked,
+        volatility["multiplier"],
+        set(cooldowns),
+    )
+    logger.info(
+        "Bot 2 | VOL_SCALE as_of=%s multiplier=%.6f annualized_volatility=%s "
+        "returns=%s/%s reason=%s stop_exit_reasons=%s",
+        as_of,
+        volatility["multiplier"],
+        (
+            f"{volatility['annualized_volatility']:.6f}"
+            if volatility["annualized_volatility"] is not None
+            else "unavailable"
+        ),
+        volatility["return_count"],
+        VOLATILITY_LOOKBACK_SESSIONS,
+        volatility["reason"],
+        sorted(STOP_FILLED_EXIT_REASONS),
+    )
+    for symbol, details in sorted(cooldowns.items()):
+        logger.info(
+            "Bot 2 | COOLDOWN symbol=%s exit_reason=%s release_date=%s",
+            symbol, details["exit_reason"], details["release_date"],
+        )
     held = {
         canonical_symbol(p["symbol"])
         for p in broker_positions
         if canonical_symbol(p["symbol"]) in desired
     }
-    for item in ranked:
+    for item in eligible_ranked:
         symbol = str(item["symbol"])
         if symbol in held:
             continue
         close = float(_prior_bars(bars[symbol], now.astimezone(_eastern()).date())[-1]["c"])
-        qty = math.floor(plan["equal_weight_notional"] / close)
+        target_notional = plan["target_allocations"][symbol]
+        qty = math.floor(target_notional / close)
         if qty < 1:
             continue
         # Fresh state is fetched inside the guard; sell work has already run.
@@ -850,7 +1242,12 @@ def run_bot2_cycle(
         "orders": orders,
         "reason": "initial_entry" if initial_entry else "monthly_rebalance",
         "universe_size": len(screened),
-        "top_20": ranked,
+        "top_50": ranked,
+        "eligible": eligible_ranked,
+        "benched": cooldowns,
+        "cooldown_history_available": history_available,
+        "volatility": volatility,
+        "allocation_plan": plan,
     }
 
 
@@ -862,6 +1259,8 @@ def dry_run_cycle() -> dict[str, Any]:
         "ALPACA_BASE_URL": ALPACA_BASE_URL,
     }
     now = datetime.now(timezone.utc)
+    as_of = now.astimezone(_eastern()).date()
+    data_feed = os.environ.get("BOT2_ALPACA_DATA_FEED", "sip").strip().lower()
     client = AlpacaMomentumClient(
         profile["ALPACA_API_KEY"], profile["ALPACA_SECRET_KEY"], profile["ALPACA_BASE_URL"]
     )
@@ -872,56 +1271,136 @@ def dry_run_cycle() -> dict[str, Any]:
         float(p["market_value"]) for p in positions
         if canonical_symbol(p["symbol"]) in vault_symbols
     )
-    ranked, screened, bars = _build_book(client, now.astimezone(_eastern()).date())
-    plan = allocation_plan(account["equity"], vault_market_value, len(ranked))
-    print(f"DRY_RUN_ACCOUNT | equity=${account['equity']:,.2f} | cash=${account['cash']:,.2f}")
+    ranked, screened, bars = _build_book(client, as_of)
+    closed_rows, history_available = load_closed_position_history()
+    cooldowns = build_stop_cooldowns(closed_rows, as_of)
+    eligible_ranked = [
+        item for item in ranked
+        if canonical_symbol(item["symbol"]) not in cooldowns
+    ]
+    volatility = load_bot2_volatility(as_of)
+    plan = build_target_allocation_plan(
+        account["equity"],
+        vault_market_value,
+        ranked,
+        volatility["multiplier"],
+        set(cooldowns),
+    )
+    current_sgov_value = sum(
+        max(0.0, float(position.get("market_value", 0) or 0))
+        for position in positions
+        if canonical_symbol(position.get("symbol")) == PARK_SYMBOL
+    )
+    planned_stock_notional = 0.0
+    for item in ranked:
+        symbol = canonical_symbol(item["symbol"])
+        target_notional = plan["target_allocations"][symbol]
+        close = float(item["price"])
+        qty = math.floor(target_notional / close) if target_notional > 0 and close > 0 else 0
+        planned_stock_notional += qty * close
+    sgov_target = max(0.0, plan["target_base"] - planned_stock_notional)
+    total_planned = vault_market_value + planned_stock_notional + sgov_target
+    observed_exit_reasons = sorted({
+        str(row[2]) for row in closed_rows if row[2] is not None
+    })
+    print(
+        f"DRY_RUN_ACCOUNT | equity=${account['equity']:,.2f} "
+        f"| cash=${account['cash']:,.2f} | as_of={as_of.isoformat()}"
+    )
+    print(f"DRY_RUN_DATA_FEED | {data_feed}")
+    print(f"DRY_RUN_PAUSE | module={BOT_PAUSED} | orders_submitted=0")
     print(f"DRY_RUN_VAULT | symbols={sorted(vault_symbols)} | market_value=${vault_market_value:,.2f}")
     print(f"DRY_RUN_INVESTABLE_BASE | ${plan['investable_base']:,.2f}")
     print(f"DRY_RUN_UNIVERSE_SIZE | {len(screened)}")
+    print(
+        "DRY_RUN_VOLATILITY | "
+        f"multiplier={volatility['multiplier']:.6f} "
+        f"| annualized_volatility={volatility['annualized_volatility']} "
+        f"| returns={volatility['return_count']}/{VOLATILITY_LOOKBACK_SESSIONS} "
+        f"| reason={volatility['reason']}"
+    )
+    print(
+        "DRY_RUN_STOP_EXIT_REASONS | "
+        f"recognized={sorted(STOP_FILLED_EXIT_REASONS)} "
+        f"| observed={observed_exit_reasons} "
+        f"| history_table_available={history_available}"
+    )
+    if cooldowns:
+        for symbol, details in sorted(cooldowns.items()):
+            print(
+                f"DRY_RUN_BENCHED | symbol={symbol} "
+                f"| exit_reason={details['exit_reason']} "
+                f"| closed_at={details['closed_at']} "
+                f"| release_date={details['release_date'].isoformat()}"
+            )
+    else:
+        print("DRY_RUN_BENCHED | none")
     sectors = _sector_map()
     for index, item in enumerate(ranked, start=1):
+        symbol = canonical_symbol(item["symbol"])
+        target_notional = plan["target_allocations"][symbol]
+        close = float(item["price"])
+        qty = math.floor(target_notional / close) if target_notional > 0 and close > 0 else 0
+        planned_notional = qty * close
         print(
-            f"LIVE_TOP20 | rank={index} | symbol={item['symbol']} "
+            f"LIVE_TOP50 | rank={index} | symbol={item['symbol']} "
             f"| momentum={float(item['momentum']):+.4%} "
             f"| dollar_volume=${float(item['median_dollar_volume']):,.2f} "
-            f"| price=${float(item['price']):,.2f} "
-            f"| target_notional=${plan['equal_weight_notional']:,.2f} "
+            f"| price=${close:,.2f} "
+            f"| slot_notional=${plan['slot_notional']:,.2f} "
+            f"| target_notional=${target_notional:,.2f} "
+            f"| shares={qty} | planned_notional=${planned_notional:,.2f} "
+            f"| release_date={cooldowns[symbol]['release_date'] if symbol in cooldowns else 'eligible'} "
             f"| sector={sectors.get(str(item['symbol']), 'unknown')} "
                 f"| asset_class={item.get('asset_class', 'us_equity')}"
         )
     print(
-        f"LIVE_SCREEN_SANITY | qualifying={len(screened)} | top20={len(ranked)} "
+        f"LIVE_SCREEN_SANITY | qualifying={len(screened)} | top50={len(ranked)} "
         f"| zero_etfs=true | above_artifact_threshold=0 "
         f"| max_momentum={max((float(item['momentum']) for item in ranked), default=0.0):+.4%}"
     )
     print(
-        "DRY_RUN_TOP_20 | "
+        "DRY_RUN_TOP_50 | "
         + json.dumps(
             [
                 {
                     "symbol": item["symbol"],
                     "momentum": item["momentum"],
                     "asset_class": item.get("asset_class", "us_equity"),
+                    "target_notional": plan["target_allocations"][
+                        canonical_symbol(item["symbol"])
+                    ],
                 }
                 for item in ranked
             ],
             sort_keys=True,
         )
     )
-    print(f"DRY_RUN_EQUAL_WEIGHT_NOTIONAL | ${plan['equal_weight_notional']:,.2f}")
-    projected = plan["target_base"]
-    desired_symbols = {str(item["symbol"]) for item in ranked}
-    projected_cash = account["cash"] - max(0.0, projected - sum(
-        float(p["market_value"]) for p in positions
-        if canonical_symbol(p["symbol"]) in desired_symbols
-    ))
-    print(f"DRY_RUN_PROJECTED_DEPLOYMENT | ${projected:,.2f} ({plan['projected_deployment']:.2%})")
-    print(f"DRY_RUN_PROJECTED_CASH | ${projected_cash:,.2f}")
+    print(f"DRY_RUN_SLOT_NOTIONAL | ${plan['slot_notional']:,.2f}")
+    print(f"DRY_RUN_SCALED_POSITION_NOTIONAL | ${plan['scaled_position_notional']:,.2f}")
+    print(f"DRY_RUN_STOCK_TARGET | ${planned_stock_notional:,.2f}")
+    print(
+        f"DRY_RUN_SGOV | target=${sgov_target:,.2f} "
+        f"| held=${current_sgov_value:,.2f} "
+        f"| additional_target=${max(0.0, sgov_target - current_sgov_value):,.2f}"
+    )
+    print(
+        f"DRY_RUN_TOTAL | planned=${total_planned:,.2f} "
+        f"| account_equity=${account['equity']:,.2f} "
+        f"| projected_deployment={plan['projected_deployment']:.2%}"
+    )
+    print("DRY_RUN_ORDERS_SUBMITTED | 0")
     return {
         "equity": account["equity"], "cash": account["cash"],
         "investable_base": plan["investable_base"], "universe_size": len(screened),
-        "top_20": ranked, "equal_weight_notional": plan["equal_weight_notional"],
-        "projected_deployment": projected, "projected_cash": projected_cash,
+        "top_50": ranked,
+        "eligible": eligible_ranked,
+        "benched": cooldowns,
+        "volatility": volatility,
+        "stock_target": planned_stock_notional,
+        "sgov_target": sgov_target,
+        "total_planned": total_planned,
+        "orders_submitted": 0,
     }
 
 

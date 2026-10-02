@@ -107,7 +107,7 @@ BOT_PROFILES = {
         "ALPACA_BASE_URL":   "https://paper-api.alpaca.markets",
         "STARTING_CAPITAL":  100_000,
         "LOOP_SLEEP_SECONDS": 3600,          # hourly check (exits + 4:30 PM entry)
-        "MAX_POSITIONS":     20,
+        "MAX_POSITIONS":     50,
         "MOMENTUM_LOOKBACK_SESSIONS": 252,
         "MOMENTUM_SKIP_SESSIONS": 21,
         "UNIVERSE_SIZE":      500,

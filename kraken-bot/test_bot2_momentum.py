@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import pathlib
+import re
 import sys
 from datetime import date, datetime, timezone
 
@@ -143,6 +144,27 @@ def test_rank_is_descending_with_deterministic_symbol_tie_break() -> None:
     assert [item["symbol"] for item in ranked] == ["AAA", "BBB"]
 
 
+def test_bot2_cap_is_read_from_its_config_profile(monkeypatch) -> None:
+    symbols = [f"S{index:03d}" for index in range(55)]
+    observations = {
+        symbol: {
+            "asset_class": "us_equity",
+            "median_dollar_volume_60": 1_000_000,
+        }
+        for symbol in symbols
+    }
+    monkeypatch.setattr(bot2, "last_screen_observations", lambda: observations)
+    ranked = bot2.rank_momentum(
+        set(symbols),
+        {symbol: _bars() for symbol in symbols},
+        date(2026, 1, 1),
+    )
+
+    assert bot2.BOT2_PROFILE["MAX_POSITIONS"] == 50
+    assert bot2.MAX_POSITIONS == bot2.BOT2_PROFILE["MAX_POSITIONS"]
+    assert len(ranked) == 50
+
+
 def test_rank_screen_selects_exactly_top_500_and_reports_cutoff() -> None:
     as_of = date(2026, 1, 1)
     assets = [_asset(f"S{index:03d}") for index in range(501)]
@@ -189,6 +211,238 @@ def test_allocation_excludes_vault_from_sizing_base_and_equal_weights() -> None:
     assert plan["investable_base"] == 90_000
     assert plan["target_base"] == 90_000
     assert plan["equal_weight_notional"] == 4_500
+
+
+def test_volatility_multiplier_uses_run106_formula_and_caps_at_one() -> None:
+    high_volatility = bot2.calculate_volatility_multiplier([0.02, -0.02] * 63)
+
+    assert high_volatility["return_count"] == 126
+    assert high_volatility["annualized_volatility"] > 0.12
+    assert high_volatility["multiplier"] == (
+        0.12 / high_volatility["annualized_volatility"]
+    )
+
+    low_volatility = bot2.calculate_volatility_multiplier([0.0001, -0.0001] * 63)
+
+    assert low_volatility["reason"] == "calculated"
+    assert low_volatility["multiplier"] == 1.0
+
+
+def test_volatility_multiplier_falls_back_for_short_history_and_zero_volatility() -> None:
+    short_history = bot2.calculate_volatility_multiplier([0.01] * 125)
+    zero_volatility = bot2.calculate_volatility_multiplier([0.0] * 126)
+
+    assert short_history == {
+        "multiplier": 1.0,
+        "annualized_volatility": None,
+        "return_count": 125,
+        "reason": "insufficient_returns",
+    }
+    assert zero_volatility["multiplier"] == 1.0
+    assert zero_volatility["reason"] == "zero_volatility"
+
+
+def test_volatility_returns_use_only_prior_nyse_sessions() -> None:
+    as_of = date(2026, 10, 2)
+    sessions = bot2._nyse_sessions_before(as_of, 127)
+    points = [(day, 100.0 + index) for index, day in enumerate(sessions)]
+    points.append((as_of, 1_000_000.0))
+
+    returns = bot2.daily_returns_from_equity_points(points, as_of)
+
+    assert len(returns) == 126
+    assert returns[-1] == (226.0 / 225.0) - 1.0
+
+
+def test_stop_cooldown_excludes_through_session_63_and_releases_on_64() -> None:
+    close_date = date(2026, 1, 2)
+    sessions = bot2.nyse_sessions_after(close_date, 64)
+    closed_at = datetime.combine(
+        close_date, bot2.dt_time(16, 0), tzinfo=bot2._eastern()
+    )
+    rows = [("AAPL", closed_at, "stop_filled")]
+
+    on_session_63 = bot2.build_stop_cooldowns(rows, sessions[62])
+    on_session_64 = bot2.build_stop_cooldowns(rows, sessions[63])
+
+    assert on_session_63["AAPL"]["release_date"] == sessions[63]
+    assert "AAPL" not in on_session_64
+
+
+def test_non_stop_exit_reasons_do_not_create_cooldowns() -> None:
+    close_date = date(2026, 1, 2)
+    closed_at = datetime.combine(
+        close_date, bot2.dt_time(16, 0), tzinfo=bot2._eastern()
+    )
+    as_of = bot2.nyse_sessions_after(close_date, 64)[10]
+    rows = [
+        ("AAPL", closed_at, "fell_out_of_top_50"),
+        ("MSFT", closed_at, "stop_arm_failed_flattened"),
+        ("NVDA", closed_at, "3day_drop_-5.0%"),
+    ]
+
+    assert bot2.build_stop_cooldowns(rows, as_of) == {}
+
+
+def test_benched_rank_slot_stays_in_sgov_instead_of_backfilling() -> None:
+    ranked = [{"symbol": f"S{index:02d}"} for index in range(50)]
+    plan = bot2.build_target_allocation_plan(
+        equity=100_000,
+        vault_market_value=0,
+        ranked=ranked,
+        multiplier=0.5,
+        benched_symbols={"S00"},
+    )
+
+    assert plan["slot_notional"] == 2_000
+    assert plan["target_allocations"]["S00"] == 0
+    assert plan["target_allocations"]["S01"] == 1_000
+    assert plan["stock_target"] == 49_000
+    assert plan["sgov_target"] == 51_000
+
+
+class _ParkingClient:
+    def __init__(self, held_qty: float, cash: float, price: float = 100.0) -> None:
+        self.held_qty = held_qty
+        self.cash = cash
+        self.price = price
+        self.submissions = []
+
+    def positions(self):
+        if self.held_qty == 0:
+            return []
+        return [{
+            "symbol": "SGOV",
+            "qty": self.held_qty,
+            "market_value": self.held_qty * self.price,
+        }]
+
+    def account(self):
+        return {
+            "equity": 100_000.0,
+            "cash": self.cash,
+            "buying_power": self.cash,
+            "long_market_value": self.held_qty * self.price,
+        }
+
+    def latest_price(self, symbol):
+        assert symbol == "SGOV"
+        return self.price
+
+    def submit(self, symbol, side, qty, order_type):
+        self.submissions.append((symbol, side, qty, order_type))
+        return {"id": "dry-test-order"}
+
+
+def test_sgov_parking_tops_up_existing_position_to_cover_idle_cash() -> None:
+    client = _ParkingClient(held_qty=100.0, cash=10_099.0)
+
+    result = bot2._park_idle_cash(client, set())
+
+    assert client.submissions == [("SGOV", "buy", 100, "market")]
+    assert result["held_qty"] == 100.0
+    assert result["buy_qty"] == 100.0
+
+
+def test_sgov_quantity_dust_is_treated_as_none() -> None:
+    client = _ParkingClient(held_qty=5e-7, cash=10_099.0)
+
+    result = bot2._park_idle_cash(client, set())
+
+    assert result["held_qty"] == 0.0
+    assert client.submissions == [("SGOV", "buy", 100, "market")]
+
+
+class _PlaceholderCheckingCursor:
+    def __init__(self, rows):
+        self.rows = rows
+        self.executed = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, traceback):
+        return False
+
+    def execute(self, query, params=()):
+        params = tuple(params or ())
+        placeholders = len(re.findall(r"(?<!%)%s", query))
+        if placeholders != len(params):
+            raise AssertionError(
+                f"query has {placeholders} placeholders but received {len(params)} params"
+            )
+        self.executed.append((query, params))
+
+    def fetchall(self):
+        return self.rows
+
+
+class _FakeConnection:
+    def __init__(self, cursor):
+        self._cursor = cursor
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, traceback):
+        return False
+
+    def cursor(self):
+        return self._cursor
+
+
+def test_database_fakes_enforce_placeholder_parameter_counts(monkeypatch) -> None:
+    closed_rows = [
+        ("AAPL", datetime(2026, 1, 2, 21, 0, tzinfo=timezone.utc), "stop_filled")
+    ]
+    cursor = _PlaceholderCheckingCursor(closed_rows)
+    monkeypatch.setattr(bot2, "get_conn", lambda: _FakeConnection(cursor))
+
+    rows, available = bot2.load_closed_position_history()
+
+    assert available is True
+    assert rows == closed_rows
+    assert cursor.executed[0][1] == (bot2.BOT_ID,)
+    try:
+        cursor.execute("SELECT %s", ())
+    except AssertionError:
+        pass
+    else:
+        raise AssertionError("database fake must reject placeholder/parameter mismatch")
+
+
+def test_stop_fill_reconciliation_records_canonical_exit_reason(monkeypatch) -> None:
+    class FilledStopClient:
+        def positions(self):
+            return []
+
+        def get_order(self, order_id):
+            assert order_id == "stop-1"
+            return {
+                "status": "filled",
+                "side": "sell",
+                "type": "stop",
+                "filled_qty": "10",
+                "filled_avg_price": "80",
+            }
+
+    recorded = []
+    monkeypatch.setattr(
+        bot2,
+        "record_close",
+        lambda symbol, reason, pnl: recorded.append((symbol, reason, pnl)),
+    )
+    positions = [{
+        "symbol": "AAPL",
+        "qty": 10,
+        "entry_price": 100.0,
+        "stop_order_id": "stop-1",
+    }]
+
+    remaining = bot2._reconcile_protective_stops(FilledStopClient(), positions)
+
+    assert remaining == []
+    assert recorded == [("AAPL", "stop_filled", -200.0)]
 
 
 def test_buy_guard_rejects_negative_cash_and_deployment_overage() -> None:

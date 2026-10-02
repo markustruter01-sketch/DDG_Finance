@@ -49,6 +49,31 @@ def test_account_triggers(changes, expected):
     assert expected in {flag["trigger"] for flag in flags}
 
 
+@pytest.mark.parametrize("symbol", ["SGOV", "sgov", "S-GOV", "s/gov"])
+def test_cash_park_symbol_variants_match_canonically(symbol):
+    assert ks.is_cash_park(symbol)
+
+
+def test_cash_park_is_not_deployed_or_missing_a_stop():
+    position = {
+        "symbol": "s/gov",
+        "qty": 900,
+        "market_value": 80_000.0,
+        "side": "long",
+    }
+    snapshot = account(
+        equity=100_000.0,
+        long_market_value=90_000.0,
+        max_deployment=0.20,
+        positions=[position],
+    )
+
+    assert ks.evaluate_account(snapshot, now=100.0) == []
+    flags = ks.evaluate_account(snapshot, now=160.1)
+    assert "deployment" not in {flag["trigger"] for flag in flags}
+    assert "missing_protective_stop" not in {flag["trigger"] for flag in flags}
+
+
 def test_jerome_monitoring_cap_allows_fully_invested_strategy():
     flags = ks.evaluate_account(
         account(bot_id="jerome_macro", equity=100.0, long_market_value=100.0),

@@ -43,6 +43,7 @@ from core.equity_universe import (  # noqa: E402
     screen_universe as shared_screen_universe,
     set_screen_data,
 )
+from core.cash_park import CASH_PARK_SYMBOLS, is_cash_park  # noqa: E402
 
 try:
     from core.order_ids import submit_with_unique_client_order_id
@@ -85,7 +86,7 @@ STOP_LOSS_PCT = 0.20
 MOMENTUM_ARTEFACT_THRESHOLD = float(
     os.environ.get("BOT2_MOMENTUM_ARTEFACT_THRESHOLD", "3.0")
 )
-PARK_SYMBOL = "SGOV"
+PARK_SYMBOL = next(iter(CASH_PARK_SYMBOLS))
 SECTOR_CACHE_FILE = _ROOT / "trading-platform" / ".local" / "bot2_fullmarket_sector_cache.json"
 STRATEGY_TABLE = "bot2_momentum_positions"
 EQUITY_SESSION_OPEN = dt_time(9, 30)
@@ -292,7 +293,10 @@ def fresh_buy_guard(
     excluded_value = sum(
         max(0.0, float(position.get("market_value", 0) or 0))
         for position in positions
-        if canonical_symbol(position.get("symbol")) in excluded_symbols
+        if (
+            is_cash_park(position.get("symbol"))
+            or canonical_symbol(position.get("symbol")) in excluded_symbols
+        )
     )
     projected_cash = cash - float(notional)
     projected_long = long_market_value + float(notional)
@@ -1078,7 +1082,7 @@ def _park_idle_cash(
     held_qty = sum(
         max(0.0, float(position.get("qty", 0) or 0))
         for position in positions
-        if canonical_symbol(position.get("symbol")) == PARK_SYMBOL
+        if is_cash_park(position.get("symbol"))
     )
     if held_qty < SGOV_QTY_DUST:
         held_qty = 0.0
@@ -1289,7 +1293,7 @@ def dry_run_cycle() -> dict[str, Any]:
     current_sgov_value = sum(
         max(0.0, float(position.get("market_value", 0) or 0))
         for position in positions
-        if canonical_symbol(position.get("symbol")) == PARK_SYMBOL
+        if is_cash_park(position.get("symbol"))
     )
     planned_stock_notional = 0.0
     for item in ranked:

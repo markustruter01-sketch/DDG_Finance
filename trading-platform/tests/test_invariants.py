@@ -329,6 +329,25 @@ def test_stop_coverage_fires_when_stop_is_missing(base_inputs):
     assert result["actual"]["missing_stops"][0]["symbol"] == "SPY"
 
 
+def test_cash_park_position_does_not_require_stop(base_inputs):
+    inputs = _copy(base_inputs)
+    inputs.broker_positions["oracle"] = [
+        {
+            "symbol": "s-gov",
+            "qty": 100.0,
+            "side": "long",
+            "market_value": 10_000.0,
+        }
+    ]
+    inputs.broker_orders["oracle"] = []
+
+    result = check_stop_coverage(inputs)
+
+    assert result["status"] == "PASS"
+    assert result["actual"]["checked_positions"] == 0
+    assert result["actual"]["missing_stops"] == []
+
+
 def test_stop_coverage_unknown_when_input_is_unreadable(base_inputs):
     result = check_stop_coverage(replace(base_inputs, broker_positions=None))
     assert result["status"] == "UNKNOWN"

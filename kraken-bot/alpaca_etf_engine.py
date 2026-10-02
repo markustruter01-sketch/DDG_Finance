@@ -52,6 +52,7 @@ def _ensure_tp() -> None:
 _ensure_tp()
 from core.order_ids import submit_with_unique_client_order_id
 from core.symbols import canonical_symbol, same_symbol
+from core.cash_park import is_cash_park
 
 
 # ── Yahoo Finance OHLCV fetcher ───────────────────────────────────────────────
@@ -166,8 +167,6 @@ def check_trend_direction(
 
 
 # ── Alpaca wrapper ────────────────────────────────────────────────────────────
-
-CASH_PARK_SYMBOLS = frozenset({"SGOV"})
 
 class AlpacaEtfEngine:
     """
@@ -1104,7 +1103,7 @@ class AlpacaEtfEngine:
         covers the safely rounded-down whole-share portion; all future ETF entries
         use whole-share sizing so they are fully covered.
         """
-        if symbol in CASH_PARK_SYMBOLS:
+        if is_cash_park(symbol):
             logger.debug(f"EtfEngine | {symbol}: cash-park exemption — no protective stop")
             return None
         if self._has_pending_owned_exit(bot_id, symbol):
@@ -1434,7 +1433,7 @@ class AlpacaEtfEngine:
             if position.get("direction", "long") != "long":
                 continue
             symbol = position.get("symbol", "")
-            if symbol in CASH_PARK_SYMBOLS:
+            if is_cash_park(symbol):
                 logger.debug(f"EtfEngine | {symbol}: cash-park exemption — skip stop reconciliation")
                 continue
             if math.floor(abs(float(position.get("qty", 0) or 0))) < 1:

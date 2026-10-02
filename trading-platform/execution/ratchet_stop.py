@@ -43,11 +43,9 @@ from __future__ import annotations
 from datetime import date
 from typing import Optional
 
-
-CASH_PARK_SYMBOLS = frozenset({"SGOV"})
-
 import numpy as np
 from loguru import logger
+from core.cash_park import is_cash_park
 
 ATR_MULTIPLIER:           float = 2.0   # canonical = algo_scanner.ATR_MULTIPLIER (2.0); Storm Mode 2.5 reverted
 LEVERAGED_ATR_MULTIPLIER: float = 2.0   # Tighter multiplier for leveraged ETFs (no leveraged tickers currently held by Oracle)
@@ -562,7 +560,7 @@ def sweep_naked_positions(dry_run: bool = False) -> dict:
 
         # SGOV is the cash-park ETF and intentionally has no protective stop.
         # Sub-share residuals cannot receive a broker GTC stop either.
-        if symbol in CASH_PARK_SYMBOLS:
+        if is_cash_park(symbol):
             logger.debug(f"StopSweep | {symbol}: cash-park exemption")
             results["skipped"].append({"symbol": symbol, "reason": "cash_park_exempt"})
             continue

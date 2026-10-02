@@ -21,6 +21,18 @@ import alpaca_etf_engine as etf_engine_module
 from db import postgres
 
 
+def test_cash_park_symbol_variants_skip_engine_stop_management():
+    engine = object.__new__(AlpacaEtfEngine)
+
+    assert engine.ensure_protective_stop("oracle", "s/gov", 10.0) is None
+    engine.reconcile_protective_stops(
+        "oracle",
+        [
+            {"direction": "long", "symbol": "s-gov", "qty": 10, "stop_price": None},
+        ],
+    )
+
+
 class _FakeCursor:
     def __init__(self, rows):
         self.rows = rows

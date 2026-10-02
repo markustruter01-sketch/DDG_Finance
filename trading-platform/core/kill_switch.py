@@ -18,6 +18,7 @@ from loguru import logger
 
 from config.settings import settings
 from core.symbols import canonical_symbol, same_symbol
+from core.cash_park import is_cash_park
 from core.bot_config import load_bot_profiles
 
 DUST_QTY = 1e-6
@@ -114,7 +115,13 @@ def evaluate_account(account: dict[str, Any], now: float | None = None) -> list[
     if equity > 0 and lmv > equity + 1e-6:
         triggers.append({"trigger": "leverage", "detail": f"lmv={lmv:.2f} equity={equity:.2f}"})
 
-    deployed_pct = lmv / equity if equity > 0 else 1.0
+    cash_park_value = sum(
+        max(0.0, float(position.get("market_value") or 0))
+        for position in account.get("positions", [])
+        if is_cash_park(position.get("symbol"))
+    )
+    deployed_lmv = max(0.0, lmv - cash_park_value)
+    deployed_pct = deployed_lmv / equity if equity > 0 else 1.0
     max_deployment = float(account.get("max_deployment", MAX_DEPLOYMENT.get(bot_id, 0.80)))
     if deployed_pct > max_deployment + 0.05 and not account.get("deployment_acknowledged", False):
         triggers.append({
@@ -140,6 +147,9 @@ def evaluate_account(account: dict[str, Any], now: float | None = None) -> list[
             _state["missing_stop_since"].pop(f"{bot_id}:{position.get('symbol')}", None)
             continue
         if canonical_symbol(position.get("symbol")) in vault_symbols:
+            _state["missing_stop_since"].pop(f"{bot_id}:{position.get('symbol')}", None)
+            continue
+        if is_cash_park(position.get("symbol")):
             _state["missing_stop_since"].pop(f"{bot_id}:{position.get('symbol')}", None)
             continue
         covered = any(_covers(position, order) for order in account.get("orders", []))

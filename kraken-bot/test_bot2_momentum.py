@@ -459,6 +459,21 @@ def test_buy_guard_rejects_negative_cash_and_deployment_overage() -> None:
     assert projection["projected_deployment"] == 0.81
 
 
+def test_buy_guard_excludes_cash_park_using_canonical_symbol() -> None:
+    account = {"equity": 100_000, "cash": 60_000, "long_market_value": 80_000}
+    positions = [{"symbol": "s-gov", "market_value": 80_000}]
+
+    allowed, projection = bot2.fresh_buy_guard(
+        account,
+        positions,
+        20_000,
+        max_deployment=0.25,
+    )
+
+    assert allowed
+    assert projection["projected_deployment"] == 0.2
+
+
 def test_pause_is_first_branch_and_does_not_construct_client(monkeypatch) -> None:
     class ExplodingClient:
         def __init__(self, *args, **kwargs):

@@ -54,6 +54,7 @@ from alpaca_etf_engine import (  # noqa: E402
     _yahoo_daily_ohlcv,
 )
 from core.symbols import canonical_symbol
+from core.cash_park import is_cash_park
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -358,6 +359,45 @@ def _in_entry_window(now: Optional[datetime] = None) -> bool:
     return in_window and not already_ran
 
 
+def _strategy_deployed_pct(positions: list[dict], equity: float) -> float:
+    """Deployment excludes positions classified as cash parking."""
+    if equity <= 0:
+        return 1.0
+    deployed_notional = sum(
+        float(position.get("market_value", 0) or 0)
+        for position in positions
+        if not is_cash_park(position.get("symbol"))
+    )
+    return deployed_notional / equity
+
+
+def _long_market_values(long_market_value, positions: list[dict]) -> tuple[float, float]:
+    """Return gross long value for equity checks and deployed value excluding cash park."""
+    cash_park_value = sum(
+        max(0.0, float(position.get("market_value", 0) or 0))
+        for position in positions
+        if is_cash_park(position.get("symbol"))
+    )
+    if long_market_value is None:
+        gross_long_value = sum(
+            max(0.0, float(position.get("market_value", 0) or 0))
+            for position in positions
+        )
+    else:
+        gross_long_value = float(long_market_value)
+    deployed_value = max(0.0, gross_long_value - cash_park_value)
+    return gross_long_value, deployed_value
+
+
+def _unpark_before_entries(engine, candidates: list[dict]) -> float:
+    """Release parked cash after candidates exist and before their entry orders."""
+    if not candidates:
+        return 0.0
+    from sgov_parking import unpark_for_entry
+
+    return unpark_for_entry(engine, "Asia", engine.get_positions())
+
+
 # ── Main cycle ─────────────────────────────────────────────────────────────────
 
 def run_asia_cycle(profile: dict, db_id: int) -> None:
@@ -515,15 +555,16 @@ def run_asia_cycle(profile: dict, db_id: int) -> None:
         position for position in live_positions
         if abs(float(position.get("qty", 0) or 0)) >= DUST_QTY
         and canonical_symbol(position.get("symbol")) not in vault_symbols
+        and not is_cash_park(position.get("symbol"))
     ]
 
     # Position cap
     current_count  = len(live_positions)
     currently_held = {canonical_symbol(p["symbol"]) for p in live_positions}
 
-    # Deployment guard
-    deployed_notional = sum(p.get("market_value", 0) for p in live_positions)
-    deployed_pct      = deployed_notional / equity if equity > 0 else 1.0
+    # Excluding parked cash here prevents this pre-scan guard from returning
+    # before the later unpark step when invested exposure is still below cap.
+    deployed_pct      = _strategy_deployed_pct(live_positions, equity)
     planned_deployment_pct = deployed_pct
     remaining_slots = max(0, max_positions - current_count)
     sizing_reachable = remaining_slots > 0 and deployed_pct < max_deployment
@@ -697,12 +738,10 @@ def run_asia_cycle(profile: dict, db_id: int) -> None:
         reverse=True,
     )
 
-    # Sell SGOV first to free cash before placing any entry orders
+    # Sell parked cash first to free cash before placing any entry orders
     if candidates:
         try:
-            from sgov_parking import unpark_for_entry as _sgov_unpark
-            _all_pos_with_sgov = engine.get_positions()
-            _sgov_unpark(engine, "Asia", _all_pos_with_sgov)
+            _unpark_before_entries(engine, candidates)
         except Exception as _up_exc:
             logger.debug(f"Asia | SGOV unpark error (non-fatal): {_up_exc}")
 
@@ -718,26 +757,28 @@ def run_asia_cycle(profile: dict, db_id: int) -> None:
         fresh_account = engine.get_account()
         fresh_equity = float(fresh_account["equity"])
         fresh_cash = float(fresh_account["cash"])
-        fresh_long_market_value = fresh_account.get("long_market_value")
+        (
+            fresh_long_market_value,
+            fresh_deployed_market_value,
+        ) = _long_market_values(
+            fresh_account.get("long_market_value"),
+            engine.get_positions(),
+        )
         long_market_value_source = "account"
-        if fresh_long_market_value is None:
-            fresh_long_market_value = sum(
-                float(position.get("market_value", 0) or 0)
-                for position in engine.get_positions()
-            )
+        if fresh_account.get("long_market_value") is None:
             long_market_value_source = "positions_snapshot"
-        else:
-            fresh_long_market_value = float(fresh_long_market_value)
         logger.info(
             "Asia | fresh long market value="
-            f"${fresh_long_market_value:,.2f} source={long_market_value_source}"
+            f"${fresh_long_market_value:,.2f} deployed="
+            f"${fresh_deployed_market_value:,.2f} source={long_market_value_source}"
         )
         projected_long_market_value = fresh_long_market_value + notional
+        projected_deployed_market_value = fresh_deployed_market_value + notional
         projected_cash = fresh_cash - notional
         if (
             projected_cash < 0
             or projected_long_market_value > fresh_equity
-            or projected_long_market_value / fresh_equity > max_deployment
+            or projected_deployed_market_value / fresh_equity > max_deployment
         ):
             logger.critical(
                 "Asia | HARD MARGIN/DEPLOYMENT GUARD — refusing order | "

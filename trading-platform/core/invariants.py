@@ -42,6 +42,7 @@ from core.runner_heartbeat import (
     RUNNER_HEARTBEAT_THRESHOLD_SECONDS,
 )
 from core.symbols import canonical_symbol, is_crypto_symbol
+from core.cash_park import is_cash_park
 
 
 Status = Literal["PASS", "DRIFT", "FAIL", "UNKNOWN"]
@@ -286,7 +287,7 @@ def check_stop_coverage(inputs: InvariantInputs) -> dict[str, Any]:
     name = "strategy_positions_have_covering_stops"
     expected = {
         "covering_stop": True,
-        "excluded": ["vault holdings", f"dust qty < {DUST_QTY}"],
+        "excluded": ["vault holdings", "cash-park holdings", f"dust qty < {DUST_QTY}"],
     }
     problem = _source_problem(inputs, "broker_positions", "broker_orders", "vault_symbols")
     if inputs.broker_positions is None or inputs.broker_orders is None or inputs.vault_symbols is None:
@@ -308,7 +309,7 @@ def check_stop_coverage(inputs: InvariantInputs) -> dict[str, Any]:
         for position in positions:
             qty = _material_qty(position)
             symbol = canonical_symbol(position.get("symbol"))
-            if qty < DUST_QTY or symbol in vault:
+            if qty < DUST_QTY or symbol in vault or is_cash_park(position.get("symbol")):
                 continue
             checked += 1
             position_side = str(position.get("side", "long")).lower()

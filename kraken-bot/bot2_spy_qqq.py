@@ -43,6 +43,7 @@ from alpaca_etf_engine import (
     calculate_atr,
     _yahoo_daily_ohlcv,
 )
+from core.cash_park import is_cash_park
 
 # ── Stage 2: risk-module imports from trading-platform/core/ ──────────────────
 # runner.py puts trading-platform/ first on sys.path before any bot is loaded,
@@ -438,7 +439,7 @@ def run_bot2_cycle(profile: dict, db_id: int) -> None:
         try:
             from sgov_parking import unpark_for_entry as _sgov_unpark
             _all_pos_with_sgov = engine.get_strategy_positions(BOT_ID)
-            if any(p["symbol"] == "SGOV" for p in _all_pos_with_sgov):
+            if any(is_cash_park(p.get("symbol")) for p in _all_pos_with_sgov):
                 _freed = _sgov_unpark(engine, "Bot2", _all_pos_with_sgov)
                 if _freed > 0:
                     # Refresh account cash after unpark so deployment math is accurate

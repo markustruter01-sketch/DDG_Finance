@@ -15,15 +15,16 @@ from __future__ import annotations
 import time
 from loguru import logger
 from jerome_alpaca import _nyse_is_open
+from core.cash_park import CASH_PARK_SYMBOLS, is_cash_park
 
-SGOV_SYMBOL          = "SGOV"
+PARK_SYMBOL          = next(iter(CASH_PARK_SYMBOLS))
 PARK_THRESHOLD_USD   = 1_000.0   # minimum idle cash to bother parking
 CASH_BUFFER_USD      = 50.0      # always leave a small liquidity buffer
 
 
 def is_sgov(pos: dict) -> bool:
     """True if this position is a cash-parking SGOV holding."""
-    return pos.get("symbol", "").upper() == SGOV_SYMBOL
+    return is_cash_park(pos.get("symbol"))
 
 
 def filter_alpha_positions(live_positions: list[dict]) -> list[dict]:
@@ -82,7 +83,7 @@ def park_idle_cash(
             f"(idle cash=${account_cash:,.2f})"
         )
         t0      = time.monotonic()
-        result  = engine.place_order(SGOV_SYMBOL, buy_side, notional)
+        result  = engine.place_order(PARK_SYMBOL, buy_side, notional)
         elapsed = time.monotonic() - t0
 
         if result:
@@ -130,7 +131,7 @@ def unpark_for_entry(
     )
     t0 = time.monotonic()
     try:
-        ok = engine.close_position(SGOV_SYMBOL)
+        ok = engine.close_position(PARK_SYMBOL)
         elapsed = time.monotonic() - t0
         if ok:
             logger.info(

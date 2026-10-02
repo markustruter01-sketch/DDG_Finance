@@ -91,6 +91,7 @@ SECTOR_CACHE_FILE = _ROOT / "trading-platform" / ".local" / "bot2_fullmarket_sec
 STRATEGY_TABLE = "bot2_momentum_positions"
 EQUITY_SESSION_OPEN = dt_time(9, 30)
 EQUITY_SESSION_CLOSE = dt_time(16, 0)
+SIP_DELAY_MINUTES = 20
 VOLATILITY_TARGET_ANNUAL = 0.12
 VOLATILITY_LOOKBACK_SESSIONS = 126
 VOLATILITY_ANNUALIZATION_SESSIONS = 252
@@ -391,6 +392,14 @@ class AlpacaMomentumClient:
     ) -> dict[str, list[dict[str, Any]]]:
         result: dict[str, list[dict[str, Any]]] = {}
         start = as_of - timedelta(days=540)
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        end_time = now - timedelta(minutes=SIP_DELAY_MINUTES)
+        end = end_time.isoformat().replace("+00:00", "Z")
+        unfinished_session = (
+            end_time.astimezone(_eastern()).date()
+            if us_equity_session_open(end_time)
+            else None
+        )
         for offset in range(0, len(symbols), batch_size):
             batch = symbols[offset:offset + batch_size]
             token = None
@@ -399,7 +408,7 @@ class AlpacaMomentumClient:
                     "symbols": ",".join(batch),
                     "timeframe": "1Day",
                     "start": start.isoformat(),
-                    "end": as_of.isoformat(),
+                    "end": end,
                     "limit": 10000,
                     "adjustment": "all",
                     "feed": os.environ.get("BOT2_ALPACA_DATA_FEED", "sip"),
@@ -409,20 +418,46 @@ class AlpacaMomentumClient:
                     params["page_token"] = token
                 payload = self._data_request("GET", "/v2/stocks/bars", params=params) or {}
                 for symbol, bars in (payload.get("bars") or {}).items():
-                    result.setdefault(canonical_symbol(symbol), []).extend(bars or [])
+                    eligible_bars = [
+                        bar for bar in (bars or [])
+                        if unfinished_session is None
+                        or _bar_date(bar) != unfinished_session
+                    ]
+                    if eligible_bars:
+                        result.setdefault(canonical_symbol(symbol), []).extend(
+                            eligible_bars
+                        )
                 token = payload.get("next_page_token")
                 if not token:
                     break
         return result
 
     def latest_price(self, symbol: str) -> float:
-        payload = self._data_request(
-            "GET", f"/v2/stocks/{canonical_symbol(symbol)}/quotes/latest"
-        )
+        symbol = canonical_symbol(symbol)
+        path = f"/v2/stocks/{symbol}/quotes/latest"
+        quote_feed = "sip"
+        fallback_reason = "sip_request_succeeded"
+        try:
+            payload = self._data_request(
+                "GET", path, params={"feed": quote_feed}
+            )
+        except requests.HTTPError as exc:
+            response = getattr(exc, "response", None)
+            if response is None or response.status_code != 403:
+                raise
+            quote_feed = "iex"
+            fallback_reason = "sip_http_403"
+            payload = self._data_request(
+                "GET", path, params={"feed": quote_feed}
+            )
         quote = (payload or {}).get("quote", {})
         bid, ask = float(quote.get("bp") or 0), float(quote.get("ap") or 0)
         if bid <= 0 and ask <= 0:
             raise RuntimeError(f"missing Alpaca quote for {symbol}")
+        print(
+            f"BOT2_LATEST_QUOTE | symbol={symbol} feed={quote_feed} "
+            f"reason={fallback_reason}"
+        )
         return (bid + ask) / 2 if bid > 0 and ask > 0 else max(bid, ask)
 
     def submit(self, symbol: str, side: str, qty: int, order_type: str, **extra: Any) -> dict[str, Any]:

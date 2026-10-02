@@ -46,6 +46,98 @@ def _asset(symbol: str, **overrides):
     }
 
 
+def test_daily_bars_end_twenty_minutes_before_now(monkeypatch) -> None:
+    fixed_now = datetime(2026, 10, 2, 15, 40, tzinfo=timezone.utc)
+
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return fixed_now
+
+    monkeypatch.setattr(bot2, "datetime", FrozenDateTime)
+    monkeypatch.delenv("BOT2_ALPACA_DATA_FEED", raising=False)
+    requests_seen = []
+    client = object.__new__(bot2.AlpacaMomentumClient)
+    client._data_request = lambda method, path, **kwargs: (
+        requests_seen.append(kwargs["params"]) or {"bars": {}}
+    )
+
+    client.daily_bars(["AAPL"], date(2026, 10, 2))
+
+    assert requests_seen[0]["end"] == "2026-10-02T15:20:00Z"
+    assert requests_seen[0]["feed"] == "sip"
+
+
+def test_daily_bars_drop_today_during_open_nyse_session(monkeypatch) -> None:
+    fixed_now = datetime(2026, 10, 2, 15, 0, tzinfo=timezone.utc)
+
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return fixed_now
+
+    monkeypatch.setattr(bot2, "datetime", FrozenDateTime)
+    client = object.__new__(bot2.AlpacaMomentumClient)
+    client._data_request = lambda *args, **kwargs: {
+        "bars": {
+            "AAPL": [
+                {"t": "2026-10-01T04:00:00Z", "c": 100.0, "v": 1000},
+                {"t": "2026-10-02T13:30:00Z", "c": 999.0, "v": 999999},
+            ]
+        }
+    }
+
+    bars = client.daily_bars(["AAPL"], date(2026, 10, 2))
+
+    assert bars == {
+        "AAPL": [{"t": "2026-10-01T04:00:00Z", "c": 100.0, "v": 1000}]
+    }
+
+
+def test_latest_price_falls_back_to_iex_only_after_sip_403(capsys) -> None:
+    requests_seen = []
+    client = object.__new__(bot2.AlpacaMomentumClient)
+
+    def data_request(method, path, **kwargs):
+        requests_seen.append((method, path, kwargs["params"]["feed"]))
+        if len(requests_seen) == 1:
+            response = bot2.requests.Response()
+            response.status_code = 403
+            raise bot2.requests.HTTPError("SIP forbidden", response=response)
+        return {"quote": {"bp": 99.0, "ap": 101.0}}
+
+    client._data_request = data_request
+
+    assert client.latest_price("sgov") == 100.0
+    assert requests_seen == [
+        ("GET", "/v2/stocks/SGOV/quotes/latest", "sip"),
+        ("GET", "/v2/stocks/SGOV/quotes/latest", "iex"),
+    ]
+    assert "feed=iex reason=sip_http_403" in capsys.readouterr().out
+
+
+def test_latest_price_does_not_fall_back_for_non_403_errors() -> None:
+    requests_seen = []
+    client = object.__new__(bot2.AlpacaMomentumClient)
+
+    def data_request(method, path, **kwargs):
+        requests_seen.append(kwargs["params"]["feed"])
+        response = bot2.requests.Response()
+        response.status_code = 500
+        raise bot2.requests.HTTPError("server error", response=response)
+
+    client._data_request = data_request
+
+    try:
+        client.latest_price("SGOV")
+    except bot2.requests.HTTPError as exc:
+        assert exc.response.status_code == 500
+    else:
+        raise AssertionError("non-403 quote errors must be raised")
+
+    assert requests_seen == ["sip"]
+
+
 def test_screen_requires_tradable_us_equity_and_mechanical_liquidity_gates() -> None:
     as_of = date(2026, 1, 1)
     assets = [

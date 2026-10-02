@@ -528,19 +528,19 @@ export default function StreamingHealthScreen() {
     <div
       className="stream-screen stream-screen-health h-full w-full flex flex-col relative"
       data-testid="health-screen"
-      style={{ background: "linear-gradient(180deg, rgba(10,22,20,.72), rgba(8,20,17,.94)), url('/streaming-forest-atmosphere.jpg') center 53% / cover, #14241f" }}
+      style={{ background: "transparent" }}
     >
       <style>{`
-        .stream-screen-health[data-testid="health-screen"] { isolation:isolate; color:#eff3eb !important; background:linear-gradient(180deg,rgba(10,22,20,.72),rgba(8,20,17,.94)),url('/streaming-forest-atmosphere.jpg') center 53% / cover,#14241f !important; font-family:"DM Sans","Avenir Next",system-ui,sans-serif; }
-        .stream-screen-health[data-testid="health-screen"] [style*="rgba(148,163,184"],.stream-screen-health[data-testid="health-screen"] [style*="rgba(148, 163, 184"],.stream-screen-health[data-testid="health-screen"] [style*="#94a3b8"],.stream-screen-health[data-testid="health-screen"] [style*="#e2e8f0"],.stream-screen-health[data-testid="health-screen"] [class*="text-slate-"] { color:rgba(223,233,220,.72) !important; text-shadow:none !important; }
+        .stream-screen-health[data-testid="health-screen"] { isolation:isolate; color:#eff3eb !important; background:transparent !important; font-family:"DM Sans","Avenir Next",system-ui,sans-serif; }
+        .stream-screen-health[data-testid="health-screen"] [style*="rgba(148,163,184"],.stream-screen-health[data-testid="health-screen"] [style*="rgba(148, 163, 184"],.stream-screen-health[data-testid="health-screen"] [style*="#94a3b8"],.stream-screen-health[data-testid="health-screen"] [style*="#e2e8f0"],.stream-screen-health[data-testid="health-screen"] [class*="text-slate-"] { color:rgba(245,248,251,.88) !important; text-shadow:0 1px 3px rgba(0,0,0,.3) !important; }
         .stream-screen-health[data-testid="health-screen"] [style*="rgba(2,6,23"] { background:rgba(11,25,22,.8) !important; border-color:rgba(229,240,226,.16) !important; }
         .stream-screen-health[data-testid="health-screen"] [class*="text-green-"],.stream-screen-health[data-testid="health-screen"] [class*="text-emerald-"] { color:#a9d8ad !important; }
         .stream-screen-health[data-testid="health-screen"] [class*="text-red-"],.stream-screen-health[data-testid="health-screen"] [class*="text-rose-"] { color:#ee9a8c !important; }
         .stream-screen-health[data-testid="health-screen"] [class*="text-yellow-"],.stream-screen-health[data-testid="health-screen"] [class*="text-amber-"] { color:#e2c47d !important; }
         .stream-screen-health [data-testid="health-topology-and-alerts"] { gap:12px; padding:12px 20px 18px; }
-        .stream-screen-health [data-testid="health-topology-and-alerts"] > div { border:1px solid rgba(229,240,226,.16); border-radius:14px; background:linear-gradient(135deg,rgba(20,38,31,.78),rgba(11,25,22,.77)) !important; box-shadow:inset 0 1px rgba(255,255,255,.06),0 14px 36px rgba(3,11,8,.2); backdrop-filter:blur(17px); }
+        .stream-screen-health [data-testid="health-topology-and-alerts"] > div { border:1px solid rgba(255,255,255,.2); border-radius:14px; background:rgba(18,27,36,.46) !important; box-shadow:inset 0 1px rgba(255,255,255,.12),0 14px 36px rgba(3,11,8,.2); backdrop-filter:blur(17px); }
         .stream-screen-health [data-testid="health-topology-and-alerts"] > div:first-child { border-right:1px solid rgba(229,240,226,.16) !important; }
-        .stream-screen-health [data-testid="health-topology-and-alerts"] > div:last-child { background:rgba(11,25,22,.69) !important; }
+        .stream-screen-health [data-testid="health-topology-and-alerts"] > div:last-child { background:rgba(18,27,36,.46) !important; }
         .stream-screen-health svg { color-scheme:dark; }
         @media(max-width:850px) { .stream-screen-health [data-testid="health-topology-and-alerts"] { padding:8px; gap:8px; } }
       `}</style>
@@ -591,7 +591,7 @@ export default function StreamingHealthScreen() {
         margin: "10px 20px 0",
         border: "1px solid rgba(234,243,229,.17)",
         borderRadius: 12,
-        background: "linear-gradient(115deg,rgba(16,34,29,.84),rgba(18,39,32,.68))",
+        background: "rgba(18,27,36,.46)",
         boxShadow: "inset 0 1px rgba(255,255,255,.05),0 10px 28px rgba(4,12,9,.16)",
         backdropFilter: "blur(18px)",
       }}>

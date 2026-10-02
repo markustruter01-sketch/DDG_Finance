@@ -929,7 +929,7 @@
   z-index: -1;
   pointer-events: none;
   background-image:
-    linear-gradient(rgba(255,255,255,.08), rgba(255,255,255,.14)),
+    linear-gradient(rgba(8,14,22,.18), rgba(8,14,22,.22)),
     url("/desktop-home-background.jpg");
   background-size: cover;
   background-position: center;
@@ -944,7 +944,7 @@
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(15,23,42,.22));
+  background: linear-gradient(180deg, rgba(8,14,22,.02), rgba(8,14,22,.12));
 }
 
 .stream-production-shell {
@@ -963,7 +963,7 @@
 }
 
 .stream-production-shell .stream-screen {
-  color: #172033 !important;
+  color: #f4f7fa !important;
   background: transparent !important;
 }
 
@@ -988,48 +988,48 @@
 .stream-production-shell .stream-screen [style*="rgba(8,16,40"],
 .stream-production-shell .stream-screen [style*="rgba(0, 0, 0"],
 .stream-production-shell .stream-screen [style*="rgba(0,0,0"] {
-  background: rgba(255,255,255,.18) !important;
-  border-color: rgba(100,116,139,.22) !important;
-  box-shadow: 0 10px 28px rgba(15,23,42,.14), inset 0 1px rgba(255,255,255,.22);
-  backdrop-filter: blur(18px) saturate(125%);
-  -webkit-backdrop-filter: blur(18px) saturate(125%);
+  background: rgba(18,27,36,.52) !important;
+  border-color: rgba(255,255,255,.2) !important;
+  box-shadow: 0 10px 28px rgba(0,0,0,.14), inset 0 1px rgba(255,255,255,.14);
+  backdrop-filter: blur(18px) saturate(115%);
+  -webkit-backdrop-filter: blur(18px) saturate(115%);
 }
 
 .stream-production-shell .stream-screen [class*="text-slate-"],
 .stream-production-shell .stream-screen [class*="text-white"] {
-  color: rgba(30,41,59,.86) !important;
-  text-shadow: 0 1px 2px rgba(15,23,42,.18);
+  color: rgba(245,248,251,.92) !important;
+  text-shadow: 0 1px 3px rgba(0,0,0,.3);
 }
 
 .stream-production-shell .stream-screen [class*="text-cyan-"],
 .stream-production-shell .stream-screen [class*="text-teal-"] {
-  color: #0e7490 !important;
+  color: #9de2f2 !important;
 }
 
 .stream-production-shell .stream-screen [class*="text-indigo-"],
 .stream-production-shell .stream-screen [class*="text-violet-"],
 .stream-production-shell .stream-screen [class*="text-purple-"] {
-  color: #6d28d9 !important;
+  color: #d4c5ff !important;
 }
 
 .stream-production-shell .stream-screen [class*="text-green-"],
 .stream-production-shell .stream-screen [class*="text-emerald-"] {
-  color: #166534 !important;
+  color: #a8e6b2 !important;
 }
 
 .stream-production-shell .stream-screen [class*="text-yellow-"],
 .stream-production-shell .stream-screen [class*="text-amber-"],
 .stream-production-shell .stream-screen [class*="text-orange-"] {
-  color: #92400e !important;
+  color: #ffe0a3 !important;
 }
 
 .stream-production-shell .stream-screen [class*="text-red-"],
 .stream-production-shell .stream-screen [class*="text-rose-"] {
-  color: #b91c1c !important;
+  color: #ffb3aa !important;
 }
 
 .stream-production-shell .stream-screen [class*="text-blue-"] {
-  color: #1d4ed8 !important;
+  color: #bdd7ff !important;
 }
 
 .stream-production-shell .stream-screen [style*="rgba(148,163,184"],
@@ -1043,15 +1043,23 @@
 .stream-production-shell .stream-screen [style*="rgb(100, 116, 139"],
 .stream-production-shell .stream-screen [style*="#94a3b8"],
 .stream-production-shell .stream-screen [style*="#e2e8f0"] {
-  color: rgba(30,41,59,.78) !important;
-  text-shadow: 0 1px 2px rgba(15,23,42,.16);
+  color: rgba(240,245,249,.78) !important;
+  text-shadow: 0 1px 3px rgba(0,0,0,.28);
+}
+
+.stream-production-shell .stream-screen [style*="rgba(223,233,220"],
+.stream-production-shell .stream-screen [style*="rgba(223, 233, 220"],
+.stream-production-shell .stream-screen [style*="rgba(208,225,207"],
+.stream-production-shell .stream-screen [style*="rgba(208, 225, 207"] {
+  color: rgba(245,248,251,.9) !important;
+  text-shadow: 0 1px 3px rgba(0,0,0,.3);
 }
 
 .stream-production-shell .stream-screen [style*="#22d3ee"],
 .stream-production-shell .stream-screen [style*="#67e8f9"],
 .stream-production-shell .stream-screen [style*="rgb(34, 211, 238"],
 .stream-production-shell .stream-screen [style*="rgb(103, 232, 249"] {
-  color: #0e7490 !important;
+  color: #9de2f2 !important;
 }
 
 .stream-production-shell .stream-screen [style*="#22c55e"],
@@ -1060,59 +1068,59 @@
 .stream-production-shell .stream-screen [style*="rgb(34, 197, 94"],
 .stream-production-shell .stream-screen [style*="rgb(52, 211, 153"],
 .stream-production-shell .stream-screen [style*="rgb(74, 222, 128"] {
-  color: #166534 !important;
+  color: #a8e6b2 !important;
 }
 
 .stream-production-shell .stream-screen [style*="#a78bfa"],
 .stream-production-shell .stream-screen [style*="rgb(167, 139, 250"] {
-  color: #6d28d9 !important;
+  color: #d4c5ff !important;
 }
 
 .stream-production-shell .stream-screen [style*="#a5b4fc"],
 .stream-production-shell .stream-screen [style*="#818cf8"],
 .stream-production-shell .stream-screen [style*="rgb(165, 180, 252"],
 .stream-production-shell .stream-screen [style*="rgb(129, 140, 248"] {
-  color: #4338ca !important;
+  color: #c5ccff !important;
 }
 
 .stream-production-shell .stream-screen [style*="#fbbf24"],
 .stream-production-shell .stream-screen [style*="#f59e0b"],
 .stream-production-shell .stream-screen [style*="rgb(251, 191, 36"],
 .stream-production-shell .stream-screen [style*="rgb(245, 158, 11"] {
-  color: #92400e !important;
+  color: #ffe0a3 !important;
 }
 
 .stream-production-shell .stream-screen [style*="#fb923c"],
 .stream-production-shell .stream-screen [style*="rgb(251, 146, 60"] {
-  color: #c2410c !important;
+  color: #ffc398 !important;
 }
 
 .stream-production-shell .stream-screen [style*="#f97316"],
 .stream-production-shell .stream-screen [style*="rgb(249, 115, 22"] {
-  color: #c2410c !important;
+  color: #ffc398 !important;
 }
 
 .stream-production-shell .stream-screen [style*="#60a5fa"],
 .stream-production-shell .stream-screen [style*="#3b82f6"],
 .stream-production-shell .stream-screen [style*="rgb(96, 165, 250"],
 .stream-production-shell .stream-screen [style*="rgb(59, 130, 246"] {
-  color: #1d4ed8 !important;
+  color: #bdd7ff !important;
 }
 
 .stream-production-shell .stream-screen [style*="#f87171"],
 .stream-production-shell .stream-screen [style*="#ef4444"],
 .stream-production-shell .stream-screen [style*="rgb(248, 113, 113"],
 .stream-production-shell .stream-screen [style*="rgb(239, 68, 68"] {
-  color: #b91c1c !important;
+  color: #ffb3aa !important;
 }
 
 .stream-screen-bots > div:first-child,
 .stream-screen-architecture > div:first-child,
 .stream-screen-architecture > div:nth-child(2) > div:last-child,
 .stream-screen-architecture > div:last-child {
-  background: rgba(255,255,255,.12) !important;
-  border-color: rgba(100,116,139,.22) !important;
-  box-shadow: 0 10px 28px rgba(15,23,42,.14), inset 0 1px rgba(255,255,255,.22);
+  background: rgba(18,27,36,.52) !important;
+  border-color: rgba(255,255,255,.2) !important;
+  box-shadow: 0 10px 28px rgba(0,0,0,.14), inset 0 1px rgba(255,255,255,.14);
   backdrop-filter: blur(18px) saturate(125%);
   -webkit-backdrop-filter: blur(18px) saturate(125%);
 }
@@ -1123,8 +1131,8 @@
 }
 
 .stream-screen-bots > div:nth-child(2) > * {
-  background: rgba(255,255,255,.20) !important;
-  box-shadow: 0 10px 28px rgba(15,23,42,.14), inset 0 1px rgba(255,255,255,.22);
+  background: rgba(18,27,36,.52) !important;
+  box-shadow: 0 10px 28px rgba(0,0,0,.14), inset 0 1px rgba(255,255,255,.14);
   backdrop-filter: blur(18px) saturate(125%);
   -webkit-backdrop-filter: blur(18px) saturate(125%);
 }
@@ -1463,7 +1471,7 @@
   .bench-shell::after,
   .production-not-found::before {
     background-image:
-      linear-gradient(rgba(255,255,255,.08), rgba(255,255,255,.12)),
+      linear-gradient(rgba(8,14,22,.18), rgba(8,14,22,.22)),
       url("/phone-home-background.jpg");
     background-position: center;
   }
@@ -1707,7 +1715,7 @@
   }
 
   .stream-production-shell::before {
-    filter: blur(5px) saturate(1.08);
+    filter: blur(5px) saturate(.88);
     transform: scale(1.04);
   }
 
@@ -1799,6 +1807,187 @@
     flex: 0 0 auto !important;
   }
 }
+
+/* Streaming views share one neutral glass system over the dashboard artwork. */
+.stream-production-shell::before {
+  background-image:
+    linear-gradient(rgba(8,14,22,.18), rgba(8,14,22,.22)),
+    url("/desktop-home-background.jpg");
+}
+
+.stream-production-shell::after {
+  background: linear-gradient(180deg, rgba(8,14,22,.02), rgba(8,14,22,.12));
+}
+
+.stream-production-shell .live-stream,
+.stream-production-shell .synaptic-audit,
+.stream-production-shell .stream-screen-bots[data-testid="bots-screen"],
+.stream-production-shell .stream-screen-health[data-testid="health-screen"],
+.stream-production-shell .learn-shell,
+.stream-production-shell .orb-screen,
+.stream-production-shell .stream-screen-performance[data-testid="performance-screen"],
+.stream-production-shell .stream-screen-architecture[data-testid="architecture-screen"] {
+  color: #f4f7fa !important;
+  background: transparent !important;
+}
+
+.stream-production-shell .live-stream::before,
+.stream-production-shell .synaptic-audit .sa-backdrop,
+.stream-production-shell .learn-shell::before,
+.stream-production-shell .orb-screen::before {
+  display: none !important;
+}
+
+.stream-production-shell .stream-screen :is(
+  .sa-panel,
+  .learn-board,
+  .learn-total,
+  .orb-stage,
+  .orb-panel,
+  .orb-satellite,
+  .orb-core,
+  [data-testid="health-summary"],
+  [data-testid="health-topology-and-alerts"] > div,
+  [data-testid="health-alert-panel"],
+  [data-testid="performance-panel"],
+  [data-testid="performance-risk-card"],
+  [data-testid="architecture-flow-sidebar"],
+  .stream-bot-card-grid > div
+) {
+  background: rgba(18,27,36,.52) !important;
+  background-image: none !important;
+  border-color: rgba(255,255,255,.2) !important;
+  box-shadow: 0 12px 32px rgba(0,0,0,.14), inset 0 1px rgba(255,255,255,.14) !important;
+  backdrop-filter: blur(18px) saturate(115%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(115%) !important;
+}
+
+.stream-production-shell .stream-screen :is(
+  .live-topbar,
+  .live-footer,
+  .sa-topbar,
+  .learn-header,
+  .learn-footer,
+  .orb-topbar,
+  .stream-screen-bots > header,
+  .stream-screen-architecture > div:first-of-type,
+  .stream-screen-architecture > div:nth-of-type(3)
+) {
+  background: rgba(18,27,36,.4) !important;
+  background-image: none !important;
+  border-color: rgba(255,255,255,.18) !important;
+  backdrop-filter: blur(18px) saturate(115%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(115%) !important;
+}
+
+.stream-production-shell .stream-screen :is(
+  .sa-rate,
+  .sa-formula,
+  .sa-window,
+  .sa-range,
+  .learn-note:hover,
+  .learn-note.is-selected,
+  .orb-satellite:hover,
+  .orb-satellite.is-selected,
+  .stream-screen-architecture [data-testid="architecture-flow-sidebar"] button:hover
+) {
+  background: rgba(255,255,255,.1) !important;
+  background-image: none !important;
+  border-color: rgba(255,255,255,.24) !important;
+}
+
+.stream-production-shell .stream-screen :is(h1,h2,h3,p,small,span,strong,label) {
+  text-shadow: 0 1px 3px rgba(0,0,0,.36);
+}
+
+.stream-production-shell .stream-clippy-assistant {
+  filter: grayscale(.9);
+}
+
+.stream-production-shell .stream-clippy-bubble {
+  max-width: 280px !important;
+  padding: 12px 15px !important;
+  background: rgba(18,27,36,.58) !important;
+  border: 1px solid rgba(255,255,255,.24) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 10px 28px rgba(0,0,0,.25), inset 0 1px rgba(255,255,255,.12) !important;
+  backdrop-filter: blur(18px) saturate(110%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(110%) !important;
+}
+
+.stream-production-shell .stream-clippy-bubble p {
+  font-size: 14px !important;
+  line-height: 1.45 !important;
+}
+
+.stream-production-shell .stream-clippy-mascot svg {
+  width: 68px !important;
+  height: 90px !important;
+}
+
+.stream-production-shell .synaptic-audit {
+  --muted: rgba(237,243,247,.82);
+  --faint: rgba(224,233,239,.72);
+}
+
+.stream-production-shell .learn-shell :is(
+  .learn-brand-section,
+  .learn-header-meta,
+  .learn-intro p,
+  .learn-note-index,
+  .learn-note-category,
+  .learn-detail-index,
+  .learn-detail-copy,
+  .learn-detail-foot,
+  .learn-detail-caption,
+  .learn-total-foot,
+  .learn-footer
+) {
+  color: rgba(239,245,248,.84) !important;
+  text-shadow: 0 1px 3px rgba(0,0,0,.36);
+}
+
+.stream-production-shell .orb-screen :is(
+  .orb-brand-path,
+  .orb-subtitle,
+  .orb-updated,
+  .orb-core-foot,
+  .orb-identity,
+  .orb-row-sub,
+  .orb-footnote,
+  .orb-card-count
+) {
+  color: rgba(239,245,248,.84) !important;
+  text-shadow: 0 1px 3px rgba(0,0,0,.36);
+}
+
+.stream-production-shell .orb-screen .orb-feed-state:not(.is-error) {
+  color: rgba(239,245,248,.88) !important;
+}
+
+.stream-production-shell .orb-screen .orb-stage::before {
+  background: radial-gradient(circle, rgba(255,255,255,.12), rgba(255,255,255,.035) 43%, transparent 70%) !important;
+}
+
+.stream-production-shell .orb-screen .orb-rings {
+  border-color: rgba(255,255,255,.22) !important;
+  box-shadow: 0 0 0 22px rgba(255,255,255,.025), 0 0 0 48px rgba(255,255,255,.018), inset 0 0 32px rgba(255,255,255,.07) !important;
+}
+
+.stream-production-shell .orb-screen .orb-rings::before,
+.stream-production-shell .orb-screen .orb-rings::after {
+  border-color: rgba(255,255,255,.22) !important;
+}
+
+.stream-production-shell .orb-screen .orb-core {
+  border-color: rgba(255,255,255,.32) !important;
+  box-shadow: 0 0 38px rgba(255,255,255,.08), inset 0 1px rgba(255,255,255,.12) !important;
+}
+
+.stream-production-shell .stream-screen-performance .perf-brand small {
+  color: rgba(239,245,248,.84) !important;
+}
+
 .bench-config-string { display: flex; align-items: center; gap: 8px; color: #687d86; }
 .bench-config-string code { color: #9aabb0; font-family: "IBM Plex Mono", monospace; font-size: 10px; }
 .bench-holdout { display: flex; align-items: center; gap: 15px; }

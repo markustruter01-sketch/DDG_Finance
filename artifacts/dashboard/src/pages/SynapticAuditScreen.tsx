@@ -109,8 +109,8 @@ export default function SynapticAuditScreen() {
     <div className="stream-screen stream-screen-math synaptic-audit">
       <style>{`
         .synaptic-audit,.synaptic-audit *{box-sizing:border-box}
-        .synaptic-audit{--ink:#edf2e9;--muted:#a4b0a6;--faint:#78877e;--edge:rgba(218,232,216,.13);height:100%;min-height:700px;position:relative;isolation:isolate;overflow:auto;color:var(--ink);background:#172522 url("/streaming-forest-atmosphere.jpg") center 54%/cover;font-family:"DM Sans","Avenir Next",ui-sans-serif,system-ui,sans-serif;letter-spacing:-.01em}
-        .sa-backdrop{position:fixed;inset:0;z-index:-1;pointer-events:none;background:linear-gradient(90deg,rgba(8,18,17,.82),rgba(10,21,19,.67) 54%,rgba(8,18,17,.8)),linear-gradient(180deg,rgba(9,20,18,.43),rgba(8,18,17,.27) 38%,rgba(8,18,17,.85))}
+        .synaptic-audit{--ink:#edf2e9;--muted:#a4b0a6;--faint:#78877e;--edge:rgba(218,232,216,.13);height:100%;min-height:700px;position:relative;isolation:isolate;overflow:auto;color:var(--ink);background:transparent;font-family:"DM Sans","Avenir Next",ui-sans-serif,system-ui,sans-serif;letter-spacing:-.01em}
+        .sa-backdrop{display:none}
         .sa-topbar{height:62px;padding:0 clamp(18px,3vw,34px);display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(229,239,225,.12);background:rgba(10,22,19,.55);backdrop-filter:blur(22px)}
         .sa-brand,.sa-top-meta,.sa-title-copy,.sa-title-side,.sa-section-title,.sa-filterbar,.sa-event-name,.sa-event-bot,.sa-event-status,.sa-event-time,.sa-value-status{display:flex;align-items:center}
         .sa-brand{gap:11px}.sa-brand-symbol{width:33px;height:33px;display:grid;place-items:center;border:1px solid rgba(193,231,202,.22);border-radius:10px;color:#c3e8ca;background:rgba(184,223,194,.09)}

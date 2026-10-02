@@ -11,7 +11,7 @@ const SVG_PADDING_X = 18;
 const SVG_PADDING_TOP = 14;
 const COL_COUNT = 5;
 const NATURAL_W = 1040;
-const COLUMN_TEXT_COLORS = ["#ffd2ae", "#b7eef1", "#d4c3ff", "#b9f0cf", "#ffe1a4"] as const;
+const COLUMN_TEXT_COLORS = ["#eaf0f4", "#eaf0f4", "#eaf0f4", "#eaf0f4", "#eaf0f4"] as const;
 
 function getColX(col: number): number {
   const usable = NATURAL_W - SVG_PADDING_X * 2;
@@ -148,11 +148,13 @@ function ArchNodeBox({
     ? nodeColor
     : "rgba(227,240,228,0.2)";
   const bgColor = selected
-    ? `${nodeColor}22`
+    ? "rgba(255,255,255,.18)"
     : highlighted
-    ? `${nodeColor}18`
-    : "rgba(13,29,27,.84)";
-  const glowFilter = (highlighted || selected) ? `drop-shadow(0 0 6px ${nodeColor}55)` : "none";
+    ? "rgba(255,255,255,.11)"
+    : "rgba(18,27,36,.62)";
+  const glowFilter = (highlighted || selected)
+    ? "drop-shadow(0 0 5px rgba(255,255,255,.24))"
+    : "none";
 
   return (
     <g
@@ -239,7 +241,6 @@ function ColumnHeaders() {
     <>
       {([0, 1, 2, 3, 4] as const).map((col) => {
         const cx = getColX(col);
-        const color = COLUMN_COLORS[col];
         const textColor = COLUMN_TEXT_COLORS[col];
         return (
           <g key={col}>
@@ -249,8 +250,8 @@ function ColumnHeaders() {
               width={NODE_W}
               height={COL_HEADER_H - 6}
               rx={5}
-              fill={`${color}12`}
-              stroke={`${color}30`}
+              fill="rgba(255,255,255,.07)"
+              stroke="rgba(255,255,255,.2)"
               strokeWidth={1}
             />
             <text
@@ -287,11 +288,13 @@ function NodePopover({ node, onClose }: { node: ArchNode; onClose: () => void })
     <foreignObject x={px} y={py} width={popW} height={popH + 20}>
       <div
         style={{
-          background: "rgba(10,23,22,.97)",
+          background: "rgba(18,27,36,.92)",
           border: `1px solid ${node.color}55`,
           borderRadius: 8,
           padding: "10px 12px",
-          boxShadow: `0 0 20px ${node.color}22`,
+          boxShadow: "0 12px 30px rgba(0,0,0,.28), inset 0 1px rgba(255,255,255,.12)",
+          backdropFilter: "blur(18px)",
+          WebkitBackdropFilter: "blur(18px)",
           fontFamily: "'JetBrains Mono', monospace",
           position: "relative",
         }}
@@ -389,9 +392,9 @@ function FlowsSidebar({
                 width: "100%",
                 textAlign: "left",
                 padding: "8px 14px",
-                 background: isActive ? "rgba(205,216,178,0.12)" : "transparent",
+                 background: isActive ? "rgba(255,255,255,0.11)" : "transparent",
                 border: "none",
-                 borderLeft: isActive ? "2px solid #cdd8a8" : "2px solid transparent",
+                 borderLeft: isActive ? "2px solid rgba(255,255,255,.62)" : "2px solid transparent",
                 cursor: "pointer",
                 display: "flex",
                 alignItems: "center",
@@ -604,20 +607,20 @@ export default function StreamingArchitectureScreen() {
         width: "100%",
         display: "flex",
         flexDirection: "column",
-        background: "linear-gradient(105deg,rgba(8,24,22,.88),rgba(9,26,24,.8) 48%,rgba(12,25,21,.88)), url('/streaming-forest-atmosphere.jpg') center 49% / cover, #10221d",
+        background: "transparent",
         overflow: "hidden",
         fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
       }}
     >
       <style>{`
         .stream-screen-architecture[data-testid="architecture-screen"] { isolation:isolate; color:#f1f1e9; }
-        .stream-screen-architecture[data-testid="architecture-screen"] { background:linear-gradient(105deg,rgba(8,24,22,.88),rgba(9,26,24,.8) 48%,rgba(12,25,21,.88)),url('/streaming-forest-atmosphere.jpg') center 49% / cover,#10221d !important; color:#f1f1e9 !important; }
-        .stream-screen-architecture[data-testid="architecture-screen"] [style*="rgba(148,163,184"],.stream-screen-architecture[data-testid="architecture-screen"] [style*="rgba(148, 163, 184"],.stream-screen-architecture[data-testid="architecture-screen"] [class*="text-slate-"] { color:rgba(223,233,220,.7) !important; text-shadow:none !important; }
-        .stream-screen-architecture[data-testid="architecture-screen"] > div:first-of-type { background:linear-gradient(90deg,rgba(16,34,29,.88),rgba(18,37,33,.79)) !important; border-bottom-color:rgba(227,239,223,.18) !important; }
-        .stream-screen-architecture[data-testid="architecture-screen"] > div:nth-of-type(2) > div:first-child { background:radial-gradient(ellipse at 50% 40%,rgba(173,193,142,.055),transparent 68%); }
-        .stream-screen-architecture[data-testid="architecture-screen"] > div:nth-of-type(3) { background:rgba(16,31,29,.82) !important; border-top-color:rgba(225,236,218,.14) !important; }
-        .stream-screen-architecture[data-testid="architecture-flow-sidebar"] { background:linear-gradient(145deg,rgba(20,39,34,.94),rgba(12,27,24,.96)) !important; color:#e4ebdd !important; backdrop-filter:blur(18px); }
-        .stream-screen-architecture[data-testid="architecture-flow-sidebar"] [style*="rgba(148,163,184"],.stream-screen-architecture[data-testid="architecture-flow-sidebar"] [style*="rgba(148, 163, 184"] { color:rgba(223,233,220,.7) !important; }
+        .stream-screen-architecture[data-testid="architecture-screen"] { background:transparent !important; color:#f1f1e9 !important; }
+        .stream-screen-architecture[data-testid="architecture-screen"] [style*="rgba(148,163,184"],.stream-screen-architecture[data-testid="architecture-screen"] [style*="rgba(148, 163, 184"],.stream-screen-architecture[data-testid="architecture-screen"] [class*="text-slate-"] { color:rgba(245,248,251,.88) !important; text-shadow:0 1px 3px rgba(0,0,0,.3) !important; }
+        .stream-screen-architecture[data-testid="architecture-screen"] > div:first-of-type { background:rgba(18,27,36,.42) !important; border-bottom-color:rgba(255,255,255,.18) !important; }
+        .stream-screen-architecture[data-testid="architecture-screen"] > div:nth-of-type(2) > div:first-child { background:radial-gradient(ellipse at 50% 40%,rgba(255,255,255,.055),transparent 68%); }
+        .stream-screen-architecture[data-testid="architecture-screen"] > div:nth-of-type(3) { background:rgba(18,27,36,.46) !important; border-top-color:rgba(255,255,255,.18) !important; }
+        .stream-screen-architecture[data-testid="architecture-flow-sidebar"] { background:rgba(18,27,36,.46) !important; color:#e4ebdd !important; backdrop-filter:blur(18px); }
+        .stream-screen-architecture[data-testid="architecture-flow-sidebar"] [style*="rgba(148,163,184"],.stream-screen-architecture[data-testid="architecture-flow-sidebar"] [style*="rgba(148, 163, 184"] { color:rgba(245,248,251,.88) !important; text-shadow:0 1px 3px rgba(0,0,0,.3) !important; }
         .stream-screen-architecture[data-testid="architecture-flow-sidebar"] button:hover { background:rgba(233,242,225,.07) !important; }
       `}</style>
       {/* Page title — fixed strip */}
@@ -643,9 +646,9 @@ export default function StreamingArchitectureScreen() {
             style={{
               fontSize: 9,
               fontWeight: 700,
-              color: "#a5b4fc",
-              background: "rgba(99,102,241,0.15)",
-              border: "1px solid rgba(99,102,241,0.3)",
+              color: "#f4f7fa",
+              background: "rgba(255,255,255,.11)",
+              border: "1px solid rgba(255,255,255,.24)",
               borderRadius: 4,
               padding: "2px 8px",
               marginLeft: 4,
@@ -739,8 +742,8 @@ export default function StreamingArchitectureScreen() {
             <div
               style={{
                 width: 8, height: 8, borderRadius: 2,
-                background: `${COLUMN_COLORS[col]}40`,
-                border: `1px solid ${COLUMN_COLORS[col]}80`,
+                background: "rgba(255,255,255,.14)",
+                border: "1px solid rgba(255,255,255,.42)",
               }}
             />
             <span style={{ fontSize: 8, color: COLUMN_TEXT_COLORS[col], fontWeight: 700, letterSpacing: "0.12em" }}>
@@ -753,7 +756,7 @@ export default function StreamingArchitectureScreen() {
           <span style={{ fontSize: 8, color: "rgba(148,163,184,0.4)" }}>data flow</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-          <div style={{ width: 18, height: 1.5, background: "#6366f1" }} />
+          <div style={{ width: 18, height: 1.5, background: "rgba(255,255,255,.72)" }} />
           <span style={{ fontSize: 8, color: "rgba(148,163,184,0.4)" }}>selected flow</span>
         </div>
         <span style={{ fontSize: 8, color: "rgba(148,163,184,0.3)" }}>

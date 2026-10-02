@@ -184,7 +184,7 @@ export default function StreamingPerformanceScreen() {
     <div className="stream-screen stream-screen-performance" data-testid="performance-screen" style={{
       width: "100%",
       height: "100%",
-      background: `linear-gradient(90deg, rgba(8,21,23,.91), rgba(9,23,23,.79) 53%, rgba(10,25,24,.75)), linear-gradient(180deg, rgba(12,25,25,.12), rgba(8,19,21,.77) 78%, #0a1a1b), url("/streaming-forest-atmosphere.jpg") center 43% / cover`,
+      background: "transparent",
       overflow: "hidden",
       display: "flex",
       flexDirection: "column",
@@ -194,7 +194,7 @@ export default function StreamingPerformanceScreen() {
       position: "relative",
     }}>
       <style>{`
-        .stream-screen-performance[data-testid="performance-screen"] { color:${C.text} !important; background:linear-gradient(90deg,rgba(8,21,23,.91),rgba(9,23,23,.79) 53%,rgba(10,25,24,.75)),linear-gradient(180deg,rgba(12,25,25,.12),rgba(8,19,21,.77) 78%,#0a1a1b),url("/streaming-forest-atmosphere.jpg") center 43% / cover !important; font-family:"Geist","Aptos",sans-serif !important; }
+        .stream-screen-performance[data-testid="performance-screen"] { color:${C.text} !important; background:transparent !important; font-family:"Geist","Aptos",sans-serif !important; }
         .stream-screen-performance > header { min-height: 43px; display:flex; align-items:center; justify-content:space-between; gap:16px; border-bottom:1px solid rgba(219,239,221,.12); padding:0 3px 8px; }
         .stream-screen-performance .perf-brand { display:flex; align-items:center; gap:11px; min-width:0; }
         .stream-screen-performance .perf-mark { width:32px;height:32px;display:grid;place-items:center;border:1px solid rgba(190,222,196,.3);border-radius:10px;background:rgba(201,231,205,.08);color:#c1e3bb; }
@@ -203,8 +203,8 @@ export default function StreamingPerformanceScreen() {
         .stream-screen-performance .perf-meta { display:flex;align-items:center;gap:7px;flex-wrap:wrap;justify-content:flex-end; }
         .stream-screen-performance .perf-pill { display:flex;align-items:center;gap:6px;padding:6px 9px;border:1px solid rgba(199,221,201,.16);border-radius:99px;background:rgba(12,31,29,.58);color:rgba(232,239,225,.8);font:600 8px "Geist Mono",monospace;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap; }
         .stream-screen-performance .perf-pill-dot { width:5px;height:5px;border-radius:50%;background:${sourceError ? "#e2c47d" : hasSnapshot ? "#a9d8ad" : "#9cc8d2"}; }
-        .stream-screen-performance [data-testid="performance-risk-card"] { border-color:rgba(214,232,211,.16) !important; border-radius:12px !important; background:linear-gradient(145deg,rgba(27,48,45,.72),rgba(11,27,27,.74)) !important; box-shadow:inset 0 1px rgba(255,255,255,.07),0 10px 25px rgba(0,0,0,.12); }
-        .stream-screen-performance [data-testid="performance-panel"] { border-color:rgba(219,239,221,.15) !important; border-radius:14px !important; background:linear-gradient(145deg,rgba(22,42,40,.79),rgba(11,27,28,.80)) !important; box-shadow:inset 0 1px rgba(255,255,255,.08),0 14px 35px rgba(0,0,0,.14); }
+        .stream-screen-performance [data-testid="performance-risk-card"] { border-color:rgba(255,255,255,.2) !important; border-radius:12px !important; background:rgba(18,27,36,.46) !important; box-shadow:inset 0 1px rgba(255,255,255,.14),0 10px 25px rgba(0,0,0,.12); }
+        .stream-screen-performance [data-testid="performance-panel"] { border-color:rgba(255,255,255,.2) !important; border-radius:14px !important; background:rgba(18,27,36,.46) !important; box-shadow:inset 0 1px rgba(255,255,255,.14),0 14px 35px rgba(0,0,0,.14); }
         @media(max-width:900px) {
           .stream-screen-performance { height:100% !important; min-height:0 !important; overflow-x:hidden !important; overflow-y:auto !important; }
           .stream-screen-performance > [data-testid="performance-risk-metrics"] { display:grid !important; grid-template-columns:repeat(3,minmax(0,1fr)); }

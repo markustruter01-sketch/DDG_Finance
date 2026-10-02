@@ -52,8 +52,8 @@ export default function StreamingLearningScreen() {
     <div className="stream-screen stream-screen-learning learn-shell">
       <style>{`
         .learn-shell,.learn-shell *{box-sizing:border-box}
-        .learn-shell{height:100%;min-height:620px;position:relative;isolation:isolate;overflow:auto;color:#edf2e9;background:#172522 url("/streaming-forest-atmosphere.jpg") center 54%/cover fixed;font-family:"DM Sans","Avenir Next",ui-sans-serif,system-ui,sans-serif;letter-spacing:-.01em}
-        .learn-shell:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:linear-gradient(90deg,rgba(8,18,17,.84),rgba(10,21,19,.68) 52%,rgba(8,18,17,.82)),linear-gradient(180deg,rgba(9,20,18,.36),rgba(8,18,17,.81))}
+        .learn-shell{height:100%;min-height:620px;position:relative;isolation:isolate;overflow:auto;color:#edf2e9;background:transparent;font-family:"DM Sans","Avenir Next",ui-sans-serif,system-ui,sans-serif;letter-spacing:-.01em}
+        .learn-shell:before{display:none}
         .learn-header{height:64px;padding:0 clamp(20px,4vw,58px);display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(229,239,225,.12);background:rgba(10,22,19,.48);backdrop-filter:blur(22px)}
         .learn-brand,.learn-header-meta,.learn-total-label,.learn-total-foot{display:flex;align-items:center}
         .learn-brand{gap:12px}.learn-brand-mark{width:32px;height:32px;display:grid;place-items:center;border:1px solid rgba(193,231,202,.28);border-radius:10px;background:rgba(184,223,194,.10);color:#c8e8cc;font:600 13px "IBM Plex Mono",monospace}

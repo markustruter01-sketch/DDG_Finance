@@ -301,6 +301,53 @@ class _ReservedShareBroker:
         return dict(self.fills[order_id])
 
 
+class _LaggingOpenOrdersBroker(_ReservedShareBroker):
+    """Return one stale collection snapshot after individual cancel confirms."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.confirmed_cancelled_ids = set()
+        self.stale_snapshot_returned = False
+
+    def _request(self, method, path, **kwargs):
+        response = super()._request(method, path, **kwargs)
+        order_id = path.rsplit("/", 1)[-1]
+        if (
+            method.upper() == "GET"
+            and self.orders[order_id]["status"].lower() == "canceled"
+        ):
+            self.confirmed_cancelled_ids.add(order_id)
+        return response
+
+    def open_orders(self):
+        active = super().open_orders()
+        if self.confirmed_cancelled_ids and not self.stale_snapshot_returned:
+            self.stale_snapshot_returned = True
+            return active + [
+                dict(self.orders[order_id])
+                for order_id in sorted(self.confirmed_cancelled_ids)
+            ]
+        return active
+
+
+class _OrderGetOutcomeBroker(_ReservedShareBroker):
+    def __init__(self, *, get_failure=False, get_status=None):
+        super().__init__()
+        self.get_failure = get_failure
+        self.get_status = get_status
+
+    def _request(self, method, path, **kwargs):
+        if method.upper() == "GET" and path.rsplit("/", 1)[-1] in self.orders:
+            if self.get_failure:
+                self.events.append(("request", method.upper(), path))
+                raise RuntimeError("fake per-order GET failed")
+            response = super()._request(method, path, **kwargs)
+            if self.get_status is not None:
+                response["status"] = self.get_status
+            return response
+        return super()._request(method, path, **kwargs)
+
+
 def _open_position_row(symbol: str = "GLD", qty: float = 10.0) -> dict:
     return {
         "bot_id": "jerome_macro",
@@ -410,9 +457,43 @@ def test_full_exit_closes_row_without_arming_a_stop(monkeypatch) -> None:
     assert ledger.insert_count == 0
 
 
+def test_confirmed_cancelled_order_in_stale_open_list_allows_rebalance(monkeypatch) -> None:
+    ledger = _install_fake_ledger(monkeypatch, _open_position_row())
+    client = _LaggingOpenOrdersBroker(qty=10)
+
+    assert _run_existing_rebalance(monkeypatch, client, ledger, "sell", 3) == 1
+
+    assert any(order[2] == "market" for order in client.submitted)
+    assert ledger.rows[0]["qty"] == 7
+    assert client.stale_snapshot_returned
+
+
 def test_unconfirmed_cancel_refuses_to_place_market_order(monkeypatch) -> None:
     ledger = _install_fake_ledger(monkeypatch, _open_position_row())
     client = _ReservedShareBroker(qty=10, cancel_confirms=False)
+
+    with pytest.raises(RuntimeError, match="cancellation was not confirmed"):
+        _run_existing_rebalance(monkeypatch, client, ledger, "sell", 3)
+
+    assert not client.submitted
+    assert client.qty == 10
+    assert ledger.rows[0]["status"] == "open"
+    assert ledger.insert_count == 0
+
+
+@pytest.mark.parametrize(
+    ("get_failure", "get_status"),
+    [(True, None), (False, "filled")],
+    ids=["GET-fails", "GET-not-canceled"],
+)
+def test_per_order_get_failure_or_other_status_refuses_rebalance(
+    monkeypatch, get_failure, get_status
+) -> None:
+    ledger = _install_fake_ledger(monkeypatch, _open_position_row())
+    client = _OrderGetOutcomeBroker(
+        get_failure=get_failure,
+        get_status=get_status,
+    )
 
     with pytest.raises(RuntimeError, match="cancellation was not confirmed"):
         _run_existing_rebalance(monkeypatch, client, ledger, "sell", 3)

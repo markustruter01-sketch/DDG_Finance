@@ -977,6 +977,7 @@ def _rebalance_existing_holding(
             for order in client.open_orders()
             if _canonical_symbol(order.get("symbol", "")) == symbol
         ]
+        confirmed_cancelled_order_ids: set[str] = set()
         for order in symbol_orders:
             order_id = order.get("id")
             if not order_id:
@@ -999,11 +1000,13 @@ def _rebalance_existing_holding(
                 raise RuntimeError(
                     f"cancel not confirmed for order {order_id}; status={last_status}"
                 )
+            confirmed_cancelled_order_ids.add(str(order_id))
 
         remaining_orders = [
             order
             for order in client.open_orders()
             if _canonical_symbol(order.get("symbol", "")) == symbol
+            and str(order.get("id") or "") not in confirmed_cancelled_order_ids
         ]
         if remaining_orders:
             raise RuntimeError(

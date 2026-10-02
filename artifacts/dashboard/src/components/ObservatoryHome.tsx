@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useState, type CSSProperties } from "react";
-import { Activity, BarChart3, CalendarClock, CheckCircle2, Crosshair, Gauge, ShieldCheck, TrendingUp, Waves } from "lucide-react";
+import { Activity, BarChart3, CalendarClock, CheckCircle2, Crosshair, Download, Gauge, ShieldCheck, Waves } from "lucide-react";
 import { useFleetData, fmtDollar, fmtEq, fmtPct, getBotStatus } from "@/hooks/useFleetData";
 import { usePerformanceHistory, usePerformanceSummary, useCorrelation, useAttribution, useRiskMetrics } from "@/hooks/use-performance";
 import { useFleetHistory } from "@/hooks/use-portfolio";
@@ -21,12 +21,36 @@ const mobileGlassBoxTreatment = `.observatory .obs-summary,.observatory .obs-bot
 const riskMetricsCss = `.obs-risk-section{margin:-10px 0 30px}.obs-risk-head{align-items:center;margin-bottom:10px}.obs-risk-heading{display:flex;align-items:center;gap:9px}.obs-risk-context{display:flex;align-items:center;justify-content:flex-end;gap:7px 13px;flex-wrap:wrap;color:var(--muted);font:9px/1.5 monospace;text-align:right}.obs-risk-source{color:#8cf1d5}.obs-risk-source.estimate,.obs-risk-state{color:#ffd28b}.obs-risk-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px}.obs-risk-card{min-width:0;padding:13px 15px;border:1px solid var(--line);border-radius:12px;background:rgba(7,29,38,.66);box-shadow:inset 0 1px rgba(255,255,255,.08);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}.obs-risk-value{margin-top:7px;color:var(--ink);font:clamp(20px,2vw,28px)/1.1 monospace;letter-spacing:-.06em;font-variant-numeric:tabular-nums}.obs-risk-value.positive{color:#b7ef75}.obs-risk-value.negative{color:#ff9a91}.obs-risk-value.warning{color:#ffd28b}.obs-risk-foot{margin-top:6px;color:var(--muted);font:9px/1.4 monospace}.obs-risk-disclaimer{margin:9px 0 0;color:#ffd28b;font:10px/1.5 monospace}.obs-risk-error{color:#ffaaa2}@media(max-width:1199px){.obs-risk-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:767px){.obs-risk-head{align-items:flex-start;flex-direction:column}.obs-risk-context{justify-content:flex-start;text-align:left}.obs-risk-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:560px){.obs-risk-grid{grid-template-columns:1fr}}`;
 
 function value(v: number | null | undefined, format: (n:number)=>string = n => String(n)) { return v == null ? "NULL" : format(v); }
+function metricValue(v: number | null | undefined, format: (n:number)=>string = n => String(n)) { return v == null || !Number.isFinite(v) ? "—" : format(v); }
 function path(points: number[]) { if (!points.length) return ""; const min=Math.min(...points), max=Math.max(...points), range=max-min||1; return points.map((v,i)=>`${i?'L':'M'} ${(i/(points.length-1||1))*238+2} ${72-((v-min)/range)*64}`).join(" "); }
 function ratioTone(v: number | null | undefined) { return v == null ? "" : v >= 1 ? "positive" : v >= 0 ? "warning" : "negative"; }
 function percentTone(v: number | null | undefined) { return v == null ? "" : v >= 0 ? "positive" : "negative"; }
 function fmtRiskRatio(v: number | null | undefined) { return v == null ? "—" : v.toFixed(2); }
 function fmtRiskPct(v: number | null | undefined, signed = false) { return v == null ? "—" : `${signed && v >= 0 ? "+" : ""}${v.toFixed(1)}%`; }
 function fmtRiskDate(v: string | null | undefined) { if (!v) return null; const d = new Date(v); return Number.isNaN(d.getTime()) ? v : d.toISOString().slice(0, 10); }
+
+const dashboardOverviewCss = `
+.observatory{padding-top:10px}
+.obs-topline{margin-bottom:8px}
+.obs-brand{font-size:0}
+.obs-session>span{display:none}
+.obs-hero,.obs-risk-section{display:none}
+.obs-runner-status{display:none!important}
+.obs-summary.obs-summary-compact{grid-template-columns:repeat(14,minmax(0,1fr));margin:0 0 25px}
+.obs-summary.obs-summary-compact .obs-summary-cell{min-width:0;min-height:82px;padding:11px 10px}
+.obs-summary.obs-summary-compact .obs-quick-primary,.obs-summary.obs-summary-compact .obs-quick-change,.obs-summary.obs-summary-compact .obs-quick-status{grid-column:span 2}
+.obs-summary-compact .obs-label{overflow:hidden;font-size:8px;letter-spacing:.08em;text-overflow:ellipsis;white-space:nowrap}
+.obs-overview-value{overflow:hidden;margin-top:7px;color:var(--ink);font:clamp(14px,1.08vw,17px)/1.05 monospace;letter-spacing:-.055em;text-overflow:ellipsis;white-space:nowrap;font-variant-numeric:tabular-nums}
+.obs-overview-value.positive{color:#b7ef75}.obs-overview-value.negative{color:#ff9a91}.obs-overview-value.warning{color:#ffd28b}
+.obs-summary-compact .obs-under{display:block;overflow:hidden;margin-top:5px;font:8px/1.35 monospace;text-overflow:ellipsis;white-space:nowrap}
+.obs-overview-regime{margin-top:9px;color:#b7ef75;font:14px/1.1 monospace;white-space:nowrap}
+.obs-quick-status-lines{display:grid;gap:5px;margin-top:7px}
+.obs-quick-status-line{display:flex;justify-content:space-between;gap:6px;color:var(--muted);font:8px/1.2 monospace;text-transform:uppercase}
+.obs-quick-status-line strong{overflow:hidden;color:var(--ink);font-weight:700;text-overflow:ellipsis;white-space:nowrap}
+.obs-quick-status-line strong.positive{color:#b7ef75}.obs-quick-status-line strong.negative{color:#ff9a91}.obs-quick-status-line strong.warning{color:#ffd28b}
+@media(max-width:1199px){.obs-summary.obs-summary-compact{grid-template-columns:repeat(8,minmax(0,1fr))}}
+@media(max-width:900px){.obs-summary.obs-summary-compact{grid-template-columns:repeat(6,minmax(0,1fr))}}
+`;
 
 export default function ObservatoryHome({
   runnerStatus,
@@ -72,6 +96,14 @@ export default function ObservatoryHome({
             : risk.isError
               ? "RISK FEED UNAVAILABLE"
               : "LOADING RISK DATA";
+  const runnerVerdict = runnerStatusError ? "UNKNOWN" : runnerStatus?.verdict ?? "UNKNOWN";
+  const runnerTone = runnerVerdict === "ALIVE" ? "positive" : runnerVerdict === "STALE" ? "negative" : "warning";
+  const killLabel = killTripped == null || killSwitchArmed == null ? "UNKNOWN" : killTripped ? "TRIPPED" : killSwitchArmed ? "ARMED" : "DISARMED";
+  const killTone = killTripped ? "negative" : killTripped == null || killSwitchArmed == null ? "warning" : "positive";
+  const riskStatus = riskData
+    ? `${riskData.source === "trade_journal" ? "EST. · " : ""}${riskData.data_points} OBS`
+    : risk.isError ? "UNAVAILABLE" : "LOADING";
+  const riskDetails = `${riskSource}${riskData ? ` · ${riskData.data_points} observations${riskData.period_days ? ` · ${riskData.period_days} periods` : ""}` : ""}${riskAsOf ? ` · As of ${riskAsOf} UTC` : ""}${riskData?.message ? ` · ${riskData.message}` : ""}`;
   const riskCards = [
     { label: "Sharpe ratio", value: fmtRiskRatio(riskData?.sharpe_ratio), detail: "Risk-adjusted excess return", tone: ratioTone(riskData?.sharpe_ratio) },
     { label: "Sortino ratio", value: fmtRiskRatio(riskData?.sortino_ratio), detail: "Downside-adjusted return", tone: ratioTone(riskData?.sortino_ratio) },
@@ -80,11 +112,61 @@ export default function ObservatoryHome({
     { label: "Annual volatility", value: fmtRiskPct(riskData?.volatility_annual_pct), detail: "Annualized standard deviation", tone: riskData?.volatility_annual_pct == null ? "" : riskData.volatility_annual_pct < 20 ? "positive" : riskData.volatility_annual_pct < 40 ? "warning" : "negative" },
     { label: "Annual return", value: fmtRiskPct(riskData?.annualised_return_pct, true), detail: riskData?.insufficient_data ? "Insufficient history to annualize" : "Annualized portfolio return", tone: percentTone(riskData?.annualised_return_pct) },
   ];
-    return <main className="observatory"><style>{css + riskMetricsCss + mobileVisualTreatment + mobileGlassBoxTreatment}</style><div className="obs-shell">
-     <div className="obs-topline"><div className="obs-brand"><span className="obs-mark"><Crosshair size={15}/></span>FLEET / OBSERVATORY</div><div className="obs-session"><span style={{ color: killTripped == null || killSwitchArmed == null ? "#fbbf24" : undefined }}><i className="obs-dot" style={{ background: killTripped == null || killSwitchArmed == null ? "#f59e0b" : undefined, boxShadow: killTripped == null || killSwitchArmed == null ? "0 0 9px #f59e0b" : undefined }}/> {killTripped == null || killSwitchArmed == null ? "KILL SWITCH UNKNOWN" : killTripped ? "KILL SWITCH" : killSwitchArmed ? "SYSTEM ARMED" : "SYSTEM DISARMED"}</span><span><i className="obs-dot"/> SYNCED {lastCycle ? new Date(lastCycle).toISOString().slice(11,19)+" UTC" : "NULL"}</span><button className="obs-button" onClick={()=>setExportOpen(v=>!v)} aria-expanded={exportOpen}>EXPORT ▾</button>{exportOpen&&<><button className="obs-button" onClick={downloadReport} disabled={report.isPending}>Export full report</button><button className="obs-button" onClick={()=>navigate("/stream")}>Full report</button></>}</div></div>
-     <header className="obs-hero"><div><p className="obs-kicker">quantitative command surface / {bots.length} active strategies</p><h1 className="obs-title">Understand the <em>why</em> behind the green.</h1></div><div className="obs-asof"><strong>{lastCycle ? new Date(lastCycle).toLocaleDateString(undefined,{weekday:"long",day:"numeric",month:"short",year:"numeric"}) : "NULL"}</strong>observed across {symbols.length || "NULL"} symbols<br/>window: API history</div></header>
-      <RunnerStatusIndicator status={runnerStatus} isError={runnerStatusError} variant="observatory" />
-       <section className="obs-summary" aria-label="Fleet summary"><div className="obs-summary-cell"><div className="obs-label">Fleet equity</div><div className="obs-value large">{value(total?.equity,fmtEq)}</div><div className="obs-under"><strong>{value(total?.pnl,fmtDollar)}</strong><span>{value(total?.pnl_pct,fmtPct)} all time</span></div></div><div className="obs-summary-cell"><div className="obs-label">24h movement</div><div className="obs-value positive">{value(total?.pnl_24h,fmtDollar)}</div><div className="obs-under">{value(total?.pnl_24h_pct,fmtPct)} vs prior close</div></div><div className="obs-summary-cell"><div className="obs-label">Open positions</div><div className="obs-value">{total?.positions == null ? "NULL" : String(total.positions).padStart(2,"0")}</div><div className="obs-under">{symbols.length ? `across ${symbols.length} symbols` : unavailable}</div></div><div className="obs-summary-cell"><div className="obs-label">Market regime</div><div className="obs-regime"><TrendingUp size={20}/><strong>{regime ?? "NULL"}</strong></div></div><div className="obs-summary-cell"><ShieldCheck size={24} color="#b7ef75"/><div><div className="obs-label">Risk coverage</div><div className="obs-under">{risk.data?.max_drawdown_pct == null ? "NULL" : "METRICS AVAILABLE"}<br/><span>{risk.isError ? unavailable : "server risk metrics"}</span></div></div></div></section>
+    return <main className="observatory"><style>{css + riskMetricsCss + mobileVisualTreatment + mobileGlassBoxTreatment + dashboardOverviewCss}</style><div className="obs-shell">
+     <div className="obs-topline"><div className="obs-brand" aria-label="Fleet Observatory"><span className="obs-mark"><Crosshair size={15}/></span>FLEET / OBSERVATORY</div><div className="obs-session"><span style={{ color: killTripped == null || killSwitchArmed == null ? "#fbbf24" : undefined }}><i className="obs-dot" style={{ background: killTripped == null || killSwitchArmed == null ? "#f59e0b" : undefined, boxShadow: killTripped == null || killSwitchArmed == null ? "0 0 9px #f59e0b" : undefined }}/> {killTripped == null || killSwitchArmed == null ? "KILL SWITCH UNKNOWN" : killTripped ? "KILL SWITCH" : killSwitchArmed ? "SYSTEM ARMED" : "SYSTEM DISARMED"}</span><span><i className="obs-dot"/> SYNCED {lastCycle ? new Date(lastCycle).toISOString().slice(11,19)+" UTC" : "NULL"}</span><button className="obs-button" onClick={()=>setExportOpen(v=>!v)} aria-label="Open export options" aria-expanded={exportOpen}><Download size={13} aria-hidden="true"/></button>{exportOpen&&<><button className="obs-button" onClick={downloadReport} disabled={report.isPending}>Export full report</button><button className="obs-button" onClick={()=>navigate("/stream")}>Full report</button></>}</div></div>
+       <section className="obs-summary obs-summary-compact" aria-label="Fleet quick information">
+         <div className="obs-summary-cell obs-quick-primary" title="Total fleet equity and lifetime profit or loss">
+           <div className="obs-label">Fleet equity</div>
+           <div className="obs-overview-value">{metricValue(total?.equity,fmtEq)}</div>
+           <div className="obs-under"><strong>{metricValue(total?.pnl,fmtDollar)}</strong><span>{metricValue(total?.pnl_pct,fmtPct)} lifetime</span></div>
+         </div>
+         <div className="obs-summary-cell obs-quick-change" title="Server-reported 24-hour profit or loss">
+           <div className="obs-label">24h change</div>
+           <div className={`obs-overview-value ${percentTone(total?.pnl_24h)}`}>{metricValue(total?.pnl_24h,fmtDollar)}</div>
+           <div className="obs-under">{metricValue(total?.pnl_24h_pct,fmtPct)} vs prior close</div>
+         </div>
+         <div className="obs-summary-cell" title={`Sortino ratio · ${riskDetails}`}>
+           <div className="obs-label">Sortino</div>
+           <div className={`obs-overview-value ${ratioTone(riskData?.sortino_ratio)}`}>{fmtRiskRatio(riskData?.sortino_ratio)}</div>
+         </div>
+         <div className="obs-summary-cell" title={`Sharpe ratio · ${riskDetails}`}>
+           <div className="obs-label">Sharpe</div>
+           <div className={`obs-overview-value ${ratioTone(riskData?.sharpe_ratio)}`}>{fmtRiskRatio(riskData?.sharpe_ratio)}</div>
+         </div>
+         <div className="obs-summary-cell" title={`Calmar ratio · ${riskDetails}`}>
+           <div className="obs-label">Calmar</div>
+           <div className={`obs-overview-value ${ratioTone(riskData?.calmar_ratio)}`}>{fmtRiskRatio(riskData?.calmar_ratio)}</div>
+         </div>
+         <div className="obs-summary-cell" title={`Maximum drawdown · ${riskDetails}`}>
+           <div className="obs-label">Max drawdown</div>
+           <div className={`obs-overview-value ${riskData?.max_drawdown_pct == null ? "" : riskData.max_drawdown_pct < 5 ? "positive" : riskData.max_drawdown_pct < 15 ? "warning" : "negative"}`}>{riskData?.max_drawdown_pct == null ? "—" : `−${Math.abs(riskData.max_drawdown_pct).toFixed(1)}%`}</div>
+         </div>
+         <div className="obs-summary-cell" title={`Annualized volatility · ${riskDetails}`}>
+           <div className="obs-label">Volatility</div>
+           <div className={`obs-overview-value ${riskData?.volatility_annual_pct == null ? "" : riskData.volatility_annual_pct < 20 ? "positive" : riskData.volatility_annual_pct < 40 ? "warning" : "negative"}`}>{fmtRiskPct(riskData?.volatility_annual_pct)}</div>
+         </div>
+         <div className="obs-summary-cell" title={`Annualized portfolio return · ${riskDetails}`}>
+           <div className="obs-label">Annual return</div>
+           <div className={`obs-overview-value ${percentTone(riskData?.annualised_return_pct)}`}>{fmtRiskPct(riskData?.annualised_return_pct,true)}</div>
+         </div>
+         <div className="obs-summary-cell" title="Server-reported number of open positions">
+           <div className="obs-label">Open positions</div>
+           <div className="obs-overview-value">{metricValue(total?.positions,n=>String(n).padStart(2,"0"))}</div>
+           <div className="obs-under">{symbols.length ? `${symbols.length} symbols` : "symbol data unavailable"}</div>
+         </div>
+         <div className="obs-summary-cell" title="Current server-reported market regime">
+           <div className="obs-label">Market regime</div>
+           <div className="obs-overview-regime">{regime ?? "—"}</div>
+         </div>
+         <div className="obs-summary-cell obs-quick-status" title={riskDetails}>
+           <div className="obs-label">System status</div>
+           <div className="obs-quick-status-lines">
+             <div className="obs-quick-status-line"><span>Runner</span><strong className={runnerTone}>{runnerVerdict}</strong></div>
+             <div className="obs-quick-status-line"><span>Kill switch</span><strong className={killTone}>{killLabel}</strong></div>
+             <div className="obs-quick-status-line"><span>Risk data</span><strong className={risk.isError ? "negative" : riskData?.source === "trade_journal" ? "warning" : riskData ? "positive" : "warning"}>{riskStatus}</strong></div>
+           </div>
+         </div>
+       </section>
       <section className="obs-risk-section" aria-labelledby="risk-performance-title">
         <div className="obs-section-head obs-risk-head">
           <div>

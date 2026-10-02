@@ -623,6 +623,24 @@ async def per_bot_vault_report(bot_id: str | None = None) -> dict:
     return get_vault_report(bot_id)
 
 
+@portfolio_router.get("/vault/per-bot/inspection", tags=["Vault"])
+async def per_bot_vault_inspection(
+    bot_id: str | None = None,
+    contribution_limit: int = 100,
+) -> dict:
+    """Read-only deployment queue, broker order, and recent skim inspection."""
+    from execution.per_bot_vault import get_vault_inspection
+    return get_vault_inspection(bot_id, contribution_limit=contribution_limit)
+
+
+@portfolio_router.get("/vault/per-bot/deployment-preview", tags=["Vault"])
+async def per_bot_vault_deployment_preview() -> dict:
+    """Read-only view of reconciliation and orders the next deployment could submit."""
+    from core.market_clock import is_market_open
+    from execution.per_bot_vault import preview_deployment_cycle
+    return preview_deployment_cycle(market_open=is_market_open())
+
+
 @portfolio_router.get("/vault/per-bot/seed-preview", tags=["Vault"])
 async def per_bot_vault_seed_preview() -> dict:
     """Preview 5% seeds from current equity without creating accounts."""

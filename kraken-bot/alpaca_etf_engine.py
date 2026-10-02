@@ -1741,8 +1741,9 @@ class AlpacaEtfEngine:
                     _cur.execute(
                         "SELECT trade_id, intended_price FROM trades "
                         "WHERE ticker = %s AND asset_class = 'momentum_etf' AND status = 'Active' "
+                        "AND LEFT(trade_id, LENGTH(%s)) = %s "
                         "ORDER BY date DESC LIMIT 1",
-                        (symbol,),
+                        (symbol, f"ETF-{bot_id}-{symbol}-", f"ETF-{bot_id}-{symbol}-"),
                     )
                     _row = _cur.fetchone()
             if _row:
@@ -1754,6 +1755,7 @@ class AlpacaEtfEngine:
                     pnl_percentage=_pnl_pct,
                     realized_pnl=realised_pnl,
                     exit_reason=exit_reason,
+                    bot_id=bot_id,
                 )
                 logger.info(f"EtfEngine | close_trade: updated trades row for {bot_id}/{symbol}")
         except Exception as _ct_exc:

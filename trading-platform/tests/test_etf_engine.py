@@ -34,8 +34,9 @@ def test_cash_park_symbol_variants_skip_engine_stop_management():
 
 
 class _FakeCursor:
-    def __init__(self, rows):
+    def __init__(self, rows, trade_row=None):
         self.rows = rows
+        self.trade_row = trade_row
         self._result = []
         self._fetchone_result = None
         self.rowcount = -1
@@ -148,8 +149,8 @@ class _FakeCursor:
             return
 
         if normalized.startswith("select trade_id, intended_price"):
-            self._fetchone_result = None
-            self.rowcount = 0
+            self._fetchone_result = self.trade_row
+            self.rowcount = 1 if self.trade_row else 0
             return
 
         raise AssertionError(f"Unexpected SQL: {sql}")
@@ -162,8 +163,8 @@ class _FakeCursor:
 
 
 class _FakeConnection:
-    def __init__(self, rows):
-        self.cursor_obj = _FakeCursor(rows)
+    def __init__(self, rows, trade_row=None):
+        self.cursor_obj = _FakeCursor(rows, trade_row)
         self.commit_count = 0
 
     def __enter__(self):
@@ -213,8 +214,8 @@ def _rows():
     ]
 
 
-def _engine(monkeypatch, rows, api, degradation_records=None):
-    connection = _FakeConnection(rows)
+def _engine(monkeypatch, rows, api, degradation_records=None, trade_row=None):
+    connection = _FakeConnection(rows, trade_row)
     monkeypatch.setattr(postgres, "get_conn", lambda: connection)
     monkeypatch.setattr(postgres, "is_pg_available", lambda: True)
     if degradation_records is not None:
@@ -442,6 +443,44 @@ def test_record_close_sets_current_qty_to_zero(monkeypatch):
 
     assert rows[0]["status"] == "closed"
     assert rows[0]["current_qty"] == 0
+
+
+def test_record_close_passes_closing_bot_and_selects_its_trade(monkeypatch):
+    rows = [{
+        "id": 14, "bot_id": "oracle", "symbol": "SPY", "status": "open",
+        "qty": 10.0, "current_qty": 10.0,
+    }]
+    trade_id = "ETF-oracle-SPY-20261002"
+    engine, connection = _engine(
+        monkeypatch,
+        rows,
+        _FakeApi(),
+        trade_row=(trade_id, 100.0),
+    )
+    closed_trades = []
+    monkeypatch.setattr(
+        "analysis.trade_journal.close_trade",
+        lambda **kwargs: closed_trades.append(kwargs),
+    )
+
+    engine.record_close("oracle", "SPY", "take_profit", realised_pnl=25.0)
+
+    assert closed_trades == [{
+        "trade_id": trade_id,
+        "pnl_percentage": 1.0,
+        "realized_pnl": 25.0,
+        "exit_reason": "take_profit",
+        "bot_id": "oracle",
+    }]
+    trade_select = next(
+        entry for entry in connection.cursor_obj.executed
+        if entry[0].startswith("select trade_id, intended_price")
+    )
+    assert trade_select[1] == (
+        "SPY",
+        "ETF-oracle-SPY-",
+        "ETF-oracle-SPY-",
+    )
 
 
 def test_backfill_repairs_stale_closed_and_scaled_out_rows(monkeypatch):

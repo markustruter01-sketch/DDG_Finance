@@ -11,7 +11,7 @@ import hashlib
 import json
 import math
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, timedelta
 from statistics import stdev
 from typing import Any
@@ -32,6 +32,8 @@ UNIVERSE = (
     "EWZ", "EWW", "ECH", "EEM", "EZA", "EPOL", "GREK", "TUR",
 )
 STRATEGY_FAMILY = "bot1_baseline_v1"
+STRATEGY_FAMILY_V2 = "bot1_baseline_v2"
+BENCHMARK_FAMILY = "benchmark_v1"
 COST_SCENARIOS = (5, 10)
 STARTING_EQUITY = 100_000.0
 MAX_GROSS = 0.80
@@ -216,12 +218,77 @@ SPEC: dict[str, Any] = {
     },
 }
 
+SPEC_V2: dict[str, Any] = {
+    **SPEC,
+    "strategy_family": STRATEGY_FAMILY_V2,
+    "version": 2,
+    "requested_dates": {
+        **SPEC["requested_dates"],
+        "calendar": (
+            "SPY unflagged adjusted-close sessions; each symbol is available "
+            "only on its own valid-close dates after 200 own valid closes"
+        ),
+        "candidate_warmup": (
+            "each candidate independently needs at least 200 own valid closes "
+            "for point-in-time availability, plus the live-aligned 205-close "
+            "entry gate and computable ATR14 before entry"
+        ),
+    },
+    "data_and_execution": {
+        **SPEC["data_and_execution"],
+        "calendar": "SPY valid-close sessions",
+        "point_in_time_symbol_warmup_closes": 200,
+        "signal_protocol": (
+            "signals use only each symbol's own valid closes through the current "
+            "SPY session; orders execute at the next SPY session only when the "
+            "target symbol has a valid close; no fill or stale-price reuse"
+        ),
+    },
+    "reporting": {
+        **SPEC["reporting"],
+        "per_run": [
+            "all_harness_metrics",
+            "calendar_year_returns",
+            "2008-2011_return",
+            "2012-2022_return",
+            "eligible_etf_counts_at_year_start",
+            "SPY_daily_return_correlation",
+            "first_held_date",
+            "actual_spy_first_session",
+        ],
+    },
+    "known_simplifications": [
+        *SPEC["known_simplifications"],
+        "200-close point-in-time visibility is separate from the stricter 205-close live-aligned entry gate",
+    ],
+}
+
+BENCHMARK_SPEC: dict[str, Any] = {
+    "strategy_family": BENCHMARK_FAMILY,
+    "universe": list(UNIVERSE),
+    "requested_dates": [START_DATE.isoformat(), END_DATE.isoformat()],
+    "calendar": "SPY unflagged adjusted-close sessions",
+    "symbol_warmup_closes": 200,
+    "cost_bps_scenarios": list(COST_SCENARIOS),
+    "benchmarks": {
+        "spy_buy_and_hold": "buy SPY at the first eligible close and hold",
+        "eem_buy_and_hold": "buy EEM at the first eligible close and hold",
+        "equal_weight_bot1_universe": (
+            "equal-weight all eligible Bot 1 universe ETFs; rebalance annually "
+            "and when a new ETF reaches eligibility"
+        ),
+    },
+}
+
 
 @dataclass(frozen=True)
 class BaselineRun:
     cost_bps: int
     result: BacktestResult
     diagnostics: dict[str, Any]
+    strategy_family: str = STRATEGY_FAMILY
+    candidate: str = "live_rule_baseline"
+    spec: Mapping[str, Any] = field(default_factory=lambda: SPEC)
 
 
 def canonical_spec_json(spec: Mapping[str, Any] = SPEC) -> str:
@@ -232,8 +299,16 @@ def spec_hash(spec: Mapping[str, Any] = SPEC) -> str:
     return hashlib.sha256(canonical_spec_json(spec).encode("utf-8")).hexdigest()
 
 
-def print_spec() -> dict[str, Any]:
-    payload = {"spec": SPEC, "spec_hash": spec_hash()}
+def print_spec(calendar: str = "intersection") -> dict[str, Any]:
+    if calendar not in ("intersection", "point_in_time"):
+        raise ValueError(
+            "calendar must be either 'intersection' or 'point_in_time'"
+        )
+    selected_spec = SPEC_V2 if calendar == "point_in_time" else SPEC
+    payload = {"spec": selected_spec, "spec_hash": spec_hash(selected_spec)}
+    if calendar == "point_in_time":
+        payload["benchmark_spec"] = BENCHMARK_SPEC
+        payload["benchmark_spec_hash"] = spec_hash(BENCHMARK_SPEC)
     print(json.dumps(payload, sort_keys=True, indent=2, allow_nan=False), flush=True)
     return payload
 
@@ -320,6 +395,18 @@ def _asof_returns(
     return _returns(closes, count)
 
 
+def _prices_on_day(
+    history: Mapping[str, Mapping[date, float]],
+    day: date,
+) -> dict[str, float]:
+    """Return only closes actually present in the as-of history for this day."""
+    return {
+        symbol: float(history[symbol][day])
+        for symbol in UNIVERSE
+        if day in history[symbol]
+    }
+
+
 class Bot1BaselineSignal:
     """Daily-close, stateful signal callable for ``run_backtest``."""
 
@@ -342,9 +429,18 @@ class Bot1BaselineSignal:
         self.last_targets: dict[str, float] = {}
 
     def _equity(self, prices: Mapping[str, float]) -> float:
-        return self.cash + math.fsum(
-            self.quantities[symbol] * prices[symbol] for symbol in UNIVERSE
-        )
+        market_value = 0.0
+        for symbol in UNIVERSE:
+            quantity = self.quantities[symbol]
+            if quantity == 0:
+                continue
+            if symbol not in prices:
+                raise ValueError(
+                    f"Held symbol {symbol} has no valid close; refusing to "
+                    "reuse a stale shadow price"
+                )
+            market_value += quantity * prices[symbol]
+        return self.cash + market_value
 
     def _trade_to_quantities(
         self,
@@ -363,7 +459,7 @@ class Bot1BaselineSignal:
     def _apply_pending(self, history: Mapping[str, Mapping[date, float]], day: date) -> None:
         if self.pending_target is None:
             return
-        prices = {symbol: float(history[symbol][day]) for symbol in UNIVERSE}
+        prices = _prices_on_day(history, day)
         equity = self._equity(prices)
         if equity <= 0:
             raise ValueError("Shadow portfolio equity is not positive")
@@ -372,15 +468,14 @@ class Bot1BaselineSignal:
             for symbol in UNIVERSE
         )
         scale = min(1.0, MAX_GROSS / gross_weight) if gross_weight else 1.0
-        target_quantities = {
-            symbol: math.trunc(
+        target_quantities = dict(self.quantities)
+        for symbol in prices:
+            target_quantities[symbol] = math.trunc(
                 float(self.pending_target.get(symbol, 0.0))
                 * equity
                 * scale
                 / prices[symbol]
             )
-            for symbol in UNIVERSE
-        }
         self._trade_to_quantities(target_quantities, prices)
 
         # Mirror the harness post-cost gross check so later decisions use its
@@ -390,6 +485,7 @@ class Bot1BaselineSignal:
             gross = math.fsum(
                 abs(self.quantities[symbol] * prices[symbol])
                 for symbol in UNIVERSE
+                if self.quantities[symbol] != 0
             )
             if equity <= 0:
                 raise ValueError("Shadow portfolio equity is not positive after trading")
@@ -404,7 +500,11 @@ class Bot1BaselineSignal:
                 break
             self._trade_to_quantities(reduced, prices)
 
+        remaining_actions: list[tuple[str, str, float | None]] = []
         for action, symbol, value in self.pending:
+            if symbol not in prices:
+                remaining_actions.append((action, symbol, value))
+                continue
             if action == "entry":
                 filled_quantity = self.quantities[symbol]
                 if filled_quantity <= 0:
@@ -432,8 +532,9 @@ class Bot1BaselineSignal:
                     position[action] = True
                     if self.quantities[symbol] <= 0:
                         self.positions.pop(symbol, None)
-        self.pending_target = None
-        self.pending.clear()
+        self.pending = remaining_actions
+        if not self.pending:
+            self.pending_target = None
 
     def _regional_regime(self, closes: Sequence[float]) -> str:
         if len(closes) < SLOW_EMA or len(closes) < 21:
@@ -457,7 +558,7 @@ class Bot1BaselineSignal:
         if self.session_index[day] == len(self.sessions) - 1:
             return None
 
-        prices = {symbol: float(history[symbol][day]) for symbol in UNIVERSE}
+        prices = _prices_on_day(history, day)
         equity = self._equity(prices)
         if equity <= 0:
             raise ValueError("Shadow portfolio equity is not positive")
@@ -522,6 +623,10 @@ class Bot1BaselineSignal:
                 if symbol in self.positions or symbol in {
                     pending_symbol
                     for action, pending_symbol, _ in actions
+                    if action == "entry"
+                } or symbol in {
+                    pending_symbol
+                    for action, pending_symbol, _ in self.pending
                     if action == "entry"
                 }:
                     continue
@@ -660,7 +765,77 @@ def _correlation_with_spy(result: BacktestResult, panel: PricePanel) -> float | 
     return _pearson(strategy_returns, spy_returns)
 
 
-def _diagnostics(result: BacktestResult, panel: PricePanel) -> dict[str, Any]:
+def _return_between(
+    result: BacktestResult,
+    start: date,
+    end: date,
+    *,
+    initial_equity: float,
+) -> float | None:
+    prior = [
+        point for point in result.equity_curve
+        if point["date"] < start
+    ]
+    through = [
+        point for point in result.equity_curve
+        if point["date"] <= end
+    ]
+    if not through:
+        return None
+    beginning = float(prior[-1]["equity"]) if prior else initial_equity
+    ending = float(through[-1]["equity"])
+    return ending / beginning - 1.0 if beginning > 0 else None
+
+
+def _calendar_year_returns(result: BacktestResult) -> dict[str, float | None]:
+    initial_equity = float(result.parameters.get("starting_equity", STARTING_EQUITY))
+    return {
+        str(year): _return_between(
+            result,
+            date(year, 1, 1),
+            date(year, 12, 31),
+            initial_equity=initial_equity,
+        )
+        for year in range(START_DATE.year, END_DATE.year + 1)
+    }
+
+
+def _eligible_etf_counts_by_year(panel: PricePanel) -> dict[str, int]:
+    spy_sessions = sorted(
+        day
+        for day in panel.closes.get("SPY", {})
+        if START_DATE <= day <= END_DATE
+    )
+    counts: dict[str, int] = {}
+    for year in range(START_DATE.year, END_DATE.year + 1):
+        first_session = next(
+            (day for day in spy_sessions if day.year == year),
+            None,
+        )
+        if first_session is None:
+            counts[str(year)] = 0
+            continue
+        counts[str(year)] = sum(
+            symbol in panel.closes
+            and first_session in panel.closes[symbol]
+            and len(
+                [
+                    day for day in panel.closes[symbol]
+                    if day <= first_session
+                ]
+            ) >= 200
+            for symbol in UNIVERSE
+        )
+    return counts
+
+
+def _diagnostics(
+    result: BacktestResult,
+    panel: PricePanel,
+    *,
+    calendar: str = "intersection",
+    eligible_etf_counts: Mapping[str, int] | None = None,
+) -> dict[str, Any]:
     first_held = next(
         (
             event["date"] for event in result.events
@@ -668,7 +843,7 @@ def _diagnostics(result: BacktestResult, panel: PricePanel) -> dict[str, Any]:
         ),
         None,
     )
-    return {
+    diagnostics = {
         "five_window_returns": {
             f"{start}..{end}": _window_return(
                 result, date.fromisoformat(start), date.fromisoformat(end)
@@ -678,19 +853,59 @@ def _diagnostics(result: BacktestResult, panel: PricePanel) -> dict[str, Any]:
         "spy_daily_return_correlation": _correlation_with_spy(result, panel),
         "margin_call_count": sum(event.get("type") == "margin_call" for event in result.events),
         "first_held_date": first_held,
-        "actual_common_first_session": result.data_window["first_session"],
-        "late_listing_calendar_note": (
-            "The 16-symbol harness calendar is the intersection of all included "
-            "symbols; late listings restrict its first shared session."
-        ),
     }
+    if calendar == "point_in_time":
+        diagnostics.update(
+            {
+                "calendar_year_returns": _calendar_year_returns(result),
+                "period_returns": {
+                    "2008-2011": _return_between(
+                        result,
+                        date(2008, 1, 1),
+                        date(2011, 12, 31),
+                        initial_equity=STARTING_EQUITY,
+                    ),
+                    "2012-2022": _return_between(
+                        result,
+                        date(2012, 1, 1),
+                        date(2022, 12, 31),
+                        initial_equity=STARTING_EQUITY,
+                    ),
+                },
+                "eligible_etf_counts_at_year_start": dict(
+                    eligible_etf_counts or {}
+                ),
+                "actual_spy_first_session": result.data_window["first_session"],
+                "calendar_note": (
+                    "SPY valid-close sessions; each ETF is visible only with its "
+                    "own valid close and at least 200 own closes."
+                ),
+            }
+        )
+    else:
+        diagnostics.update(
+            {
+                "actual_common_first_session": result.data_window["first_session"],
+                "late_listing_calendar_note": (
+                    "The 16-symbol harness calendar is the intersection of all "
+                    "included symbols; late listings restrict its first shared session."
+                ),
+            }
+        )
+    return diagnostics
 
 
 def run_scenarios(
     panel: PricePanel | Mapping[str, Mapping[date, float]],
     atr_history: Mapping[str, Mapping[date, tuple[float, float, float]]],
+    *,
+    calendar: str = "intersection",
 ) -> list[BaselineRun]:
-    """Run both fixed in-sample cost cases against made-up or supplied panels."""
+    """Run both fixed cost cases using the requested session calendar."""
+    if calendar not in ("intersection", "point_in_time"):
+        raise ValueError(
+            "calendar must be either 'intersection' or 'point_in_time'"
+        )
     if isinstance(panel, PricePanel):
         history = panel.closes
     else:
@@ -710,9 +925,33 @@ def run_scenarios(
         for day in series
     ):
         raise ValueError(f"ATR panel contains rows after {END_DATE.isoformat()}")
-    sessions = [day for day in _common_dates(history, UNIVERSE) if START_DATE <= day <= END_DATE]
+    if calendar == "intersection":
+        sessions = [
+            day for day in _common_dates(history, UNIVERSE)
+            if START_DATE <= day <= END_DATE
+        ]
+    else:
+        sessions = [
+            day for day in history["SPY"]
+            if START_DATE <= day <= END_DATE
+        ]
     if len(sessions) < 2:
-        raise ValueError("At least two common in-sample sessions are required")
+        raise ValueError(
+            "At least two in-sample sessions are required for the selected calendar"
+        )
+
+    strategy_family = (
+        STRATEGY_FAMILY_V2
+        if calendar == "point_in_time"
+        else STRATEGY_FAMILY
+    )
+    run_spec = SPEC_V2 if calendar == "point_in_time" else SPEC
+    run_spec_hash = spec_hash(run_spec)
+    eligible_counts = (
+        _eligible_etf_counts_by_year(panel)
+        if calendar == "point_in_time"
+        else None
+    )
 
     results = []
     for cost_bps in COST_SCENARIOS:
@@ -729,15 +968,141 @@ def run_scenarios(
             max_gross=MAX_GROSS,
             starting_equity=STARTING_EQUITY,
             whole_shares=True,
+            calendar=calendar,
         )
         result.parameters.update({
-            "family": STRATEGY_FAMILY,
+            "family": strategy_family,
             "candidate": "live_rule_baseline",
             "cost_bps": cost_bps,
-            "spec": SPEC,
-            "spec_hash": spec_hash(),
+            "spec": run_spec,
+            "spec_hash": run_spec_hash,
         })
-        results.append(BaselineRun(cost_bps, result, _diagnostics(result, panel)))
+        results.append(
+            BaselineRun(
+                cost_bps,
+                result,
+                _diagnostics(
+                    result,
+                    panel,
+                    calendar=calendar,
+                    eligible_etf_counts=eligible_counts,
+                ),
+                strategy_family=strategy_family,
+                candidate="live_rule_baseline",
+                spec=run_spec,
+            )
+        )
+    return results
+
+
+def _single_asset_buy_and_hold(symbol: str):
+    entered = False
+
+    def signal(history, day):
+        nonlocal entered
+        if entered or day not in history[symbol]:
+            return None
+        entered = True
+        return {symbol: 1.0}
+
+    return signal
+
+
+def _equal_weight_universe_signal():
+    last_eligible: frozenset[str] = frozenset()
+    last_rebalanced_year: int | None = None
+
+    def signal(history, day):
+        nonlocal last_eligible, last_rebalanced_year
+        eligible = frozenset(
+            symbol
+            for symbol in UNIVERSE
+            if day in history[symbol] and len(history[symbol]) >= 200
+        )
+        if not eligible:
+            last_eligible = eligible
+            return None
+        new_listing_joined = eligible != last_eligible
+        annual_rebalance = day.year != last_rebalanced_year
+        last_eligible = eligible
+        if not new_listing_joined and not annual_rebalance:
+            return None
+
+        weight = 1.0 / len(eligible)
+        targets = {symbol: weight for symbol in sorted(eligible)}
+        last_rebalanced_year = day.year
+        return targets
+
+    return signal
+
+
+def run_point_in_time_benchmarks(
+    panel: PricePanel,
+) -> list[BaselineRun]:
+    """Run passive and annual equal-weight references on SPY sessions."""
+    benchmark_panels = {
+        "spy_buy_and_hold": PricePanel(
+            closes={"SPY": panel.closes["SPY"]},
+            flagged_rows_dropped=panel.flagged_rows_dropped,
+            source=panel.source,
+        ),
+        "eem_buy_and_hold": PricePanel(
+            closes={
+                "SPY": panel.closes["SPY"],
+                "EEM": panel.closes["EEM"],
+            },
+            flagged_rows_dropped=panel.flagged_rows_dropped,
+            source=panel.source,
+        ),
+        "equal_weight_bot1_universe": panel,
+    }
+    benchmark_signals = {
+        "spy_buy_and_hold": lambda: _single_asset_buy_and_hold("SPY"),
+        "eem_buy_and_hold": lambda: _single_asset_buy_and_hold("EEM"),
+        "equal_weight_bot1_universe": _equal_weight_universe_signal,
+    }
+    eligible_counts = _eligible_etf_counts_by_year(panel)
+    results: list[BaselineRun] = []
+    for candidate, benchmark_panel in benchmark_panels.items():
+        for cost_bps in COST_SCENARIOS:
+            result = run_backtest(
+                benchmark_panel,
+                benchmark_signals[candidate](),
+                START_DATE,
+                END_DATE,
+                cost_bps=cost_bps,
+                borrow_fee_rate=0,
+                risk_free_rate=0,
+                margin_rate=0,
+                max_gross=1.0,
+                starting_equity=STARTING_EQUITY,
+                whole_shares=True,
+                calendar="point_in_time",
+            )
+            result.parameters.update(
+                {
+                    "family": BENCHMARK_FAMILY,
+                    "candidate": candidate,
+                    "cost_bps": cost_bps,
+                    "spec": BENCHMARK_SPEC,
+                    "spec_hash": spec_hash(BENCHMARK_SPEC),
+                }
+            )
+            results.append(
+                BaselineRun(
+                    cost_bps=cost_bps,
+                    result=result,
+                    diagnostics=_diagnostics(
+                        result,
+                        panel,
+                        calendar="point_in_time",
+                        eligible_etf_counts=eligible_counts,
+                    ),
+                    strategy_family=BENCHMARK_FAMILY,
+                    candidate=candidate,
+                    spec=BENCHMARK_SPEC,
+                )
+            )
     return results
 
 
@@ -788,11 +1153,11 @@ def _persist_run(record: BaselineRun) -> int:
     """Append one result to exploration_runs only."""
     result = record.result
     parameters = {
-        "family": STRATEGY_FAMILY,
-        "candidate": "live_rule_baseline",
+        "family": record.strategy_family,
+        "candidate": record.candidate,
         "cost_bps": record.cost_bps,
-        "spec": SPEC,
-        "spec_hash": spec_hash(),
+        "spec": record.spec,
+        "spec_hash": spec_hash(record.spec),
         "harness_parameters": result.parameters,
     }
     persisted_result = BacktestResult(
@@ -804,19 +1169,244 @@ def _persist_run(record: BaselineRun) -> int:
     )
     return append_exploration_run(
         persisted_result,
-        strategy_family=STRATEGY_FAMILY,
+        strategy_family=record.strategy_family,
         notes=json.dumps(
-            {"supplemental": record.diagnostics, "classification": "in-sample baseline"},
+            {
+                "supplemental": record.diagnostics,
+                "classification": (
+                    "passive in-sample benchmark"
+                    if record.strategy_family == BENCHMARK_FAMILY
+                    else "in-sample baseline"
+                ),
+            },
             sort_keys=True,
             allow_nan=False,
         ),
     )
 
 
-def run_cli() -> dict[str, Any]:
-    print_spec()
+def _experiment_7_details() -> dict[str, Any]:
+    return {
+        "experiment_id": 7,
+        "hypothesis": (
+            "Global ETF trend strategy produces an acceptable pooled "
+            "risk-adjusted return."
+        ),
+        "parameters": {"family": "global ETF trend"},
+        "notes": "Reconstructed from conversation history, not recorded at the time.",
+        "comparison_limit": (
+            "The registry row does not freeze individual entry, sizing, "
+            "correlation, or exit rules, so it cannot establish rule-level parity."
+        ),
+    }
+
+
+def _rule_by_rule_comparison() -> list[dict[str, str]]:
+    universe = ", ".join(UNIVERSE)
+    return [
+        {
+            "rule": "Universe",
+            "live": universe,
+            "rebuild": universe,
+            "assessment": "Matched.",
+        },
+        {
+            "rule": "Entry timing and history",
+            "live": (
+                "One daily scan during 19:40–19:59 UTC; 250-close fetch; "
+                "requires at least 205 closes."
+            ),
+            "rebuild": (
+                "Daily-close decision approximation; point-in-time visibility "
+                "after 200 own closes; entry still requires 205 own closes."
+            ),
+            "assessment": "Entry gate matched; scan time is approximated.",
+        },
+        {
+            "rule": "Trend entry and ATR",
+            "live": (
+                "EMA50 > EMA200; EMA50 above its value five bars earlier; "
+                "latest close above EMA50; ATR14 must compute."
+            ),
+            "rebuild": (
+                "Same conditions; recursive EMA over latest 250 adjusted closes; "
+                "ATR14 from stored high/low/close."
+            ),
+            "assessment": (
+                "Rule logic matched; historical adjusted-close and OHLC sources "
+                "are not identical to live Yahoo inputs."
+            ),
+        },
+        {
+            "rule": "Regional and global crisis gates",
+            "live": (
+                "Reject regional BEAR/CRISIS and global SPY CRISIS; regional "
+                "regime uses a 20-session -12% crisis threshold and EMA50/200."
+            ),
+            "rebuild": (
+                "Reject regional BEAR/CRISIS and global SPY 20-session return "
+                "<= -12%; regional regime uses the same threshold and EMA periods."
+            ),
+            "assessment": (
+                "Regime thresholds align; rebuild uses historical stored closes "
+                "and cannot reproduce live data-fetch fail-closed behavior."
+            ),
+        },
+        {
+            "rule": "Candidate ranking",
+            "live": "Ranks eligible candidates by close-to-EMA50 momentum.",
+            "rebuild": "(close - EMA50) / EMA50, descending.",
+            "assessment": "Matched.",
+        },
+        {
+            "rule": "Position count and deployment",
+            "live": "At most 6 positions and 80% maximum deployment.",
+            "rebuild": "At most 6 positions and 80% maximum gross exposure.",
+            "assessment": "Matched.",
+        },
+        {
+            "rule": "Volatility sizing",
+            "live": (
+                "12% annualized volatility target, 13% per-name cap, plus "
+                "live minimum-size and fail-closed sizing checks."
+            ),
+            "rebuild": (
+                "12% / annualized 20-return sample volatility, capped at 13%; "
+                "whole-share fills and 80% gross cap."
+            ),
+            "assessment": (
+                "Target and cap align; live minimum-size and fail-closed checks "
+                "are not modeled."
+            ),
+        },
+        {
+            "rule": "Correlation control",
+            "live": (
+                "90-calendar-day fetch; trailing 60 returns; block if any held "
+                "ETF has rounded correlation > 0.75; includes other bots' holdings."
+            ),
+            "rebuild": (
+                "Tail-aligned return arrays; rounded correlation > 0.75 blocks "
+                "correlated standalone holdings; no cross-bot holdings."
+            ),
+            "assessment": (
+                "Within-strategy cap is aligned; cross-bot portfolio context and "
+                "date alignment across gaps are absent."
+            ),
+        },
+        {
+            "rule": "Trailing stop",
+            "live": "8% trailing stop managed by the broker-facing ETF engine.",
+            "rebuild": "8% closing-high stop, close-only trigger, next-close fill.",
+            "assessment": "Close-only rebuild approximation; intraday/broker lifecycle differs.",
+        },
+        {
+            "rule": "Minimum hold and take profits",
+            "live": (
+                "5 calendar-day minimum hold; +6% and +12% take-profit levels, "
+                "each scaling out 33% of original quantity."
+            ),
+            "rebuild": (
+                "Same 5-day, +6%, +12%, and 33%-of-original rules; whole-share "
+                "execution."
+            ),
+            "assessment": "Rule thresholds align; fills and rounding differ.",
+        },
+        {
+            "rule": "Trend and 3-day exits",
+            "live": (
+                "After minimum hold: close below EMA50 calculated from the latest "
+                "50 closes, or last-three-session return <= -5%."
+            ),
+            "rebuild": (
+                "Same close-below-latest-50 EMA50 or close[-1]/close[-4]-1 <= -5%."
+            ),
+            "assessment": "Aligned as daily-close rules.",
+        },
+        {
+            "rule": "Operational safeguards",
+            "live": (
+                "Checks live open positions, cross-bot exposure, sizing, broker "
+                "orders, and fail-closed behavior."
+            ),
+            "rebuild": (
+                "Standalone historical simulation; no live broker, portfolio "
+                "database, or cross-bot state."
+            ),
+            "assessment": "Not reproduced by this historical comparison.",
+        },
+    ]
+
+
+def _assert_no_existing_point_in_time_runs() -> None:
+    """Avoid silently appending a duplicate copy of this fixed experiment."""
+    from db.research_postgres import get_research_conn
+
+    families = [STRATEGY_FAMILY_V2, BENCHMARK_FAMILY]
+    with get_research_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT run_id, strategy_family, parameters->>'candidate'
+                FROM exploration_runs
+                WHERE strategy_family = ANY(%s)
+                  AND parameters #>> '{harness_parameters,calendar}' = 'point_in_time'
+                ORDER BY run_id
+                """,
+                (families,),
+            )
+            existing = cur.fetchall()
+    if existing:
+        raise RuntimeError(
+            "Point-in-time Bot 1/benchmark rows already exist; refusing to "
+            f"duplicate them: {existing}"
+        )
+
+
+def run_cli(calendar: str = "intersection") -> dict[str, Any]:
+    print_spec(calendar)
     panel, atr_history = _load_run_data()
-    records = run_scenarios(panel, atr_history)
+    records = run_scenarios(panel, atr_history, calendar=calendar)
+
+    if calendar == "point_in_time":
+        records.extend(run_point_in_time_benchmarks(panel))
+        _assert_no_existing_point_in_time_runs()
+        report: dict[str, Any] = {
+            "strategy_family": STRATEGY_FAMILY_V2,
+            "benchmark_family": BENCHMARK_FAMILY,
+            "requested_dates": [START_DATE.isoformat(), END_DATE.isoformat()],
+            "experiment_7": _experiment_7_details(),
+            "rule_by_rule_comparison": _rule_by_rule_comparison(),
+            "runs": [
+                {
+                    "strategy_family": record.strategy_family,
+                    "candidate": record.candidate,
+                    "cost_bps": record.cost_bps,
+                    "harness_metrics": record.result.metrics,
+                    **record.diagnostics,
+                }
+                for record in records
+            ],
+        }
+        # Emit the complete comparison before the append-only persistence step.
+        print(json.dumps(report, sort_keys=True, indent=2, allow_nan=False), flush=True)
+        persisted = []
+        for record in records:
+            persisted.append(
+                {
+                    "run_id": _persist_run(record),
+                    "strategy_family": record.strategy_family,
+                    "candidate": record.candidate,
+                    "cost_bps": record.cost_bps,
+                }
+            )
+        report["persisted_runs"] = persisted
+        print(
+            json.dumps({"persisted_runs": persisted}, sort_keys=True, indent=2),
+            flush=True,
+        )
+        return report
+
     runs = []
     for record in records:
         run_id = _persist_run(record)
@@ -840,12 +1430,22 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--print-spec", action="store_true", help="print frozen specification only")
-    mode.add_argument("--run", action="store_true", help="load Helium prices, run, and append two scenarios")
+    mode.add_argument(
+        "--run",
+        action="store_true",
+        help="load Helium prices, run scenarios, and append the results",
+    )
+    parser.add_argument(
+        "--calendar",
+        choices=("intersection", "point_in_time"),
+        default="intersection",
+        help="SPY point-in-time sessions or the original all-symbol intersection",
+    )
     args = parser.parse_args()
     if args.print_spec:
-        print_spec()
+        print_spec(args.calendar)
     else:
-        run_cli()
+        run_cli(args.calendar)
 
 
 if __name__ == "__main__":

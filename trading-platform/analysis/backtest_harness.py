@@ -20,7 +20,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from statistics import mean, stdev
-from typing import Any
+from typing import Any, Literal
 
 from db.research_postgres import get_research_conn
 
@@ -31,6 +31,8 @@ MAINTENANCE_EQUITY_RATIO = 0.30
 TRADING_DAYS_PER_YEAR = 252
 CALENDAR_DAYS_PER_YEAR = 365
 _EPSILON = 1e-12
+POINT_IN_TIME_CALENDAR_SYMBOL = "SPY"
+POINT_IN_TIME_WARMUP_CLOSES = 200
 
 
 @dataclass(frozen=True)
@@ -217,12 +219,21 @@ class _AsOfPanel(Mapping[str, Mapping[date, float]]):
         panel: PricePanel,
         cutoff: date,
         ordered_dates: Mapping[str, tuple[date, ...]],
+        eligible_symbols: frozenset[str] | None = None,
     ) -> None:
         self._panel = panel
         self._cutoff = cutoff
         self._ordered_dates = ordered_dates
+        self._eligible_symbols = eligible_symbols
 
     def __getitem__(self, symbol: str) -> Mapping[date, float]:
+        if symbol not in self._panel.closes:
+            raise KeyError(symbol)
+        if (
+            self._eligible_symbols is not None
+            and symbol not in self._eligible_symbols
+        ):
+            return _AsOfSeries({}, (), self._cutoff)
         series = self._panel.closes[symbol]
         return _AsOfSeries(series, self._ordered_dates[symbol], self._cutoff)
 
@@ -331,18 +342,31 @@ def _validate_run_parameters(
 
 
 def _equity(book: _Book, prices: Mapping[str, float]) -> float:
-    return book.cash + sum(
-        book.quantities[symbol] * prices[symbol]
-        for symbol in book.quantities
-    )
+    marked_value = 0.0
+    for symbol, quantity in book.quantities.items():
+        if quantity == 0:
+            continue
+        if symbol not in prices:
+            raise ValueError(
+                f"Held symbol {symbol} has no valid close for this session; "
+                "refusing to fill or reuse a stale price"
+            )
+        marked_value += quantity * prices[symbol]
+    return book.cash + marked_value
 
 
 def _gross_and_net(book: _Book, prices: Mapping[str, float]) -> tuple[float, float]:
-    values = {
-        symbol: quantity * prices[symbol]
-        for symbol, quantity in book.quantities.items()
-    }
-    return sum(abs(value) for value in values.values()), sum(values.values())
+    values = []
+    for symbol, quantity in book.quantities.items():
+        if quantity == 0:
+            continue
+        if symbol not in prices:
+            raise ValueError(
+                f"Held symbol {symbol} has no valid close for this session; "
+                "refusing to fill or reuse a stale price"
+            )
+        values.append(quantity * prices[symbol])
+    return sum(abs(value) for value in values), sum(values)
 
 
 def _rounded_quantity(quantity: float, whole_shares: bool) -> float:
@@ -478,8 +502,9 @@ def _accrue_financing(
         / CALENDAR_DAYS_PER_YEAR
     )
     short_market_value = sum(
-        max(0.0, -book.quantities[symbol]) * previous_prices[symbol]
+        -book.quantities[symbol] * previous_prices[symbol]
         for symbol in book.quantities
+        if book.quantities[symbol] < 0
     )
     borrow_fee = (
         short_market_value
@@ -779,20 +804,22 @@ def _rebalance_to_weights(
         targets = {symbol: 0.0 for symbol in book.quantities}
         scale = 0.0
     else:
+        priced_symbols = tuple(
+            symbol for symbol in book.quantities if symbol in prices
+        )
         target_values = {
             symbol: target_weights.get(symbol, 0.0) * equity
-            for symbol in book.quantities
+            for symbol in priced_symbols
         }
         gross = sum(abs(value) for value in target_values.values())
         cap = max_gross * equity
         scale = min(1.0, cap / gross) if gross else 1.0
-        targets = {
-            symbol: _rounded_quantity(
+        targets = dict(book.quantities)
+        for symbol in priced_symbols:
+            targets[symbol] = _rounded_quantity(
                 target_values[symbol] * scale / prices[symbol],
                 whole_shares,
             )
-            for symbol in book.quantities
-        }
 
     _trade_to_quantities(
         book,
@@ -956,14 +983,18 @@ def run_backtest(
     trailing_stop_signal: SignalFunction | None = None,
     trailing_stop_cash_asset: str | None = None,
     registered_experiment_id: int | None = None,
+    calendar: Literal["intersection", "point_in_time"] = "intersection",
 ) -> BacktestResult:
-    """Run a generic signed-target-weight strategy over a synchronized close panel.
+    """Run a generic signed-target-weight strategy over a close panel.
 
     ``signal_function`` receives only history dated on or before the decision
     day. Each non-empty mapping is a full target portfolio expressed as signed
-    fractions of equity; it trades on the next common valid close. Missing
-    symbol dates are excluded from the common session calendar, never forward-
-    filled. Financing accrues over actual calendar days between closes.
+    fractions of equity; omitted symbols are targeted to zero. The default
+    ``intersection`` calendar retains synchronized-close behavior. The
+    ``point_in_time`` calendar uses SPY's valid-close sessions and exposes a
+    symbol only on its own valid-close dates after 200 own closes. It never
+    fills missing prices; orders execute on an eligible close for that symbol.
+    Financing accrues over actual calendar days between sessions.
 
     ``trailing_stop_signal`` can identify one virtual sleeve inside a net
     symbol position. Its signed target weights must be emitted alongside each
@@ -972,6 +1003,14 @@ def run_backtest(
     """
     if not callable(signal_function):
         raise TypeError("signal_function must be callable")
+    if calendar not in ("intersection", "point_in_time"):
+        raise ValueError(
+            "calendar must be either 'intersection' or 'point_in_time'"
+        )
+    if calendar == "point_in_time" and trailing_stop_signal is not None:
+        raise ValueError(
+            "calendar='point_in_time' does not support trailing_stop_signal"
+        )
     if trailing_stop_signal is not None and not callable(trailing_stop_signal):
         raise TypeError("trailing_stop_signal must be callable when provided")
     start = _coerce_date(start)
@@ -1023,13 +1062,28 @@ def run_backtest(
         raise ValueError(
             "trailing_stop_cash_asset must be present in the price panel"
         )
-    common_dates = set.intersection(
-        *(set(series) for series in panel.closes.values())
-    )
-    sessions = sorted(day for day in common_dates if start <= day <= end)
+    if calendar == "intersection":
+        common_dates = set.intersection(
+            *(set(series) for series in panel.closes.values())
+        )
+        sessions = sorted(day for day in common_dates if start <= day <= end)
+    else:
+        calendar_series = panel.closes.get(POINT_IN_TIME_CALENDAR_SYMBOL)
+        if not calendar_series:
+            raise ValueError(
+                "calendar='point_in_time' requires SPY in the price panel"
+            )
+        sessions = sorted(
+            day for day in calendar_series if start <= day <= end
+        )
     if len(sessions) < 2:
+        session_description = (
+            "common valid closes"
+            if calendar == "intersection"
+            else "SPY valid closes"
+        )
         raise ValueError(
-            "At least two common valid closes are required to evaluate a run"
+            f"At least two {session_description} are required to evaluate a run"
         )
 
     prices_by_symbol = panel.closes
@@ -1055,10 +1109,32 @@ def run_backtest(
     }
 
     for index, day in enumerate(sessions):
-        current_prices = {
-            symbol: prices_by_symbol[symbol][day]
-            for symbol in symbols
-        }
+        if calendar == "intersection":
+            current_prices = {
+                symbol: prices_by_symbol[symbol][day]
+                for symbol in symbols
+            }
+        else:
+            current_prices = {
+                symbol: prices_by_symbol[symbol][day]
+                for symbol in symbols
+                if day in prices_by_symbol[symbol]
+            }
+        for symbol, quantity in book.quantities.items():
+            if quantity != 0 and symbol not in current_prices:
+                raise ValueError(
+                    f"Held symbol {symbol} has no valid close on {day}; "
+                    "point-in-time runs do not fill or reuse stale prices"
+                )
+
+        eligible_symbols: frozenset[str] | None = None
+        if calendar == "point_in_time":
+            eligible_symbols = frozenset(
+                symbol
+                for symbol, dates in ordered_dates.items()
+                if day in prices_by_symbol[symbol]
+                and bisect_right(dates, day) >= POINT_IN_TIME_WARMUP_CLOSES
+            )
 
         if previous_day is not None and previous_prices is not None:
             _accrue_financing(
@@ -1120,7 +1196,46 @@ def run_backtest(
             sleeve_high_water.pop(symbol, None)
             sleeve_low_water.pop(symbol, None)
 
-        if pending_signal is not None:
+        if pending_signal is not None and calendar == "point_in_time":
+            assert eligible_symbols is not None
+            executable = {
+                symbol: weight
+                for symbol, weight in pending_signal.items()
+                if symbol in eligible_symbols
+            }
+            if executable:
+                equity_before_trade = _equity(book, current_prices)
+                target_weights = {
+                    symbol: (
+                        book.quantities[symbol] * current_prices[symbol]
+                        / equity_before_trade
+                        if equity_before_trade > 0
+                        else 0.0
+                    )
+                    for symbol in current_prices
+                }
+                target_weights.update(executable)
+                for symbol in stopped_today:
+                    if symbol in current_prices:
+                        target_weights[symbol] = 0.0
+                _rebalance_to_weights(
+                    book,
+                    target_weights,
+                    current_prices,
+                    cost_rate=cost_rate,
+                    max_gross=max_gross,
+                    whole_shares=whole_shares,
+                    day=day,
+                    events=events,
+                )
+                pending_signal = {
+                    symbol: weight
+                    for symbol, weight in pending_signal.items()
+                    if symbol not in executable
+                }
+                if not pending_signal:
+                    pending_signal = None
+        elif pending_signal is not None:
             targets = dict(pending_signal)
             if trailing_stop_signal is None:
                 for symbol in stopped_today:
@@ -1182,8 +1297,8 @@ def run_backtest(
                             sleeve_high_water[symbol] = current_prices[symbol]
                         else:
                             sleeve_low_water[symbol] = current_prices[symbol]
-        pending_signal = None
-        pending_sleeve_signal = None
+            pending_signal = None
+            pending_sleeve_signal = None
 
         equity = _equity(book, current_prices)
         gross_exposure, net_exposure = _gross_and_net(book, current_prices)
@@ -1220,9 +1335,27 @@ def run_backtest(
                 events=events,
             )
 
-        as_of_history = _AsOfPanel(panel, day, ordered_dates)
+        as_of_history = _AsOfPanel(
+            panel,
+            day,
+            ordered_dates,
+            eligible_symbols=eligible_symbols,
+        )
         raw_signal = signal_function(as_of_history, day)
         normalized_signal = _normalise_signal(raw_signal, symbols)
+        if calendar == "point_in_time" and normalized_signal is not None:
+            assert eligible_symbols is not None
+            unavailable_targets = [
+                symbol
+                for symbol, weight in normalized_signal.items()
+                if abs(weight) > _EPSILON and symbol not in eligible_symbols
+            ]
+            if unavailable_targets:
+                raise ValueError(
+                    "Point-in-time signal targets symbols without a same-day "
+                    "valid close and 200 own closes: "
+                    + ", ".join(sorted(unavailable_targets))
+                )
         raw_sleeve_signal = (
             trailing_stop_signal(as_of_history, day)
             if trailing_stop_signal is not None
@@ -1257,7 +1390,25 @@ def run_backtest(
                 raise ValueError(
                     f"Signal on final session {day} has no next close for execution"
                 )
-            pending_signal = normalized_signal
+            if calendar == "intersection":
+                pending_signal = normalized_signal
+            else:
+                assert eligible_symbols is not None
+                if pending_signal is None:
+                    pending_signal = {}
+                pending_signal.update(
+                    {
+                        symbol: weight
+                        for symbol, weight in normalized_signal.items()
+                        if symbol in eligible_symbols
+                        and (
+                            abs(weight) > _EPSILON
+                            or book.quantities[symbol] != 0
+                        )
+                    }
+                )
+                if not pending_signal:
+                    pending_signal = None
             pending_sleeve_signal = normalized_sleeve_signal
 
         previous_day = day
@@ -1289,6 +1440,14 @@ def run_backtest(
         "trailing_stop_cash_asset": trailing_stop_cash_asset,
         "registered_experiment_id": registered_experiment_id,
     }
+    if calendar == "point_in_time":
+        parameters.update(
+            {
+                "calendar": calendar,
+                "calendar_symbol": POINT_IN_TIME_CALENDAR_SYMBOL,
+                "symbol_warmup_closes": POINT_IN_TIME_WARMUP_CLOSES,
+            }
+        )
     data_window = {
         "requested_start": start.isoformat(),
         "requested_end": end.isoformat(),
@@ -1297,9 +1456,21 @@ def run_backtest(
         "symbols": list(symbols),
         "price_source": panel.source,
         "flagged_rows_dropped": panel.flagged_rows_dropped,
-        "session_calendar": "intersection_of_unflagged_adjusted_close_dates",
+        "session_calendar": (
+            "intersection_of_unflagged_adjusted_close_dates"
+            if calendar == "intersection"
+            else "SPY_unflagged_adjusted_close_dates"
+        ),
         "holdout_cutoff": EXPLORE_END.isoformat(),
     }
+    if calendar == "point_in_time":
+        data_window.update(
+            {
+                "calendar": calendar,
+                "calendar_symbol": POINT_IN_TIME_CALENDAR_SYMBOL,
+                "symbol_warmup_closes": POINT_IN_TIME_WARMUP_CLOSES,
+            }
+        )
     return BacktestResult(
         equity_curve=tuple(equity_curve),
         events=tuple(events),

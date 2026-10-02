@@ -246,3 +246,84 @@ def test_fake_cursor_placeholder_parameter_mismatch_fails_before_execute() -> No
 
     baseline._execute_checked(cursor, "SELECT %s, %s", (1, 2))
     assert cursor.executed == ("SELECT %s, %s", (1, 2))
+
+
+def test_signal_handles_symbols_without_a_current_point_in_time_close() -> None:
+    day = BASE
+    next_day = day + timedelta(days=1)
+    history = {symbol: {} for symbol in baseline.UNIVERSE}
+    history["SPY"] = {day: 100.0}
+    signal = baseline.Bot1BaselineSignal((day, next_day), atr_history={})
+
+    assert signal(history, day) is None
+    assert not signal.positions
+    assert all(quantity == 0 for quantity in signal.quantities.values())
+
+
+def test_equal_weight_benchmark_rebalances_for_new_eligibility_and_new_year() -> None:
+    first_day = date(2020, 1, 2)
+    join_day = date(2020, 6, 1)
+    unchanged_day = date(2020, 6, 2)
+    next_year_day = date(2021, 1, 4)
+    signal = baseline._equal_weight_universe_signal()
+
+    def asof_history(day: date, eligible: set[str]):
+        history = {symbol: {} for symbol in baseline.UNIVERSE}
+        for symbol in eligible:
+            history[symbol] = {
+                day - timedelta(days=offset): 100.0
+                for offset in range(199, -1, -1)
+            }
+        return history
+
+    initial = signal(asof_history(first_day, {"SPY", "QQQ"}), first_day)
+    assert initial == {"QQQ": 0.5, "SPY": 0.5}
+
+    joined = signal(
+        asof_history(join_day, {"SPY", "QQQ", "EEM"}),
+        join_day,
+    )
+    assert joined == pytest.approx(
+        {"EEM": 1 / 3, "QQQ": 1 / 3, "SPY": 1 / 3}
+    )
+
+    assert signal(
+        asof_history(unchanged_day, {"SPY", "QQQ", "EEM"}),
+        unchanged_day,
+    ) is None
+    yearly = signal(
+        asof_history(next_year_day, {"SPY", "QQQ", "EEM"}),
+        next_year_day,
+    )
+    assert yearly == pytest.approx(
+        {"EEM": 1 / 3, "QQQ": 1 / 3, "SPY": 1 / 3}
+    )
+
+
+def test_point_in_time_spec_leaves_frozen_v1_hash_unchanged() -> None:
+    assert baseline.spec_hash() == (
+        "7708be0e4007ccd95e5aede6429d06e60ed0463cd7fca3b341466be67b196745"
+    )
+    assert baseline.spec_hash(baseline.SPEC_V2) != baseline.spec_hash()
+
+
+def test_point_in_time_diagnostics_use_the_spy_calendar_label() -> None:
+    dates = [
+        date(2008, 1, 2) + timedelta(days=index)
+        for index in range(205)
+    ]
+    panel = {
+        symbol: dict.fromkeys(dates, 100.0)
+        for symbol in baseline.UNIVERSE
+    }
+
+    record = baseline.run_scenarios(
+        panel,
+        atr_history={},
+        calendar="point_in_time",
+    )[0]
+
+    assert record.diagnostics["actual_spy_first_session"] == "2008-01-02"
+    assert "actual_common_first_session" not in record.diagnostics
+    assert "late_listing_calendar_note" not in record.diagnostics
+    assert record.diagnostics["calendar_note"].startswith("SPY valid-close")

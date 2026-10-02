@@ -92,6 +92,132 @@ def test_buy_and_hold_tracks_price_return_less_entry_cost() -> None:
     assert result.metrics["total_costs"] == pytest.approx(10)
 
 
+def test_point_in_time_calendar_uses_spy_and_waits_for_symbol_close() -> None:
+    days = _days(207)
+    panel = harness.PricePanel(
+        {
+            "SPY": dict.fromkeys(days, 100.0),
+            "AAA": {
+                **dict.fromkeys(days[5:205], 10.0),
+                days[206]: 10.0,
+            },
+        }
+    )
+
+    def signal(history, current_day):
+        if current_day == days[200]:
+            assert len(history["AAA"]) == 0
+        if current_day == days[204]:
+            assert len(history["AAA"]) == 200
+            assert max(history["AAA"]) == current_day
+            return {"AAA": 1.0}
+        if current_day == days[205]:
+            assert len(history["AAA"]) == 0
+        return None
+
+    result = harness.run_backtest(
+        panel,
+        signal,
+        days[0],
+        days[-1],
+        cost_bps=0,
+        borrow_fee_rate=0,
+        risk_free_rate=0,
+        max_gross=1.0,
+        starting_equity=100.0,
+        calendar="point_in_time",
+    )
+
+    assert [point["date"] for point in result.equity_curve] == days
+    trades = [event for event in result.events if event["type"] == "trade"]
+    assert len(trades) == 1
+    assert trades[0]["symbol"] == "AAA"
+    assert trades[0]["date"] == days[206].isoformat()
+    assert trades[0]["price"] == 10.0
+    assert result.parameters["calendar"] == "point_in_time"
+    assert result.data_window["calendar_symbol"] == "SPY"
+
+
+def test_point_in_time_rejects_early_signals_and_never_marks_stale_holdings() -> None:
+    days = _days(202)
+    panel = harness.PricePanel(
+        {
+            "SPY": dict.fromkeys(days, 100.0),
+            "AAA": dict.fromkeys(days[:201], 10.0),
+        }
+    )
+    with pytest.raises(ValueError, match="without a same-day valid close"):
+        harness.run_backtest(
+            panel,
+            lambda _history, day: {"AAA": 0.5} if day == days[0] else None,
+            days[0],
+            days[2],
+            cost_bps=0,
+            borrow_fee_rate=0,
+            risk_free_rate=0,
+            calendar="point_in_time",
+        )
+
+    def buy_after_warmup(_history, day):
+        return {"AAA": 0.5} if day == days[199] else None
+
+    with pytest.raises(ValueError, match="Held symbol AAA has no valid close"):
+        harness.run_backtest(
+            panel,
+            buy_after_warmup,
+            days[0],
+            days[-1],
+            cost_bps=0,
+            borrow_fee_rate=0,
+            risk_free_rate=0,
+            calendar="point_in_time",
+        )
+
+
+def test_default_intersection_calendar_remains_the_default() -> None:
+    days = _days(5)
+    panel = harness.PricePanel(
+        {
+            "SPY": dict.fromkeys(days, 100.0),
+            "AAA": dict.fromkeys(days[2:], 10.0),
+        }
+    )
+    signal = lambda _history, _day: None
+    implicit = harness.run_backtest(
+        panel,
+        signal,
+        days[0],
+        days[-1],
+        cost_bps=0,
+        borrow_fee_rate=0,
+        risk_free_rate=0,
+    )
+    explicit = harness.run_backtest(
+        panel,
+        signal,
+        days[0],
+        days[-1],
+        cost_bps=0,
+        borrow_fee_rate=0,
+        risk_free_rate=0,
+        calendar="intersection",
+    )
+    point_in_time = harness.run_backtest(
+        panel,
+        signal,
+        days[0],
+        days[-1],
+        cost_bps=0,
+        borrow_fee_rate=0,
+        risk_free_rate=0,
+        calendar="point_in_time",
+    )
+
+    assert implicit == explicit
+    assert [point["date"] for point in implicit.equity_curve] == days[2:]
+    assert [point["date"] for point in point_in_time.equity_curve] == days
+
+
 def test_short_position_gains_when_price_falls() -> None:
     days = _days(4)
     panel = _panel({"AAA": [10, 10, 8, 8]}, days=days)

@@ -76,6 +76,7 @@ STOP_LOSS = 0.20
 STARTING_EQUITY = 100_000.0
 CONTROL_ITERATIONS = 1_000
 RANDOM_SEED = 271_2026
+BORROW_EPSILON = 1e-8
 PEAD_SYMBOLS = EARNINGS_SYMBOLS
 WINDOWS: tuple[tuple[str, date, date], ...] = (
     ("2019_2020", date(2019, 1, 1), date(2020, 12, 31)),
@@ -660,8 +661,11 @@ def _volatility_multiplier(
     curve: list[float],
     target_volatility: float,
     realized_volatility_window: int,
+    multiplier_cap: float = 1.0,
 ) -> tuple[float, bool]:
     """Return a capped portfolio-volatility multiplier and fallback status."""
+    if not math.isfinite(multiplier_cap) or multiplier_cap < 1.0:
+        raise ValueError("multiplier_cap must be finite and at least 1.0")
     daily_returns = [
         curve[index] / curve[index - 1] - 1
         for index in range(1, len(curve))
@@ -675,7 +679,111 @@ def _volatility_multiplier(
     )
     if realized_volatility <= 0:
         return 1.0, True
-    return min(1.0, target_volatility / realized_volatility), False
+    return min(multiplier_cap, target_volatility / realized_volatility), False
+
+
+def _margin_interest_due(
+    cash: float, annual_rate: float, elapsed_calendar_days: int
+) -> float:
+    """Return simple interest accrued on negative cash over elapsed calendar days."""
+    if cash >= -BORROW_EPSILON or annual_rate <= 0 or elapsed_calendar_days <= 0:
+        return 0.0
+    return -cash * annual_rate * elapsed_calendar_days / 365.0
+
+
+def _cooldown_expiry_index(stop_day_index: int, cooldown_days: int) -> int:
+    """First trading-day index that is eligible after a stop-day cooldown."""
+    return stop_day_index + cooldown_days + 1
+
+
+def _is_cooling_down(
+    symbol: str, day_index: int, cooldown_until: dict[str, int]
+) -> bool:
+    """Whether ``symbol`` is blocked on this trading-day index."""
+    return day_index < cooldown_until.get(symbol, -1)
+
+
+def _cooldown_filtered_weights(
+    ranked: list[tuple[str, float, float]],
+    top_n: int,
+    day_index: int,
+    cooldown_until: dict[str, int],
+) -> dict[str, float]:
+    """Keep cooled symbols' original equal-weight slots in idle capital."""
+    slot_weights = _weights(ranked, top_n=top_n)
+    return {
+        symbol: weight
+        for symbol, weight in slot_weights.items()
+        if not _is_cooling_down(symbol, day_index, cooldown_until)
+    }
+
+
+def _trim_holdings_to_one_x(
+    holdings: dict[str, Holding],
+    series: dict[str, Series],
+    day: date,
+    cash: float,
+    trade_returns: list[float],
+    event_log: list[dict[str, Any]],
+    turnover: float,
+    cost_paid: float,
+) -> tuple[float, float, float]:
+    """Sell holdings proportionally until gross exposure equals net equity."""
+    invested = _holding_value(holdings, series, day)
+    equity = cash + invested
+    if invested <= 0:
+        return cash, turnover, cost_paid
+
+    # Account for sale costs when sizing the reduction so post-trade gross
+    # exposure is no greater than post-trade equity.
+    sale_notional = (
+        invested
+        if equity <= 0
+        else min(invested, (invested - equity) / (1.0 - SLIP))
+    )
+    if sale_notional <= 0:
+        return cash, turnover, cost_paid
+
+    fraction_to_sell = min(1.0, sale_notional / invested)
+    sold_total = 0.0
+    remaining: dict[str, Holding] = {}
+    for symbol, holding in holdings.items():
+        bar = _bar_open(series[symbol], day)
+        if bar is None:
+            raise RuntimeError(
+                f"cannot execute a maintenance reduction for {symbol} on {day}"
+            )
+        qty_sold = holding.qty * fraction_to_sell
+        notional = qty_sold * bar.close
+        proceeds = notional * (1.0 - SLIP)
+        cost = notional * SLIP
+        cash += proceeds
+        turnover += notional
+        cost_paid += cost
+        sold_total += notional
+        if qty_sold > 0:
+            trade_returns.append(proceeds / (qty_sold * holding.entry_exec) - 1)
+        remaining_qty = holding.qty - qty_sold
+        if remaining_qty > 1e-12:
+            holding.qty = remaining_qty
+            remaining[symbol] = holding
+
+    holdings.clear()
+    holdings.update(remaining)
+    event_log.append(
+        {
+            "date": day.isoformat(),
+            "action": "MARGIN_CALL",
+            "symbol": None,
+            "cash_after": cash,
+            "notional": sold_total,
+            "equity_before": equity,
+            "invested_before": invested,
+            "maintenance_ratio_before": equity / invested,
+            "target_leverage": 1.0,
+        }
+    )
+    return cash, turnover, cost_paid
 
 
 def _sell(
@@ -723,11 +831,16 @@ def _buy(
     turnover: float,
     cost_paid: float,
     exit_day: date | None = None,
+    allow_margin: bool = False,
 ) -> tuple[float, float, float]:
     bar = data.by_date.get(day)
     if bar is None or target_notional <= 0:
         return cash, turnover, cost_paid
-    notional = min(target_notional, cash / (1 + SLIP))
+    notional = (
+        target_notional
+        if allow_margin
+        else min(target_notional, cash / (1 + SLIP))
+    )
     if notional <= 0:
         return cash, turnover, cost_paid
     entry_exec = bar.open * (1 + SLIP)
@@ -1057,8 +1170,16 @@ def simulate_momentum(
     target_volatility: float | None = None,
     realized_volatility_window: int = 126,
     idle_capital: Literal["cash", "sgov"] = "cash",
+    multiplier_cap: float = 1.0,
+    margin_interest_rate: float = 0.0,
+    maintenance_margin_ratio: float | None = None,
+    cooldown_days: int = 0,
 ) -> dict[str, Any]:
-    """One-cash momentum book; selector is used only for controls."""
+    """One-cash momentum book; selector is used only for controls.
+
+    The optional leverage, maintenance, interest, and cooldown controls are
+    disabled by default so historical cash-only simulations stay unchanged.
+    """
     if top_n <= 0:
         raise ValueError("top_n must be positive")
     if target_volatility is not None and target_volatility <= 0:
@@ -1067,6 +1188,19 @@ def simulate_momentum(
         raise ValueError("realized_volatility_window must be positive")
     if idle_capital not in {"cash", "sgov"}:
         raise ValueError("idle_capital must be 'cash' or 'sgov'")
+    if not math.isfinite(multiplier_cap) or multiplier_cap < 1.0:
+        raise ValueError("multiplier_cap must be finite and at least 1.0")
+    if not math.isfinite(margin_interest_rate) or margin_interest_rate < 0:
+        raise ValueError("margin_interest_rate must be finite and non-negative")
+    if maintenance_margin_ratio is not None and (
+        not math.isfinite(maintenance_margin_ratio)
+        or not 0 < maintenance_margin_ratio < 1
+    ):
+        raise ValueError("maintenance_margin_ratio must be between 0 and 1")
+    if isinstance(cooldown_days, bool) or not isinstance(cooldown_days, int):
+        raise ValueError("cooldown_days must be a non-negative integer")
+    if cooldown_days < 0:
+        raise ValueError("cooldown_days must be a non-negative integer")
     if not isinstance(ranking_cache, MomentumCache):
         raise TypeError(
             "ranking_cache must be built by build_momentum_cache so its "
@@ -1097,6 +1231,7 @@ def simulate_momentum(
         )
     calendar = _all_days(series, end)
     rebalance_days = _rebalance_days(calendar, rebalance_frequency)
+    day_indices = {day: index for index, day in enumerate(calendar)}
     cash = STARTING_EQUITY
     holdings: dict[str, Holding] = {}
     curve: list[float] = []
@@ -1111,15 +1246,32 @@ def simulate_momentum(
     stops = 0
     rebalance_multipliers: list[float] = []
     scaling_fallbacks = 0
+    cooldown_until: dict[str, int] = {}
     sgov_series = _load_sgov_series(end) if idle_capital == "sgov" else None
     idle_interest_earned = 0.0
+    margin_interest_paid = 0.0
+    margin_calls = 0
+    borrowed_days = 0
+    previous_day: date | None = None
 
     for day in calendar:
         if day < start:
             continue
+        interest_paid_today = 0.0
+        if previous_day is not None and margin_interest_rate > 0:
+            interest_paid_today = _margin_interest_due(
+                cash,
+                margin_interest_rate,
+                (day - previous_day).days,
+            )
+            cash -= interest_paid_today
+            margin_interest_paid += interest_paid_today
         if sgov_series is not None:
             cash_before_idle_return = cash
-            cash *= 1 + _sgov_daily_return(sgov_series, day)
+            # Positive idle cash earns SGOV's return; borrowed cash is charged
+            # the separate margin rate instead of earning a negative SGOV yield.
+            if cash > 0:
+                cash *= 1 + _sgov_daily_return(sgov_series, day)
             idle_interest_earned += cash - cash_before_idle_return
         for symbol, holding in list(holdings.items()):
             bar = series[symbol].by_date.get(day)
@@ -1130,6 +1282,10 @@ def simulate_momentum(
                 )
                 del holdings[symbol]
                 stops += 1
+                if cooldown_days:
+                    cooldown_until[symbol] = _cooldown_expiry_index(
+                        day_indices[day], cooldown_days
+                    )
         if day in rebalance_days:
             for symbol, holding in list(holdings.items()):
                 cash, turnover, cost_paid = _sell(
@@ -1144,11 +1300,19 @@ def simulate_momentum(
                 fallback = False
             else:
                 multiplier, fallback = _volatility_multiplier(
-                    curve, target_volatility, realized_volatility_window
+                    curve,
+                    target_volatility,
+                    realized_volatility_window,
+                    multiplier_cap,
                 )
             rebalance_multipliers.append(multiplier)
             scaling_fallbacks += int(fallback)
-            for symbol, weight in _weights(selected, top_n=top_n).items():
+            weights = _weights(selected, top_n=top_n)
+            if cooldown_days:
+                weights = _cooldown_filtered_weights(
+                    selected, top_n, day_indices[day], cooldown_until
+                )
+            for symbol, weight in weights.items():
                 equity_open = cash + _holding_value(holdings, series, day)
                 cash, turnover, cost_paid = _buy(
                     symbol,
@@ -1157,9 +1321,31 @@ def simulate_momentum(
                     series[symbol],
                     day,
                     cash, holdings, event_log, turnover, cost_paid,
+                    allow_margin=multiplier > 1.0,
                 )
         equity_close = cash + _holding_value(holdings, series, day)
+        invested_close = _holding_value(holdings, series, day)
+        if (
+            maintenance_margin_ratio is not None
+            and invested_close > 0
+            and equity_close / invested_close < maintenance_margin_ratio
+        ):
+            cash, turnover, cost_paid = _trim_holdings_to_one_x(
+                holdings,
+                series,
+                day,
+                cash,
+                trade_returns,
+                event_log,
+                turnover,
+                cost_paid,
+            )
+            margin_calls += 1
+            equity_close = cash + _holding_value(holdings, series, day)
+            invested_close = _holding_value(holdings, series, day)
         deployed = (equity_close - cash) / equity_close if equity_close else 0.0
+        borrowed_amount = -cash if cash < -BORROW_EPSILON else 0.0
+        borrowed_days += int(borrowed_amount > 0)
         curve.append(equity_close)
         mode_days[str(day.year)]["momentum"] += 1
         if not holdings:
@@ -1172,8 +1358,12 @@ def simulate_momentum(
                 "equity": equity_close,
                 "deployed_pct": deployed,
                 "positions": len(holdings),
+                "invested_value": invested_close,
+                "borrowed_amount": borrowed_amount,
+                "margin_interest_paid": interest_paid_today,
             }
         )
+        previous_day = day
     for symbol, holding in list(holdings.items()):
         cash, turnover, cost_paid = _sell(
             holding, series[symbol], end, cash, trade_returns, event_log,
@@ -1206,6 +1396,16 @@ def simulate_momentum(
     result["idle_interest_pct_of_starting_equity"] = (
         idle_interest_earned / STARTING_EQUITY * 100.0
     )
+    result["multiplier_cap"] = multiplier_cap
+    result["margin_interest_rate"] = margin_interest_rate
+    result["margin_interest_paid"] = margin_interest_paid
+    result["borrowed_days"] = borrowed_days
+    result["percent_days_borrowing"] = (
+        borrowed_days / len(daily_deployment) * 100.0 if daily_deployment else 0.0
+    )
+    result["maintenance_margin_ratio"] = maintenance_margin_ratio
+    result["margin_calls"] = margin_calls
+    result["cooldown_days"] = cooldown_days
     return result
 
 

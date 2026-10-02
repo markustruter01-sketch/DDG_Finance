@@ -8,7 +8,12 @@ from analysis.bot2_momentum_pead_v4 import (
     Bar,
     MomentumCache,
     Series,
+    _cooldown_expiry_index,
+    _cooldown_filtered_weights,
+    _is_cooling_down,
+    _margin_interest_due,
     _sgov_daily_return,
+    _volatility_multiplier,
     build_event_schedule,
     build_momentum_cache,
     screen_universe_current,
@@ -65,6 +70,7 @@ def _momentum_result(
     lookback_bars: int = 252,
     top_n: int = 20,
     rebalance_frequency: str = "monthly",
+    simulation_options: dict[str, object] | None = None,
 ) -> dict[str, object]:
     cache = build_momentum_cache(
         data,
@@ -87,6 +93,7 @@ def _momentum_result(
         skip_bars=22,
         top_n=top_n,
         rebalance_frequency=rebalance_frequency,
+        **(simulation_options or {}),
     )
 
 
@@ -200,6 +207,125 @@ def test_default_volatility_arguments_keep_the_unscaled_result():
     assert explicit["average_multiplier"] == 1.0
     assert explicit["minimum_multiplier"] == 1.0
     assert explicit["scaling_fallbacks"] == 0
+
+
+def test_new_momentum_options_are_off_without_changing_defaults():
+    data = _parameter_universe()
+    implicit = _momentum_result(data)
+    explicit = _momentum_result(
+        data,
+        simulation_options={
+            "multiplier_cap": 1.0,
+            "margin_interest_rate": 0.0,
+            "maintenance_margin_ratio": None,
+            "cooldown_days": 0,
+        },
+    )
+
+    assert implicit == explicit
+    assert explicit["margin_interest_paid"] == 0.0
+    assert explicit["margin_calls"] == 0
+    assert explicit["borrowed_days"] == 0
+
+
+def test_margin_interest_accrues_only_on_borrowed_cash_and_calendar_days():
+    assert _margin_interest_due(1_000.0, 0.0625, 3) == 0.0
+    assert _margin_interest_due(0.0, 0.0625, 3) == 0.0
+    assert _margin_interest_due(-1_000.0, 0.0625, 0) == 0.0
+    assert _margin_interest_due(-1_000.0, 0.0625, 3) == pytest.approx(
+        1_000.0 * 0.0625 * 3 / 365
+    )
+
+
+def test_volatility_multiplier_respects_an_opt_in_cap():
+    curve = [100_000.0]
+    for index in range(126):
+        daily_return = 0.0001 if index % 2 else -0.0001
+        curve.append(curve[-1] * (1 + daily_return))
+
+    multiplier, fallback = _volatility_multiplier(
+        curve, 0.12, 126, multiplier_cap=1.5
+    )
+
+    assert multiplier == 1.5
+    assert fallback is False
+
+
+def test_cooldown_blocks_through_session_63_and_keeps_the_slot_idle():
+    cooldown_until = {"AAA": _cooldown_expiry_index(0, 63)}
+    ranked = [("AAA", 0.20, 0.10), ("BBB", 0.10, 0.12)]
+
+    assert _is_cooling_down("AAA", 63, cooldown_until)
+    assert _cooldown_filtered_weights(ranked, 2, 63, cooldown_until) == {
+        "BBB": 0.5
+    }
+    assert not _is_cooling_down("AAA", 64, cooldown_until)
+    assert _cooldown_filtered_weights(ranked, 2, 64, cooldown_until) == {
+        "AAA": 0.5,
+        "BBB": 0.5,
+    }
+
+
+def test_margin_call_is_recorded_and_reduces_exposure_to_one_x(monkeypatch):
+    first = date(2019, 1, 2)
+    second = date(2019, 1, 3)
+    data = {
+        "AAA": Series(
+            "AAA",
+            [
+                Bar(first, 100.0, 100.0, 100.0, 100.0, 1_000_000),
+                # The gap is below maintenance but stays above the 20% stop.
+                Bar(second, 81.0, 81.0, 81.0, 81.0, 1_000_000),
+            ],
+        )
+    }
+    cache = MomentumCache(
+        lookback_bars=252,
+        skip_bars=22,
+        top_n=1,
+        rebalance_frequency="monthly",
+    )
+    cache[first] = [("AAA", 0.20, 0.10)]
+    monkeypatch.setattr(
+        "analysis.bot2_momentum_pead_v4._volatility_multiplier",
+        lambda curve, target, window, multiplier_cap=1.0: (
+            multiplier_cap,
+            False,
+        ),
+    )
+
+    result = simulate_momentum(
+        data,
+        {"AAA"},
+        universe_size=500,
+        start=first,
+        end=second,
+        ranking_cache=cache,
+        lookback_bars=252,
+        skip_bars=22,
+        top_n=1,
+        target_volatility=0.12,
+        idle_capital="cash",
+        multiplier_cap=3.0,
+        margin_interest_rate=0.0625,
+        maintenance_margin_ratio=0.30,
+    )
+
+    assert result["margin_calls"] == 1
+    assert result["margin_interest_paid"] == pytest.approx(
+        200_300.0 * 0.0625 / 365
+    )
+    assert result["average_multiplier"] == 3.0
+    assert result["borrowed_days"] == 1
+    assert result["daily_deployment"][0]["margin_interest_paid"] == 0.0
+    assert result["daily_deployment"][0]["borrowed_amount"] == pytest.approx(
+        200_300.0
+    )
+    assert result["daily_deployment"][1]["margin_interest_paid"] > 0
+    assert [event["action"] for event in result["event_log"]].count(
+        "MARGIN_CALL"
+    ) == 1
+    assert result["daily_deployment"][-1]["deployed_pct"] == pytest.approx(1.0)
 
 
 def test_experiment_18_default_sharpe_reproduces_exactly():

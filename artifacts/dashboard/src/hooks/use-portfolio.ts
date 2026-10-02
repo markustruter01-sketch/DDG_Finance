@@ -135,6 +135,7 @@ export interface FleetEquityData {
 export interface BotRegistryEntry {
   id: string;
   display_name: string;
+  subtitle: string;
   short_name: string;
   icon: string;
   color: string;

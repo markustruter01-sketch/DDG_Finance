@@ -3,6 +3,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui";
 import { Activity, TrendingDown, TrendingUp, Shield, AlertTriangle, CheckCircle2, Clock, DollarSign } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getFleetStartingCapital, formatCapitalFull } from "@/lib/fleet-capital";
+import { formatBotLabel, useBotIdentity } from "@/lib/bot-identity";
 
 function fmt(v: number | null | undefined, prefix = "$") {
   if (v == null) return "—";
@@ -25,6 +26,7 @@ function timeAgo(iso: string | null | undefined) {
 }
 
 export function WeeklyReviewPanel() {
+  const { getBotIdentity } = useBotIdentity();
   const { data, isLoading, isError } = useWeeklyReview();
   const { data: portfolio } = usePortfolio();
   const { data: fleetEq } = useFleetEquity();
@@ -37,6 +39,7 @@ export function WeeklyReviewPanel() {
   const equityReady = liveTotal != null;
 
   const oracleEquity = fleetEq?.oracle?.equity ?? null;
+  const oracleLabel = formatBotLabel(getBotIdentity("oracle"));
 
   if (isLoading) {
     return (
@@ -133,7 +136,7 @@ export function WeeklyReviewPanel() {
           {/* Bot equity breakdown */}
           <div className="mt-3 grid grid-cols-2 gap-2">
             {[
-              { label: "Oracle", val: oracleEquity, start: 100_000 },
+              { label: oracleLabel, val: oracleEquity, start: 100_000 },
               { label: "ETF Fleet", val: liveTotal, start: startingCapital },
             ].map(({ label, val, start }) => {
               const pnl = val != null && start != null ? val - start : null;
@@ -213,7 +216,7 @@ export function WeeklyReviewPanel() {
 
         {/* ── Oracle This Week ── */}
         <div className="rounded-xl border border-white/5 bg-white/3 p-4">
-          <div className="text-[9px] uppercase tracking-widest text-muted-foreground mb-3 font-semibold">Oracle — This Week</div>
+          <div className="text-[9px] uppercase tracking-widest text-muted-foreground mb-3 font-semibold">{oracleLabel} — This Week</div>
           {oracleWinCount + oracleLossCount === 0 ? (
             <div className="text-xs text-muted-foreground italic">No closed trades this week</div>
           ) : (

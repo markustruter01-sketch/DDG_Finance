@@ -12,6 +12,7 @@ from typing import Any
 from fastapi import APIRouter
 from loguru import logger
 from core.bot_config import load_bot_profiles
+from core.bot_registry import display_label
 
 router = APIRouter()
 
@@ -39,20 +40,20 @@ def _build_entry_windows() -> dict[str, dict[str, Any]]:
     oracle_start, oracle_end = _profile_window(profiles["oracle"])
     return {
     "spy_qqq_trend": {
-        "label": "US Core",
+        "label": display_label("spy_qqq_trend"),
         "mode": "runner_interval",
         "entry_interval_seconds": 3600,
         "source": "bot2_spy_qqq runner: no fixed entry gate; scans on each hourly cycle",
     },
     "oracle": {
-        "label": "Asia",
+        "label": display_label("oracle"),
         "mode": "fixed_window",
         "start": oracle_start,
         "end": oracle_end,
         "source": "kraken-bot/config.py BOT_PROFILES['oracle']",
     },
     "jerome_macro": {
-        "label": "Hard Assets",
+        "label": display_label("jerome_macro"),
         "mode": "event_driven",
         "source": (
             "bot3_hard_assets_strategy: initial entry, partial-entry recovery, "

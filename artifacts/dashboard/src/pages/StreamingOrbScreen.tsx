@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { ArrowUpRight, CircleDashed, Orbit, Radio, TrendingUp } from "lucide-react";
 import { useFleetEquity, useLivePositions } from "@/hooks/use-portfolio";
 import { useJournal } from "@/hooks/use-journal";
-import { getAttributedBotIdentity } from "@/lib/bot-identity";
+import { formatBotLabel, useBotIdentity } from "@/lib/bot-identity";
 
 const SATELLITE_SLOTS = [
   { x: "18%", y: "20%" },
@@ -21,6 +21,7 @@ function signedMoney(value: number) {
 }
 
 export default function StreamingOrbScreen() {
+  const { getAttributedBotIdentity } = useBotIdentity();
   const fleet = useFleetEquity();
   const positions = useLivePositions();
   const journal = useJournal();
@@ -134,7 +135,7 @@ export default function StreamingOrbScreen() {
                 aria-label={`Select ${position.symbol}, ${identity.displayName}`}
                 data-testid={`orb-position-${position.symbol}-${index}`}
               >
-                <span className="orb-satellite-head"><span>{identity.icon} {identity.shortName}</span><span>{position.side}</span></span>
+                  <span className="orb-satellite-head"><span>{identity.icon} {identity.shortName}</span><span>{position.side}</span></span>
                 <span className="orb-satellite-symbol">{position.symbol}</span>
                 <span className={`orb-satellite-pnl ${position.unrealized_pl >= 0 ? "is-positive" : "is-negative"}`}>{signedMoney(position.unrealized_pl)}</span>
               </button>
@@ -162,7 +163,7 @@ export default function StreamingOrbScreen() {
                     <div className="orb-row" key={`${position.bot_id ?? "unattributed"}-${position.symbol}-${index}`}>
                       <div className="orb-row-main">
                         <span className="orb-symbol">{position.symbol} · {position.side}</span>
-                        <span className="orb-identity">{identity.icon} {identity.displayName} · {position.qty} units</span>
+                        <span className="orb-identity">{identity.icon} {formatBotLabel(identity)} · {position.qty} units</span>
                       </div>
                       <div>
                         <div className={`orb-row-value ${position.unrealized_pl >= 0 ? "is-positive" : "is-negative"}`}>{signedMoney(position.unrealized_pl)}</div>
@@ -196,7 +197,7 @@ export default function StreamingOrbScreen() {
                     <div className="orb-row" key={trade.trade_id}>
                       <div className="orb-row-main">
                         <span className="orb-symbol">{trade.ticker} · {trade.status.replaceAll("_", " ")}</span>
-                        <span className="orb-identity">{identity.icon} {identity.displayName} · {trade.date ? new Date(trade.date).toLocaleDateString() : "Date unavailable"}</span>
+                        <span className="orb-identity">{identity.icon} {formatBotLabel(identity)} · {trade.date ? new Date(trade.date).toLocaleDateString() : "Date unavailable"}</span>
                       </div>
                       <div className={`orb-row-value ${pnl >= 0 ? "is-positive" : "is-negative"}`}>{Number.isFinite(pnl) ? `${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}%` : "—"}</div>
                     </div>
@@ -208,7 +209,7 @@ export default function StreamingOrbScreen() {
           </section>
         </div>
         <div className="orb-footnote">
-          <span>{selected ? `Selected · ${selected.symbol} / ${getAttributedBotIdentity(selected.bot_id).displayName}` : "No position selected"}</span>
+          <span>{selected ? `Selected · ${selected.symbol} / ${formatBotLabel(getAttributedBotIdentity(selected.bot_id))}` : "No position selected"}</span>
           <span>Only reported service data · no synthetic position records</span>
           <ArrowUpRight size={12} aria-hidden="true" />
         </div>

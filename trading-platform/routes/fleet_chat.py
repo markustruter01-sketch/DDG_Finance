@@ -23,6 +23,7 @@ import httpx
 from fastapi import APIRouter, HTTPException
 from loguru import logger
 from pydantic import BaseModel, Field
+from core.bot_registry import display_label
 
 from analysis.gemini_auditor import (
     _gemini_api_key,
@@ -139,7 +140,7 @@ _BOT_DEFAULTS: dict[str, dict] = _load_bot_defaults()
 _CHAT_SYSTEM_PROMPT = """\
 You are the FLEET COMMANDER — an AI fleet management assistant for a quantitative trading platform.
 You have direct control over 3 Kraken crypto bots (Davy Jones, Blackbeard, Calypso) and advisory
-control over Oracle (Alpaca equities — you can veto tickers but Groq manages strategy).
+control over __ORACLE_DISPLAY_LABEL__ (Alpaca equities — you can veto tickers but Groq manages strategy).
 Apex Predator (options) and Navigator (forex) can only be put on HOLD.
 
 PARAMETER BOUNDS (your recommendations MUST stay within these):
@@ -161,7 +162,7 @@ RULES:
 
 - If no parameter changes are needed, say so clearly
 - Respond conversationally but precisely — this is a trading command center
-"""
+""".replace("__ORACLE_DISPLAY_LABEL__", display_label("oracle"))
 
 
 

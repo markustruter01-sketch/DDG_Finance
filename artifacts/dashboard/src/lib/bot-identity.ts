@@ -1,44 +1,51 @@
-// Single source of truth for bot identity (icon + display name + canonical ID).
-// Keys are canonical bot_ids returned by /fleet/equity.
+// Bot labels come from the trading API registry; this module only resolves the
+// API data and supplies a non-label icon fallback for unknown identities.
+import { useMemo } from "react";
+import { useBotRegistry, type BotRegistryEntry } from "@/hooks/use-portfolio";
 
 export interface BotIdentity {
   canonicalId: string;
-  displayName: string; // Full label: "Moe (SPY/QQQ)"
-  shortName:   string; // Compact label for tight spaces: "Moe"
+  displayName: string;
+  subtitle: string;
+  shortName: string;
   icon:        string;
 }
 
-const IDENTITY_MAP: Record<string, BotIdentity> = {
-  "oracle":        { canonicalId: "oracle",        displayName: "Asia-Pacific",     shortName: "Asia",     icon: "🌏" },
-  "spy_qqq_trend": { canonicalId: "spy_qqq_trend", displayName: "US Core",          shortName: "US Core",  icon: "📈" },
-  "jerome_macro":  { canonicalId: "jerome_macro",  displayName: "Emerging Markets", shortName: "EM",   icon: "🌎" },
-  // buck_futures retired (Stage 5 merge 2026-08-11) — merged into jerome_macro EM bot
-  // Entry kept so legacy DB references render gracefully rather than falling back to 🤖
-  "buck_futures":  { canonicalId: "buck_futures",  displayName: "Frontier (Retired)", shortName: "Retired", icon: "🌍" },
-};
-
-export function getBotIdentity(id: string): BotIdentity {
-  return IDENTITY_MAP[id] ?? {
-    canonicalId: id,
-    displayName: id,
-    shortName:   id,
-    icon: "🤖",
+function makeIdentity(id: string, entry?: BotRegistryEntry): BotIdentity {
+  return {
+    canonicalId: entry?.id ?? id,
+    displayName: entry?.display_name ?? id,
+    subtitle: entry?.subtitle ?? "",
+    shortName: entry?.short_name ?? id,
+    icon: entry?.icon ?? "🤖",
   };
 }
 
-/**
- * Resolve only explicit canonical IDs for data attribution. Unlike
- * getBotIdentity(), this never treats a missing or unknown ID as a valid bot.
- */
-export function getAttributedBotIdentity(id?: string | null): BotIdentity {
-  const normalized = typeof id === "string" ? id.trim() : "";
-  const identity = normalized ? IDENTITY_MAP[normalized] : undefined;
-  if (identity) return identity;
+export function formatBotLabel(identity: BotIdentity): string {
+  return identity.subtitle
+    ? `${identity.displayName} · ${identity.subtitle}`
+    : identity.displayName;
+}
 
-  return {
-    canonicalId: normalized || "unattributed",
-    displayName: normalized ? `Unknown bot (${normalized})` : "Unattributed",
-    shortName: "Unknown",
-    icon: "?",
-  };
+export function useBotIdentity() {
+  const { data } = useBotRegistry();
+  const entriesByIdentity = useMemo(() => {
+    const entries = new Map<string, BotRegistryEntry>();
+    for (const bot of data?.bots ?? []) {
+      entries.set(bot.id, bot);
+      for (const alias of bot.legacy_aliases ?? []) entries.set(alias, bot);
+    }
+    return entries;
+  }, [data?.bots]);
+
+  return useMemo(() => {
+    const getBotIdentity = (id: string) =>
+      makeIdentity(id, entriesByIdentity.get(id));
+    const getAttributedBotIdentity = (id?: string | null) => {
+      const normalized = typeof id === "string" ? id.trim() : "";
+      const entry = normalized ? entriesByIdentity.get(normalized) : undefined;
+      return makeIdentity(normalized || "unattributed", entry);
+    };
+    return { getBotIdentity, getAttributedBotIdentity };
+  }, [entriesByIdentity]);
 }

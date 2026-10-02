@@ -3,6 +3,7 @@ import { X, Activity, Wifi, Server, Shield, Database, Anchor, AlertTriangle, Che
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { api } from "@/hooks/use-trading-client";
+import { formatBotLabel, useBotIdentity } from "@/lib/bot-identity";
 
 type Level = "green" | "yellow" | "red" | "unknown";
 
@@ -108,14 +109,9 @@ const COMPONENT_LABELS: Record<string, string> = {
   options_bot: "Options Engine",
   forex_bot: "Forex Gump",
   alert_system: "Alert System",
-  bot_oracle: "Oracle / US Core",
-  bot_spy_qqq_trend: "SPY/QQQ Trend",
-  bot_jerome_macro: "Jerome Macro",
   scheduler: "Scheduler",
   database: "Database",
   degradation_events: "Degradation Events",
-  kraken_davy_jones: "SPY/QQQ Trend",
-  kraken_blackbeard: "Jerome",
   kraken_poseidon: "Poseidon",
   kraken_kraken_current: "Kraken Current",
 };
@@ -154,7 +150,7 @@ function buildExplanation(key: string, node: NodeHealth): string {
   }
 
   if (key === "kraken_api") {
-    if (detail.includes("Bot not started")) return "The Kraken bot process hasn't written a status file yet. Start the 'SPY/QQQ Trend' bot workflow to resolve.";
+    if (detail.includes("Bot not started")) return `The ${node.label} bot process hasn't written a status file yet. Start the '${node.label}' bot workflow to resolve.`;
     if (detail.includes("paused")) return "The Kraken bot is paused — either manually via the dashboard toggle or by the circuit breaker (>3% drop / 30min). Resume from the toolbar.";
     if (detail.includes("503") || detail.includes("timeout")) return "The Kraken exchange API returned a server error. This is usually transient — the bot will retry on the next cycle.";
     if (data_age_s != null && data_age_s > 1800) return `Kraken status file is ${data_age_s.toFixed(0)}s old (threshold 1800s / 30 min). The Replit workflow may have been paused — check if the bot is still running.`;
@@ -610,6 +606,7 @@ function TestControlPanel({
 
 /* ── Main Modal ─────────────────────────────────────────────────────────── */
 export function SystemHealthModal({ onClose }: { onClose: () => void }) {
+  const { getBotIdentity } = useBotIdentity();
   const { data, isLoading } = useQuery<HealthData>({
     queryKey: ["/system/health-architecture"],
     queryFn: async () => (await api.get("/system/health-architecture")).data,
@@ -620,6 +617,13 @@ export function SystemHealthModal({ onClose }: { onClose: () => void }) {
   const [overrides, setOverrides] = useState<Overrides>({});
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const resetOverrides = useCallback(() => setOverrides({}), []);
+  const botDisplayLabels: Record<string, string> = {
+    bot_oracle: formatBotLabel(getBotIdentity("oracle")),
+    bot_spy_qqq_trend: formatBotLabel(getBotIdentity("spy_qqq_trend")),
+    bot_jerome_macro: formatBotLabel(getBotIdentity("jerome_macro")),
+    kraken_davy_jones: formatBotLabel(getBotIdentity("spy_qqq_trend")),
+    kraken_blackbeard: formatBotLabel(getBotIdentity("jerome_macro")),
+  };
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -634,10 +638,11 @@ export function SystemHealthModal({ onClose }: { onClose: () => void }) {
     const merged: Record<string, NodeHealth> = {};
     for (const [key, node] of Object.entries(data.nodes)) {
       const ov = overrides[key];
-      merged[key] = ov ? { ...node, ...ov } : node;
+      const labeledNode = botDisplayLabels[key] ? { ...node, label: botDisplayLabels[key] } : node;
+      merged[key] = ov ? { ...labeledNode, ...ov } : labeledNode;
     }
     return merged;
-  }, [data, overrides]);
+  }, [data, overrides, botDisplayLabels]);
 
   const overallLevel: Level = useMemo(() => {
     if (!mergedNodes) return "unknown";
@@ -795,9 +800,8 @@ export function SystemHealthModal({ onClose }: { onClose: () => void }) {
                   ([k]) => k.startsWith("kraken_") && k !== "kraken_api"
                 );
                 if (perBotNodes.length === 0) return null;
-                const BOT_DISPLAY: Record<string, string> = {
-                  kraken_davy_jones: "SPY/QQQ Trend",
-                  kraken_blackbeard: "Jerome",
+                const botDisplay: Record<string, string> = {
+                  ...botDisplayLabels,
                   kraken_poseidon: "Poseidon",
                   kraken_kraken_current: "Kraken Current",
                 };
@@ -809,7 +813,7 @@ export function SystemHealthModal({ onClose }: { onClose: () => void }) {
                     </div>
                     {perBotNodes.map(([key, node]) => {
                       const colors = LEVEL_COLORS[node.level];
-                      const botLabel = BOT_DISPLAY[key] ?? key.replace("kraken_", "").replace(/_/g, " ");
+                      const botLabel = botDisplay[key] ?? key.replace("kraken_", "").replace(/_/g, " ");
                       const kickPending = (node as NodeHealth & { kick_pending?: boolean }).kick_pending;
                       return (
                         <div key={key} className="flex items-center gap-2 px-2 py-1 rounded-lg backdrop-blur-sm"

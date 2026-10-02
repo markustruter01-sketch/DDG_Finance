@@ -10,7 +10,7 @@ import {
   useBotRegistry,
 } from "@/hooks/use-trading";
 import { Activity } from "lucide-react";
-import { getBotIdentity } from "@/lib/bot-identity";
+import { formatBotLabel } from "@/lib/bot-identity";
 import { DDGBadge } from "@/components/DDGBadge";
 import {
   AreaChart,
@@ -68,11 +68,10 @@ function ratioColor(v: number | null | undefined, goodThreshold = 1): string {
 }
 
 /* ── bot config ──────────────────────────────────────────── */
-const BOT_META: Record<string, { icon: string; color: string; label: string }> = {
-  "oracle":         { icon: getBotIdentity("oracle").icon,         color: "#a78bfa", label: getBotIdentity("oracle").displayName },
-  "spy_qqq_trend":  { icon: getBotIdentity("spy_qqq_trend").icon,  color: C.cyan,    label: getBotIdentity("spy_qqq_trend").displayName },
-  "jerome_macro":   { icon: getBotIdentity("jerome_macro").icon,   color: C.orange,  label: getBotIdentity("jerome_macro").displayName },
-  // buck_futures retired May 2026 — removed from performance view
+const BOT_META: Record<string, { color: string }> = {
+  oracle: { color: "#a78bfa" },
+  spy_qqq_trend: { color: C.cyan },
+  jerome_macro: { color: C.orange },
 };
 
 /* ── fear & greed helpers ────────────────────────────────── */
@@ -319,7 +318,14 @@ export default function StreamingPerformanceScreen() {
           {/* bot rows */}
           <div style={{ flex: 1, overflowY: "auto", padding: "6px 0" }}>
             {registryBots.length > 0 ? registryBots.map((bot) => {
-              const meta = BOT_META[bot.id] ?? { icon: "🤖", color: C.label, label: bot.id };
+              const meta = BOT_META[bot.id] ?? { color: C.label };
+              const label = formatBotLabel({
+                canonicalId: bot.id,
+                displayName: bot.display_name,
+                subtitle: bot.subtitle,
+                shortName: bot.short_name,
+                icon: bot.icon,
+              });
               const botEq = fleetEqByBotId[bot.id];
               const equity = botEq?.equity ?? null;
               const pnl    = botEq?.pnl ?? null;
@@ -332,10 +338,10 @@ export default function StreamingPerformanceScreen() {
                   padding: "10px 18px",
                   borderBottom: `1px solid rgba(255,255,255,0.03)`,
                 }}>
-                  <span style={{ fontSize: 18 }}>{meta.icon}</span>
+                  <span style={{ fontSize: 18 }}>{bot.icon}</span>
                   <div>
                     <div style={{ fontSize: 14, fontFamily: "monospace", fontWeight: 800, color: meta.color, letterSpacing: "0.04em" }}>
-                      {meta.label}
+                      {label}
                     </div>
                     <div style={{ fontSize: 9, fontFamily: "monospace", color: C.dim, marginTop: 2 }}>
                       {equity != null ? `$${(equity / 1000).toFixed(1)}k equity` : "— equity"}

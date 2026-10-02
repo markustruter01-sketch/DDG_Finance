@@ -13,6 +13,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from loguru import logger
+from core.bot_registry import display_label
 
 from core.pipeline import get_last_run
 from core.market_clock import is_market_open
@@ -381,11 +382,12 @@ async def ai_commentary(force: bool = False) -> dict:
                 "budget_exhausted": _groq_budget.budget_exhausted(),
             }
         _exhausted = _groq_budget.budget_exhausted()
+        _oracle_label = display_label("oracle")
         return {
             "commentary": (
-                "The Oracle is resting — daily AI token budget exhausted. Commentary will resume tomorrow at midnight UTC."
+                f"{_oracle_label} is resting — daily AI token budget exhausted. Commentary will resume tomorrow at midnight UTC."
                 if _exhausted else
-                "The Oracle is resting — daily call limit reached. Commentary will resume tomorrow at midnight UTC."
+                f"{_oracle_label} is resting — daily call limit reached. Commentary will resume tomorrow at midnight UTC."
             ),
             "generated_at": None,
             "cached": False,
@@ -520,7 +522,7 @@ Current open positions:
 """
 
     system_prompt = (
-        "You are 'The Degen Oracle' — a quant trading AI with swagger and sharp wit. "
+        f"You are '{display_label('oracle')}' — a quant trading AI with swagger and sharp wit. "
         "In exactly 2 punchy sentences: your sharpest market read right now, and one concrete portfolio observation. "
         "Reference specific tickers or data when available. Direct, no filler. Plain text only."
     )
@@ -565,7 +567,7 @@ Current open positions:
                 "error": str(exc),
             }
         return {
-            "commentary": "The Oracle is resting — daily AI token limit reached. Check back tomorrow for fresh market insight.",
+            "commentary": f"{display_label('oracle')} is resting — daily AI token limit reached. Check back tomorrow for fresh market insight.",
             "generated_at": None,
             "cached": False,
             "cache_age_seconds": 0,

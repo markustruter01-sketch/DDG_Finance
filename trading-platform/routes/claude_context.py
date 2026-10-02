@@ -15,6 +15,7 @@ async def get_claude_context():
     Paste the 'prompt' field at the start of any new Claude session.
     """
     from db.postgres import get_conn, is_pg_available
+    from core.bot_registry import display_label
 
     sections = []
 
@@ -92,7 +93,7 @@ PLATFORM OVERVIEW
                 kraken_pos = cur.fetchall()
 
                 sections.append("OPEN POSITIONS")
-                sections.append(f"  Oracle active positions: {oracle_active}")
+                sections.append(f"  {display_label('oracle')} active positions: {oracle_active}")
                 for r in kraken_pos:
                     sections.append(f"  {r[0]}: {r[1]} open")
                 sections.append("")
@@ -172,10 +173,10 @@ PLATFORM OVERVIEW
                         )
                     sections.append("")
 
-    sections.append("""KNOWN ARCHITECTURE
-- Oracle: STF v1.0 — EMA20/50 + ADX>=25 + RSI 40-75 | Trail 2.5xATR | Stop 2.0xATR
-- Davy Jones: Mean reversion | Z-score + RSI 40/60 | Conservative sizing
-- Blackbeard: Mean reversion | Z-score + RSI 30/70 | Aggressive sizing | Perf breaker active
+    sections.append(f"""KNOWN ARCHITECTURE
+- {display_label('oracle')}: STF v1.0 — EMA20/50 + ADX>=25 + RSI 40-75 | Trail 2.5xATR | Stop 2.0xATR
+- {display_label('davy-jones')}: Mean reversion | Z-score + RSI 40/60 | Conservative sizing
+- {display_label('blackbeard')}: Mean reversion | Z-score + RSI 30/70 | Aggressive sizing | Perf breaker active
 - Calypso: Mean reversion | Z-score + RSI 35/65 | EMA 50/200 | Dead zone fixed
 - Apex Predator: Momentum | RSI 45/55 | EMA 20/50 4H | VPIN 0.80
 - Navigator: H4 Forex swing | RSI 30/70 | EMA 50/200 trend filter | ATR min 8 pips | Per-pair cooldown
@@ -187,14 +188,14 @@ RECENT MAJOR CHANGES (Apr 2026)
 - Calypso: 5 strategy fixes including dead zone elimination
 - Navigator: 4 entry fixes + per-pair cooldown
 - Poseidon: Complete strategy replacement (pairs -> momentum)
-- Oracle: Trail trigger 1.5->2.5xATR, profit-gated exits
+- {display_label('oracle')}: Trail trigger 1.5->2.5xATR, profit-gated exits
 - All bots: stall detection via bot_portfolio.last_updated, DB-backed state, fleet halt
 - Fee drag confirmed: Kraken bots NOT live-capital ready (need 40%+ WR over 60 trades)
 
 REVIEW FLAGS DUE
 - Apr 30: Blackbeard WR check (currently 24.4% — if still <35%, hard pause)
 - May 6:  Calypso 2-week post-fix review (baseline: 20.6% WR, -$89/trade)
-- May 7:  Oracle exit validation (need 30 clean trades with closed_at)
+- May 7:  {display_label('oracle')} exit validation (need 30 clean trades with closed_at)
 - May 15: Navigator 30-trade post-fix validation
 - Jun 1:  Live capital readiness assessment
 

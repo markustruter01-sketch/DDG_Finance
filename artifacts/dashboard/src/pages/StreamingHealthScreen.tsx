@@ -3,7 +3,7 @@ import { Activity, Server, Shield, Database, Anchor, AlertTriangle, CheckCircle2
 import { useQuery } from "@tanstack/react-query";
 import { DDGBadge } from "@/components/DDGBadge";
 import { api } from "@/hooks/use-trading-client";
-import { getAttributedBotIdentity } from "@/lib/bot-identity";
+import { formatBotLabel, useBotIdentity } from "@/lib/bot-identity";
 
 type Level = "green" | "yellow" | "red" | "unknown";
 
@@ -95,9 +95,6 @@ const WIRES: WireSpec[] = [
 const COMPONENT_LABELS: Record<string, string> = {
   platform_core: "Platform Core",
   data_pipeline: "Data Pipeline",
-  bot_oracle: getAttributedBotIdentity("oracle").displayName,
-  bot_spy_qqq_trend: getAttributedBotIdentity("spy_qqq_trend").displayName,
-  bot_jerome_macro: getAttributedBotIdentity("jerome_macro").displayName,
   degradation_events: "Degradation Events",
   alpaca_api: "Alpaca API",
   equity_manager: "Equity Manager",
@@ -231,7 +228,7 @@ function PerBotFleetStrip({ nodes }: { nodes: Record<string, NodeHealth> }) {
       <div className="flex items-center gap-2 px-5 py-2 flex-wrap">
         {perBotNodes.map(([key, node]) => {
           const colors = LEVEL_COLORS[node.level];
-          const botLabel = COMPONENT_LABELS[key] ?? key;
+          const botLabel = nodes[key]?.label ?? COMPONENT_LABELS[key] ?? key;
           return (
             <div key={key} className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg"
               style={{
@@ -465,6 +462,7 @@ function AlertPanel({ nodes }: { nodes: Record<string, NodeHealth> }) {
 
 /* ── Main Screen ──────────────────────────────────────────────────────────── */
 export default function StreamingHealthScreen() {
+  const { getBotIdentity } = useBotIdentity();
   const { data, isLoading, isError } = useQuery<HealthData>({
     queryKey: ["/system/health-architecture"],
     queryFn: async () => (await api.get("/system/health-architecture")).data,
@@ -478,13 +476,20 @@ export default function StreamingHealthScreen() {
     return () => clearInterval(t);
   }, []);
 
+  const componentLabels = useMemo(() => ({
+    ...COMPONENT_LABELS,
+    bot_oracle: formatBotLabel(getBotIdentity("oracle")),
+    bot_spy_qqq_trend: formatBotLabel(getBotIdentity("spy_qqq_trend")),
+    bot_jerome_macro: formatBotLabel(getBotIdentity("jerome_macro")),
+  }), [getBotIdentity]);
+
   const nodes = useMemo(() => {
     if (!data?.nodes) return null;
     return Object.fromEntries(
       Object.keys(NODE_POSITIONS).map((key) => [
         key,
         data.nodes[key] ?? {
-          label: COMPONENT_LABELS[key] ?? key,
+          label: componentLabels[key] ?? key,
           level: "unknown" as const,
           latency_ms: null,
           data_age_s: null,
@@ -492,7 +497,7 @@ export default function StreamingHealthScreen() {
         },
       ]),
     ) as Record<string, NodeHealth>;
-  }, [data?.nodes]);
+  }, [data?.nodes, componentLabels]);
   const reportAge = data ? Math.max(0, Math.floor((now.getTime() - data.timestamp) / 1000)) : null;
   const reportStale = Boolean(reportAge != null && reportAge > 60) || (isError && Boolean(data));
 

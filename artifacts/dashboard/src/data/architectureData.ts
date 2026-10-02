@@ -1,5 +1,5 @@
 export interface ArchNode {
-  id: string; label: string; subtitle: string; col: 0 | 1 | 2 | 3 | 4; row: number; color: string; description: string;
+  id: string; label: string; subtitle: string; col: 0 | 1 | 2 | 3 | 4; row: number; color: string; description: string; botId?: string;
 }
 export interface ArchEdge { id: string; from: string; to: string; label?: string; }
 export interface ArchFlow { id: string; label: string; description: string; nodeIds: string[]; edgeIds: string[]; steps: string[]; }
@@ -7,14 +7,16 @@ export interface ArchFlow { id: string; label: string; description: string; node
 export const COLUMN_LABELS: Record<number, string> = { 0: "BOTS", 1: "API LAYER", 2: "DATABASE", 3: "EXTERNAL SERVICES", 4: "LLMs" };
 export const COLUMN_COLORS: Record<number, string> = { 0: "#f97316", 1: "#22d3ee", 2: "#8b5cf6", 3: "#10b981", 4: "#f59e0b" };
 
-const bot = (id: string, label: string, row: number, color: string, description: string): ArchNode => ({ id, label, subtitle: "Alpaca ETF fleet", col: 0, row, color, description });
+const bot = (id: string, botId: string, row: number, color: string, description: string): ArchNode => ({
+  id, botId, label: id, subtitle: "Alpaca ETF fleet", col: 0, row, color, description,
+});
 const api = (id: string, label: string, row: number, description: string): ArchNode => ({ id, label, subtitle: "FastAPI endpoint", col: 1, row, color: "#22d3ee", description });
 const db = (id: string, label: string, row: number): ArchNode => ({ id, label, subtitle: "PostgreSQL table", col: 2, row, color: "#8b5cf6", description: `Current production table: ${label}.` });
 
 export const NODES: ArchNode[] = [
-  bot("bot_oracle", "Oracle / US Core", 0, "#a78bfa", "Momentum and risk-managed ETF execution for the US Core allocation."),
-  bot("bot_spy_qqq", "SPY/QQQ Trend", 1, "#22d3ee", "Trend-following execution for the SPY and QQQ ETF allocation."),
-  bot("bot_jerome", "Jerome Macro", 2, "#fb923c", "Macro ETF execution for the Emerging Markets allocation."),
+  bot("bot_oracle", "oracle", 0, "#a78bfa", "Momentum and risk-managed ETF execution."),
+  bot("bot_spy_qqq", "spy_qqq_trend", 1, "#22d3ee", "Trend-following execution for SPY and QQQ."),
+  bot("bot_jerome", "jerome_macro", 2, "#fb923c", "Macro ETF execution for precious metals and crypto."),
   api("api_runner", "Bot Runner", 0, "Runs the three active Alpaca ETF strategy loops and writes portfolio heartbeats."),
   api("api_trading", "Trading API", 1, "FastAPI service for fleet control, positions, performance, health, audit, and analysis."),
   api("api_equity", "Fleet Equity", 2, "Server-computed fleet equity and win rate; the dashboard consumes this as the SSOT."),

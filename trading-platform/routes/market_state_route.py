@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 from loguru import logger
+from core.bot_registry import display_label
 
 router = APIRouter()
 
@@ -77,7 +78,7 @@ async def get_market_state_endpoint() -> dict:
             },
             "dual_gate_note": (
                 "Live fast gate (algo_scanner + executor): "
-                "SPY close > 200SMA AND 5d return > -3% → Oracle long-only brake. "
+                f"SPY close > 200SMA AND 5d return > -3% → {display_label('oracle')} long-only brake. "
                 "CRISIS gate (this module): SPY 20d return <= -12% → "
                 "both-sides block + safe-haven rotation. "
                 "Complementary; CRISIS is more restrictive when both active."

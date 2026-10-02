@@ -13,6 +13,7 @@ from datetime import datetime, timezone, date as date_type
 from typing import Any
 
 from fastapi import APIRouter
+from core.bot_registry import display_label
 from loguru import logger
 
 scorecard_router = APIRouter()
@@ -37,7 +38,7 @@ _BOT_CFG: dict[str, dict] = {
         "asset_class":            "momentum_etf",
     },
     "jerome_macro": {
-        "strategy":               "Jerome v2 EMA/ADX/ATR trend-following",
+        "strategy":               f"{display_label('jerome_macro')} v2 EMA/ADX/ATR trend-following",
         "evaluation_window_start": "2026-05-28",
         "table":                  "jerome_positions",
         "bot_id":                 "jerome_macro",

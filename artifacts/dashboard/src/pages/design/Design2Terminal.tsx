@@ -1,9 +1,9 @@
 import { useFleetData } from "@/hooks/useFleetData";
-import { AnimatedStyle, BotLine, DesignNav, FleetTotals, getBotRows, PositionChips } from "./DesignShared";
+import { AnimatedStyle, BotLine, DesignNav, FleetTotals, useBotRows, PositionChips } from "./DesignShared";
 
 export default function Design2Terminal() {
   const data = useFleetData();
-  const rows = getBotRows(data);
+  const rows = useBotRows(data);
   return (
     <main className="min-h-screen overflow-hidden bg-[#090909] font-mono text-[#f5f5f5]">
       <AnimatedStyle>{`

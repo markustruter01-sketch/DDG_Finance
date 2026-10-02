@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { cn, formatCurrency, formatCryptoPrice } from "@/lib/utils";
-import { getBotIdentity } from "@/lib/bot-identity";
+import { formatBotLabel, useBotIdentity } from "@/lib/bot-identity";
 import { MarketStatusBadge, isAssetCrypto, HEALTH_COLOR_MAP, RollingPnl } from "@/lib/dashboard-shared";
 import type { LivePosition } from "@/hooks/use-trading";
 import { useStatusSummary } from "@/hooks/use-trading";
@@ -19,6 +19,8 @@ export function KrakenPositionCard({
   isPaper?: boolean;
   compact?: boolean;
 }) {
+  const { getBotIdentity } = useBotIdentity();
+  const davyJonesIdentity = getBotIdentity("davy-jones");
   const [expanded, setExpanded] = useState(false);
   const pnlUsd  = typeof kpos.unrealized_pnl_usd === "number" ? kpos.unrealized_pnl_usd : null;
   const isUp    = pnlUsd == null ? true : pnlUsd >= 0;
@@ -103,7 +105,7 @@ export function KrakenPositionCard({
                   </div>
                 ))}
               </div>
-              <div className="mt-2 text-[9px] text-cyan-400/40 italic">Mean-reversion · auto-managed by {getBotIdentity("davy-jones").displayName}</div>
+              <div className="mt-2 text-[9px] text-cyan-400/40 italic">Mean-reversion · auto-managed by {formatBotLabel(davyJonesIdentity)}</div>
             </div>
           </motion.div>
         )}
@@ -121,6 +123,8 @@ export function KrakenPositionsPanel({
   signals?: any[];
   isPaper?: boolean;
 }) {
+  const { getBotIdentity } = useBotIdentity();
+  const davyJonesIdentity = getBotIdentity("davy-jones");
   const [open, setOpen] = useState(true);
   if (positions.length === 0) return null;
 
@@ -135,7 +139,7 @@ export function KrakenPositionsPanel({
         onClick={() => setOpen(v => !v)}
         className="w-full px-4 py-2 flex items-center gap-2 text-left hover:bg-cyan-500/[0.04] transition-colors"
       >
-        <span className="text-[9px] uppercase font-semibold tracking-wider text-cyan-400/60">{getBotIdentity("davy-jones").icon} {getBotIdentity("davy-jones").displayName}</span>
+        <span className="text-[9px] uppercase font-semibold tracking-wider text-cyan-400/60">{davyJonesIdentity.icon} {formatBotLabel(davyJonesIdentity)}</span>
         <Badge variant="outline" className="text-[8px] px-1 py-0 border-cyan-500/20 text-cyan-400/50">{positions.length}</Badge>
         {isPaper && <Badge variant="outline" className="text-[8px] px-1 py-0 border-amber-500/20 text-amber-400/50">PAPER</Badge>}
         <span className="text-[9px] text-muted-foreground/30 ml-1">crypto positions</span>
@@ -180,6 +184,8 @@ export function AlpacaPositionCard({
   closingSymbol: string | null;
   compact?: boolean;
 }) {
+  const { getBotIdentity } = useBotIdentity();
+  const oracleIdentity = getBotIdentity("oracle");
   const [expanded, setExpanded] = useState(false);
   const isShort = (pos.side ?? "long").toLowerCase() === "short";
   const isBearHedge = (pos.asset_class ?? "").toLowerCase() === "bear_hedge";
@@ -302,7 +308,7 @@ export function AlpacaPositionCard({
                   </button>
                 )}
               </div>
-              <div className="mt-1 text-[9px] text-green-400/30 italic">AI conviction · managed by Degen Oracle</div>
+              <div className="mt-1 text-[9px] text-green-400/30 italic">AI conviction · managed by {formatBotLabel(oracleIdentity)}</div>
             </div>
           </motion.div>
         )}
@@ -350,7 +356,7 @@ export function AlpacaPositionsPanel({
         onClick={() => setOpen(v => !v)}
         className="w-full px-4 py-2 flex items-center gap-2 text-left hover:bg-orange-500/[0.04] transition-colors"
       >
-        <span className="text-[9px] uppercase font-semibold tracking-wider text-orange-400/60">⚡ Degen Oracle</span>
+        <span className="text-[9px] uppercase font-semibold tracking-wider text-orange-400/60">⚡ {formatBotLabel(oracleIdentity)}</span>
         <Badge variant="outline" className="text-[8px] px-1 py-0 border-orange-500/20 text-orange-400/50">{positions.length}</Badge>
         <span className="text-[9px] text-muted-foreground/30 ml-1">equity positions</span>
         {shortPositions.length > 0 && (
@@ -358,7 +364,7 @@ export function AlpacaPositionsPanel({
         )}
         {isEquityMode && (
           <span
-            title="NYSE is open — Oracle is running in equity mode"
+            title={`NYSE is open — ${formatBotLabel(oracleIdentity)} is running in equity mode`}
             className="flex items-center gap-1 text-[8px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded border border-green-500/25 bg-green-500/8 text-green-400/70"
           >
             📈 Equity Mode
@@ -366,7 +372,7 @@ export function AlpacaPositionsPanel({
         )}
         {isAfterhoursMode && (
           <span
-            title={`NYSE is closed — Oracle is in Crypto After-Hours mode${ahPositionCount != null && ahPositionCount > 0 ? ` · ${ahPositionCount} crypto position${ahPositionCount !== 1 ? "s" : ""}${ahUnrealizedPnl == null ? " · P&L unavailable" : ` · P&L: ${ahUnrealizedPnl >= 0 ? "+" : ""}$${Math.abs(ahUnrealizedPnl).toFixed(2)}`}` : ""}`}
+            title={`NYSE is closed — ${formatBotLabel(oracleIdentity)} is in Crypto After-Hours mode${ahPositionCount != null && ahPositionCount > 0 ? ` · ${ahPositionCount} crypto position${ahPositionCount !== 1 ? "s" : ""}${ahUnrealizedPnl == null ? " · P&L unavailable" : ` · P&L: ${ahUnrealizedPnl >= 0 ? "+" : ""}$${Math.abs(ahUnrealizedPnl).toFixed(2)}`}` : ""}`}
             className="flex items-center gap-1 text-[8px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded border border-indigo-500/30 bg-indigo-500/10 text-indigo-400"
           >
             🌙 Crypto After-Hours

@@ -1330,7 +1330,7 @@ def run_performance_analysis(days: int = 10) -> dict[str, Any]:
     global _last_performance_report
     run_at = datetime.now(tz=timezone.utc)
 
-    # ── Alpaca / Degen Oracle stats ────────────────────────────────────────
+    # ── Alpaca / active strategy stats ─────────────────────────────────────
     try:
         from analysis.trade_journal import get_all_trades
         cutoff = (datetime.now(tz=timezone.utc) - timedelta(days=days)).date()
@@ -1378,10 +1378,12 @@ def run_performance_analysis(days: int = 10) -> dict[str, Any]:
             return "N/A"
         return f"{pnl:+.2f}{suffix}"
 
+    from core.bot_registry import display_label
+    oracle_label = display_label("oracle")
     user_prompt = f"""\
 ANALYSIS WINDOW: Last {days} days
 
-DEGEN ORACLE BOT (Alpaca — US Equities, LLM-driven):
+{oracle_label} (Alpaca — US Equities, LLM-driven):
   Closed trades : {alpaca_total}
   Wins / Losses : {alpaca_wins} / {alpaca_losses}
   Win rate      : {_fmt_wr(alpaca_win_rate)}

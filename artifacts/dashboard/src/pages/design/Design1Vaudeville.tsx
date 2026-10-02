@@ -1,9 +1,9 @@
 import { useFleetData } from "@/hooks/useFleetData";
-import { AnimatedStyle, DesignNav, FleetTotals, getBotRows, PositionChips } from "./DesignShared";
+import { AnimatedStyle, DesignNav, FleetTotals, useBotRows, PositionChips } from "./DesignShared";
 
 export default function Design1Vaudeville() {
   const data = useFleetData();
-  const rows = getBotRows(data);
+  const rows = useBotRows(data);
   return (
     <main className="relative min-h-screen overflow-hidden bg-[#071126] font-sans text-white">
       <AnimatedStyle>{`

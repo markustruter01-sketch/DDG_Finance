@@ -93,8 +93,12 @@ def enqueue_profitable_trade(
     if pnl_usd < cfg.get("min_pnl_usd", 0):
         return
 
+    from core.bot_registry import bot_by_id, display_label
+
+    registry_bot = bot_by_id(bot_name)
+    resolved_bot_name = display_label(registry_bot.id) if registry_bot else bot_name
     entry = {
-        "bot_name": bot_name,
+        "bot_name": resolved_bot_name,
         "symbol": symbol,
         "pnl_pct": pnl_pct,
         "pnl_usd": pnl_usd,
@@ -108,7 +112,7 @@ def enqueue_profitable_trade(
         queue.append(entry)
         _save_queue(queue)
 
-    logger.info(f"Alert queued: {bot_name} {symbol} +{pnl_pct:.2f}% (${pnl_usd:,.2f})")
+    logger.info(f"Alert queued: {resolved_bot_name} {symbol} +{pnl_pct:.2f}% (${pnl_usd:,.2f})")
 
 
 def flush_alerts() -> int:

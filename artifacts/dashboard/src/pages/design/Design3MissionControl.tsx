@@ -1,9 +1,9 @@
 import { useFleetData } from "@/hooks/useFleetData";
-import { AnimatedStyle, BotLine, DesignNav, FleetTotals, getBotRows, PositionChips } from "./DesignShared";
+import { AnimatedStyle, BotLine, DesignNav, FleetTotals, useBotRows, PositionChips } from "./DesignShared";
 
 export default function Design3MissionControl() {
   const data = useFleetData();
-  const rows = getBotRows(data);
+  const rows = useBotRows(data);
   return (
     <main className="relative min-h-screen overflow-hidden bg-[#dfe8f3] font-sans text-[#102033]">
       <AnimatedStyle>{`

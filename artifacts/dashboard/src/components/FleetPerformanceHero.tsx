@@ -6,8 +6,10 @@ import {
 } from "@/hooks/use-trading";
 import { MiniSparkline } from "@/lib/dashboard-shared";
 import { getFleetBotCount } from "@/lib/fleet-capital";
+import { formatBotLabel, useBotIdentity } from "@/lib/bot-identity";
 
 export function FleetPerformanceHero() {
+  const { getBotIdentity } = useBotIdentity();
   const { data: summary }      = useStatusSummary();
   const { data: fleetEq }      = useFleetEquity();
   const { data: registry }     = useBotRegistry();
@@ -32,14 +34,15 @@ export function FleetPerformanceHero() {
     const oracleTodayTrades = journal?.trades?.filter(t => t.date?.startsWith(todayStr) && t.pnl_percentage != null) ?? [];
     if (oracleTodayTrades.length > 0) {
       const oracleDailyPnl = oracleTodayTrades.reduce((sum, t) => sum + t.pnl_percentage, 0);
-      results.push({ name: "Oracle", icon: "🔮", dailyPnl: oracleDailyPnl });
+      const identity = getBotIdentity("oracle");
+      results.push({ name: formatBotLabel(identity), icon: identity.icon, dailyPnl: oracleDailyPnl });
     }
 
     const sorted = [...results].sort((a, b) => b.dailyPnl - a.dailyPnl);
     const best  = sorted[0] ?? null;
     const worst = sorted[sorted.length - 1] ?? null;
     return { best, worst };
-  }, [journal, todayStr]);
+  }, [journal, todayStr, getBotIdentity]);
 
   const knownPnlPcts = journal?.trades?.map(t => t.pnl_percentage).filter((value): value is number => value != null) ?? [];
   const alpacaBestPct  = knownPnlPcts.length > 0 ? Math.max(...knownPnlPcts) : null;
@@ -52,10 +55,11 @@ export function FleetPerformanceHero() {
     const oracleCurve = oracleSnapshots.length > 0
       ? oracleSnapshots.slice(-20).map(s => s.cumulative_pnl_pct)
       : [];
-    lines.push({ id: "oracle", name: "Oracle", icon: "🔮", accent: "#facc15", curve: oracleCurve });
+    const identity = getBotIdentity("oracle");
+    lines.push({ id: "oracle", name: formatBotLabel(identity), icon: identity.icon, accent: "#facc15", curve: oracleCurve });
 
     return lines;
-  }, [perfHistory]);
+  }, [perfHistory, getBotIdentity]);
 
   const botCount = getFleetBotCount(registry, fleetEq);
   const totalTrades = alpacaTotal;

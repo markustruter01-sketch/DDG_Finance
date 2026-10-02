@@ -65,3 +65,4 @@
 - [Research connection isolation](research-connection-isolation.md) — research imports must not initialize or fall back through the shared application database.
 - [ETF current quantity backfill](current-qty-backfill.md) — keep immutable entry qty separate from one-time broker-matched current_qty backfill; closed=0, canceled=NULL, failures stay NULL.
 - [CSSOM inline-style selectors](cssom-inline-style-selectors.md) — React/browser style serialization can differ from source literals; verify substring selectors against rendered attributes.
+- [Fleet chat prompt interpolation](fleet-chat-prompt-interpolation.md) — preserve literal prompt braces; use a sentinel replacement for registry labels instead of converting the full prompt to an f-string.

@@ -19,6 +19,7 @@ from data.economic_calendar import is_blackout_active
 from execution.broker import get_account, get_positions
 from execution.kill_switch import get_state as ks_get_state
 from config.settings import settings
+from core.bot_registry import BOT_REGISTRY, display_label
 
 from routes._deps import (
     EXPECTED_JOB_COUNT,
@@ -151,9 +152,9 @@ from core.scheduler import is_auto_trading_enabled
 
 
 _HEALTH_ACTIVE_BOTS = (
-    ("oracle", "Oracle / US Core"),
-    ("spy_qqq_trend", "SPY/QQQ Trend"),
-    ("jerome_macro", "Jerome Macro"),
+    "oracle",
+    "spy_qqq_trend",
+    "jerome_macro",
 )
 from core.bot_liveness import PORTFOLIO_STALE_THRESHOLDS
 
@@ -330,7 +331,8 @@ async def system_health_architecture() -> dict:
         degradation_read_error = str(exc)[:160]
         required_read_failed = True
 
-    for bot_id, label in _HEALTH_ACTIVE_BOTS:
+    for bot_id in _HEALTH_ACTIVE_BOTS:
+        label = display_label(bot_id)
         nodes[f"bot_{bot_id}"] = _build_health_bot_node(
             bot_id,
             label,
@@ -795,13 +797,16 @@ async def system_health_architecture() -> dict:
     ):
         nodes.pop(_retired_key, None)
     _fleet_level = nodes.get("platform_core", {}).get("level", "yellow")
-    for _bot_key, _bot_label in (
-        ("bot_oracle", "Oracle / US Core"),
-        ("bot_spy_qqq", "SPY/QQQ Trend / Asia-Pacific"),
-        ("bot_jerome", "Jerome Macro / Emerging Markets"),
+    for _bot_key, _bot_id in (
+        ("bot_oracle", "oracle"),
+        ("bot_spy_qqq", "spy_qqq_trend"),
+        ("bot_jerome", "jerome_macro"),
     ):
+        _bot_entry = BOT_REGISTRY[_bot_id]
         nodes[_bot_key] = {
-            "label": _bot_label,
+            "label": display_label(_bot_id),
+            "display_name": _bot_entry.display_name,
+            "subtitle": _bot_entry.subtitle,
             "level": _fleet_level,
             "latency_ms": None,
             "data_age_s": nodes.get("platform_core", {}).get("data_age_s"),

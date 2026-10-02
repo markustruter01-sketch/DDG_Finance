@@ -7,13 +7,13 @@ import {
 } from "@/hooks/use-trading";
 import { useMemo, useState } from "react";
 import { getBotColors } from "@/lib/bot-colors";
-import { getAttributedBotIdentity } from "@/lib/bot-identity";
+import { formatBotLabel, useBotIdentity } from "@/lib/bot-identity";
 import { DDGBadge } from "@/components/DDGBadge";
 
-const STATIC_BOTS: Array<{ id: string; name: string; icon: string; exchange: string; asset_class: string; color: string; status: string }> = [
-  { id: "oracle", name: getAttributedBotIdentity("oracle").displayName, icon: getAttributedBotIdentity("oracle").icon, exchange: "alpaca", asset_class: "stocks", color: "purple", status: "active" },
-  { id: "spy_qqq_trend", name: getAttributedBotIdentity("spy_qqq_trend").displayName, icon: getAttributedBotIdentity("spy_qqq_trend").icon, exchange: "alpaca", asset_class: "equity_etf", color: "cyan", status: "active" },
-  { id: "jerome_macro", name: getAttributedBotIdentity("jerome_macro").displayName, icon: getAttributedBotIdentity("jerome_macro").icon, exchange: "alpaca", asset_class: "macro_etf", color: "orange", status: "active" },
+const STATIC_BOTS: Array<{ id: string; exchange: string; asset_class: string; color: string; status: string }> = [
+  { id: "oracle", exchange: "alpaca", asset_class: "stocks", color: "purple", status: "active" },
+  { id: "spy_qqq_trend", exchange: "alpaca", asset_class: "equity_etf", color: "cyan", status: "active" },
+  { id: "jerome_macro", exchange: "alpaca", asset_class: "macro_etf", color: "orange", status: "active" },
   // Retired identities stay out of the runtime fallback.
 ];
 
@@ -229,6 +229,7 @@ function BotCard({ bot }: { bot: BotCardData }) {
 }
 
 export default function StreamingBotsScreen() {
+  const { getAttributedBotIdentity } = useBotIdentity();
   const [filter, setFilter] = useState<"all" | "live" | "paused" | "attention">("all");
   const [query, setQuery] = useState("");
   const { data: livePositions } = useLivePositions();
@@ -316,7 +317,7 @@ export default function StreamingBotsScreen() {
     const identity = getAttributedBotIdentity(bot.id);
     return {
       id:                 bot.id,
-      name:               identity.displayName,
+      name:               formatBotLabel(identity),
       icon:               identity.icon,
       exchangeLabel:      getExchangeLabel(bot.exchange, bot.asset_class),
       color:              colors.hex,
@@ -531,7 +532,7 @@ export default function StreamingBotsScreen() {
                         {pnlUsd == null ? "—" : `${pnlUsd >= 0 ? "+" : ""}$${Math.abs(pnlUsd).toFixed(0)}`}
                       </span>
                     </div>
-                    <div className="text-[7px] font-mono" style={{ color: "rgba(148,163,184,0.65)" }}>{identity.displayName}</div>
+                    <div className="text-[7px] font-mono" style={{ color: "rgba(148,163,184,0.65)" }}>{formatBotLabel(identity)}</div>
                   </div>
                 );
               })

@@ -21,7 +21,7 @@ Exchange = Literal["alpaca", "kraken", "oanda", "binance_data_only"]
 class BotEntry:
     # Identity
     id: str                          # canonical id (e.g. "spy_qqq_trend")
-    display_name: str                # full UI name (e.g. "SPY/QQQ Trend")
+    display_name: str                # primary UI name
     short_name: str                  # tight UI name
     icon: str                        # emoji or icon ref
     
@@ -47,6 +47,7 @@ class BotEntry:
 
     # UI color (Tailwind color name, e.g. "purple", "amber", "cyan")
     color: str = ""
+    subtitle: str = ""
 
 
 # ───────────────────────────────────────────────────────────────────────
@@ -56,8 +57,8 @@ class BotEntry:
 BOT_REGISTRY: dict[str, BotEntry] = {
     "oracle": BotEntry(
         id="oracle",
-        display_name="Oracle",
-        short_name="Oracle",
+        display_name="Atlas",
+        short_name="Atlas",
         icon="🔮",
         strategy_label="Stock Trend Follower v1.0 — EMA20/50 + ADX + RSI",
         asset_class="stocks",
@@ -76,11 +77,12 @@ BOT_REGISTRY: dict[str, BotEntry] = {
         trading_hours="nyse_only",
         cycle_minutes=15,
         color="purple",
+        subtitle="Global Market Indexes",
     ),
     "spy_qqq_trend": BotEntry(
         id="spy_qqq_trend",
-        display_name="SPY/QQQ Trend",
-        short_name="SPY/QQQ",
+        display_name="Momentum",
+        short_name="Momentum",
         icon="📈",
         strategy_label="EMA50/200 dual-trend on SPY+QQQ",
         asset_class="equity_etf",
@@ -93,11 +95,12 @@ BOT_REGISTRY: dict[str, BotEntry] = {
         trading_hours="nyse_only",
         cycle_minutes=60,
         color="amber",
+        subtitle="Stock Trend Cooldown",
     ),
     "jerome_macro": BotEntry(
         id="jerome_macro",
-        display_name="Jerome",
-        short_name="Jerome",
+        display_name="Bullion",
+        short_name="Bullion",
         icon="🏛️",
         strategy_label="LLM Commodity Macro — Groq ETF decisions",
         asset_class="commodity_etf",
@@ -110,6 +113,7 @@ BOT_REGISTRY: dict[str, BotEntry] = {
         trading_hours="macro_cycle",
         cycle_minutes=240,
         color="red",
+        subtitle="Precious Metals and Crypto",
     ),
 
     "forex_gump": BotEntry(
@@ -186,6 +190,15 @@ def display_name(any_id: str) -> str:
     """Get display name. Returns the input unchanged if unknown (safe fallback)."""
     bot = bot_by_id(any_id)
     return bot.display_name if bot else any_id
+
+
+def display_label(any_id: str) -> str:
+    """Return the registry display name and subtitle as one UI-friendly label."""
+    bot = bot_by_id(any_id)
+    if not bot:
+        return any_id
+    return f"{bot.display_name} · {bot.subtitle}" if bot.subtitle else bot.display_name
+
 
 def fleet_starting_capital() -> float:
     """Sum of starting_capital for all non-retired bots."""

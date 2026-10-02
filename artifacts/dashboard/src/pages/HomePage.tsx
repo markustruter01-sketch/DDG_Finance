@@ -15,7 +15,7 @@ import {
 import { useExportReport } from "@/hooks/use-report";
 import { api } from "@/hooks/use-trading-client";
 import { useToast } from "@/hooks/use-toast";
-import { getBotIdentity } from "@/lib/bot-identity";
+import { formatBotLabel, useBotIdentity } from "@/lib/bot-identity";
 import FleetSparkline from "@/components/FleetSparkline";
 import ObservatoryHome from "@/components/ObservatoryHome";
 import RunnerStatusIndicator from "@/components/RunnerStatusIndicator";
@@ -602,6 +602,7 @@ function ExportDropdown({
   total?: { equity?: number; pnl?: number; pnl_pct?: number };
   regime?: string; killTripped?: boolean | null;
 }) {
+  const { getBotIdentity } = useBotIdentity();
   const [open, setOpen]     = useState(false);
   const [busy, setBusy]     = useState<string | null>(null);
   const ref                 = useRef<HTMLDivElement>(null);
@@ -663,9 +664,9 @@ function ExportDropdown({
       `──────────────────────────────────`,
       `FLEET TOTAL  ${fmtEq(total?.equity)}  ${fmtPct(total?.pnl_pct)}  ${fmtDollar(total?.pnl)}`,
       ``,
-      `${getBotIdentity("spy_qqq_trend").displayName.padEnd(16)}  ${fmtEq(spy?.equity)}  ${fmtPct(spy?.pnl_pct)}  ${fmtDollar(spy?.pnl)}`,
-      `${getBotIdentity("oracle").displayName.padEnd(16)}  ${fmtEq(oracle?.equity)}  ${fmtPct(oracle?.pnl_pct)}  ${fmtDollar(oracle?.pnl)}`,
-      `${getBotIdentity("jerome_macro").displayName.padEnd(16)}  ${fmtEq(jerome?.equity)}  ${fmtPct(jerome?.pnl_pct)}  ${fmtDollar(jerome?.pnl)}`,
+      `${formatBotLabel(getBotIdentity("spy_qqq_trend")).padEnd(16)}  ${fmtEq(spy?.equity)}  ${fmtPct(spy?.pnl_pct)}  ${fmtDollar(spy?.pnl)}`,
+      `${formatBotLabel(getBotIdentity("oracle")).padEnd(16)}  ${fmtEq(oracle?.equity)}  ${fmtPct(oracle?.pnl_pct)}  ${fmtDollar(oracle?.pnl)}`,
+      `${formatBotLabel(getBotIdentity("jerome_macro")).padEnd(16)}  ${fmtEq(jerome?.equity)}  ${fmtPct(jerome?.pnl_pct)}  ${fmtDollar(jerome?.pnl)}`,
       ``,
       `REGIME: ${regime ?? "UNKNOWN"}`,
       `KILL SWITCH: ${killTripped == null ? "UNKNOWN" : killTripped ? "TRIPPED ⚠" : "ARMED"}`,
@@ -679,7 +680,7 @@ function ExportDropdown({
       document.execCommand("copy"); document.body.removeChild(ta);
       toast({ title: "Fleet status copied" });
     } finally { setBusy(null); setOpen(false); }
-  }, [spy, oracle, jerome, total, regime, killTripped, toast]);
+  }, [spy, oracle, jerome, total, regime, killTripped, toast, getBotIdentity]);
 
   const items = [
     {
@@ -791,6 +792,7 @@ function ExportDropdown({
 // ── HomePage ──────────────────────────────────────────────────────────────────
 
 export default function HomePage() {
+  const { getBotIdentity } = useBotIdentity();
   const [, navigate] = useLocation();
   const {
     fleet, oracle, spy, jerome, total,
@@ -928,11 +930,11 @@ export default function HomePage() {
 
       {/* ── Ship cards ── */}
       <div className="mx-auto px-4 pt-4 pb-2 space-y-3" style={{ maxWidth: 600, position: "relative", zIndex: 1 }}>
-        <ShipCard shipName={getBotIdentity("spy_qqq_trend").displayName} callsign={getBotIdentity("spy_qqq_trend").icon} bot={spy}    status={spyStatus}
+        <ShipCard shipName={formatBotLabel(getBotIdentity("spy_qqq_trend"))} callsign={getBotIdentity("spy_qqq_trend").icon} bot={spy}    status={spyStatus}
           wfStatus={wfMap.get("spy_qqq_trend")} accent="#fbbf24" livePositions={positionsByBot?.spy_qqq_trend?.positions} strategyPositionCount={positionsByBot?.spy_qqq_trend?.strategy_count} entryWindow={entryWindows?.spy_qqq_trend} />
-        <ShipCard shipName={getBotIdentity("oracle").displayName}        callsign={getBotIdentity("oracle").icon}        bot={oracle} status={oraStatus}
+        <ShipCard shipName={formatBotLabel(getBotIdentity("oracle"))}        callsign={getBotIdentity("oracle").icon}        bot={oracle} status={oraStatus}
           wfStatus={wfMap.get("oracle")}        accent="#a78bfa" livePositions={positionsByBot?.oracle?.positions} strategyPositionCount={positionsByBot?.oracle?.strategy_count} entryWindow={entryWindows?.oracle} />
-        <ShipCard shipName={getBotIdentity("jerome_macro").displayName}  callsign={getBotIdentity("jerome_macro").icon}  bot={jerome} status={jeromeStatus}
+        <ShipCard shipName={formatBotLabel(getBotIdentity("jerome_macro"))}  callsign={getBotIdentity("jerome_macro").icon}  bot={jerome} status={jeromeStatus}
           wfStatus={wfMap.get("jerome_macro")}  accent="#f87171" livePositions={positionsByBot?.jerome_macro?.positions} strategyPositionCount={positionsByBot?.jerome_macro?.strategy_count} entryWindow={entryWindows?.jerome_macro} />
 
         {/* Footer */}

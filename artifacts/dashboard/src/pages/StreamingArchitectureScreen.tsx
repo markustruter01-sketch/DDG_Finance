@@ -1,6 +1,7 @@
-import { useState, useRef, useEffect, useCallback, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { X, ChevronRight } from "lucide-react";
 import { NODES, EDGES, FLOWS, COLUMN_LABELS, COLUMN_COLORS, type ArchNode, type ArchEdge, type ArchFlow } from "@/data/architectureData";
+import { formatBotLabel, useBotIdentity } from "@/lib/bot-identity";
 
 const NODE_W = 152;
 const NODE_H = 56;
@@ -558,8 +559,18 @@ function DotGrid({ width, height }: { width: number; height: number }) {
 export default function StreamingArchitectureScreen() {
   const [activeFlow, setActiveFlow] = useState<ArchFlow | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const { getBotIdentity } = useBotIdentity();
+  const nodes = useMemo(() => NODES.map((node) => {
+    if (!node.botId) return node;
+    const identity = getBotIdentity(node.botId);
+    return {
+      ...node,
+      label: formatBotLabel(identity),
+      subtitle: identity.subtitle || node.subtitle,
+    };
+  }), [getBotIdentity]);
 
-  const selectedNode = NODES.find((n) => n.id === selectedNodeId) ?? null;
+  const selectedNode = nodes.find((n) => n.id === selectedNodeId) ?? null;
 
   const highlightedNodeIds = activeFlow ? new Set(activeFlow.nodeIds) : null;
   const highlightedEdgeIds = activeFlow ? new Set(activeFlow.edgeIds) : null;
@@ -667,14 +678,14 @@ export default function StreamingArchitectureScreen() {
                 <EdgePath
                   key={edge.id}
                   edge={edge}
-                  nodes={NODES}
+                  nodes={nodes}
                   highlighted={highlighted}
                   dimmed={dimmed}
                 />
               );
             })}
 
-            {NODES.map((node) => {
+            {nodes.map((node) => {
               const highlighted = highlightedNodeIds ? highlightedNodeIds.has(node.id) : false;
               const dimmed = highlightedNodeIds ? !highlighted : false;
               const selected = selectedNodeId === node.id;

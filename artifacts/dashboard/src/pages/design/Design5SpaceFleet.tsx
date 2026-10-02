@@ -1,9 +1,9 @@
 import { useFleetData } from "@/hooks/useFleetData";
-import { AnimatedStyle, BotLine, DesignNav, FleetTotals, getBotRows } from "./DesignShared";
+import { AnimatedStyle, BotLine, DesignNav, FleetTotals, useBotRows } from "./DesignShared";
 
 export default function Design5SpaceFleet() {
   const data = useFleetData();
-  const rows = getBotRows(data);
+  const rows = useBotRows(data);
   return (
     <main className="relative min-h-screen overflow-hidden bg-[#02030a] font-mono text-white">
       <AnimatedStyle>{`

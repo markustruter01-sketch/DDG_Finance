@@ -1,9 +1,9 @@
 import { useFleetData } from "@/hooks/useFleetData";
-import { AnimatedStyle, DesignNav, FleetTotals, getBotRows, PositionChips } from "./DesignShared";
+import { AnimatedStyle, DesignNav, FleetTotals, useBotRows, PositionChips } from "./DesignShared";
 
 export default function Design4Arcade() {
   const data = useFleetData();
-  const rows = getBotRows(data);
+  const rows = useBotRows(data);
   return (
     <main className="min-h-screen overflow-hidden bg-[#f7f0df] font-sans text-[#111]">
       <AnimatedStyle>{`

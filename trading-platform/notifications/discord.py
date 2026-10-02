@@ -175,12 +175,6 @@ COLOR_BLUE   = 0x3B82F6
 COLOR_PURPLE = 0xA855F7
 COLOR_ORANGE = 0xF97316
 
-_DISPLAY_NAMES = {
-    "oracle":        "Larry (Oracle)",
-    "spy_qqq_trend": "Moe (SPY/QQQ)",
-    "jerome_macro":  "Curly (Jerome)",
-}
-
 # Active bots in display order — buck_futures retired May 2026
 _ACTIVE_BOTS = ["oracle", "spy_qqq_trend", "jerome_macro"]
 
@@ -306,7 +300,9 @@ def notify_daily_pnl_report() -> None:
     last_trades = _last_trade_timestamps()
 
     for bot_id in _ACTIVE_BOTS:
-        display   = _DISPLAY_NAMES.get(bot_id, bot_id)
+        from core.bot_registry import display_label
+
+        display   = display_label(bot_id)
         bot_data  = fleet.get(bot_id, {})
         starting  = float(bot_data.get("starting", 100_000.0)) or 100_000.0
         pnl_24h_b = float(bot_data.get("pnl_24h", 0.0))

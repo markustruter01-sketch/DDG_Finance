@@ -1,11 +1,12 @@
 import { useFleetData, getBotStatus, fmtEq, fmtPct, fmtDollar, type BotStatus } from "@/hooks/useFleetData";
+import { formatBotLabel, useBotIdentity, type BotIdentity } from "@/lib/bot-identity";
 
 export type DesignFleetData = ReturnType<typeof useFleetData>;
 
 export const BOT_META = [
-  { id: "spy_qqq_trend", name: "SPY / QQQ", pilot: "Moe", icon: "◉", accent: "#ffd166" },
-  { id: "oracle", name: "Asia Pacific", pilot: "Larry", icon: "◈", accent: "#b794f4" },
-  { id: "jerome_macro", name: "Emerging Markets", pilot: "Curly", icon: "✦", accent: "#ff6b8a" },
+  { id: "spy_qqq_trend", icon: "◉", accent: "#ffd166" },
+  { id: "oracle", icon: "◈", accent: "#b794f4" },
+  { id: "jerome_macro", icon: "✦", accent: "#ff6b8a" },
 ] as const;
 
 export const STATUS_META: Record<BotStatus, { label: string; color: string }> = {
@@ -15,14 +16,17 @@ export const STATUS_META: Record<BotStatus, { label: string; color: string }> = 
   IDLE: { label: "IDLE", color: "#ffd166" },
 };
 
-export function getBotRows(data: DesignFleetData) {
+export function getBotRows(data: DesignFleetData, getBotIdentity: (id: string) => BotIdentity) {
   const positions = data.positionsByBot;
   return BOT_META.map((meta) => {
+    const identity = getBotIdentity(meta.id);
     const bot = meta.id === "oracle" ? data.oracle : meta.id === "jerome_macro" ? data.jerome : data.spy;
     const status = getBotStatus(bot, data.mktOpen, false);
     const livePositions = positions?.[meta.id]?.positions ?? [];
     return {
       ...meta,
+      name: formatBotLabel(identity),
+      subtitle: identity.subtitle,
       bot,
       status,
       statusMeta: STATUS_META[status],
@@ -31,6 +35,11 @@ export function getBotRows(data: DesignFleetData) {
        positionCount: positions?.[meta.id]?.strategy_count ?? bot?.positions ?? null,
     };
   });
+}
+
+export function useBotRows(data: DesignFleetData) {
+  const { getBotIdentity } = useBotIdentity();
+  return getBotRows(data, getBotIdentity);
 }
 
 export function DesignNav({ current, mode }: { current: number; mode: string }) {
@@ -97,7 +106,7 @@ export function BotLine({ row, compact = false }: { row: ReturnType<typeof getBo
         <span className="text-xl" style={{ color: row.accent }}>{row.icon}</span>
         <div className="min-w-0">
           <div className="truncate text-xs font-black uppercase tracking-wider text-white">{row.name}</div>
-          <div className="text-[10px] text-white/40">{row.pilot} · {row.positionCount} positions · WF {row.wf ?? "—"}</div>
+          <div className="text-[10px] text-white/40">{row.subtitle} · {row.positionCount} positions · WF {row.wf ?? "—"}</div>
         </div>
         <span className="ml-auto flex items-center gap-1 text-[9px] font-black uppercase" style={{ color: row.statusMeta.color }}>
           <i className="h-1.5 w-1.5 rounded-full" style={{ background: row.statusMeta.color, boxShadow: `0 0 8px ${row.statusMeta.color}` }} />{row.statusMeta.label}

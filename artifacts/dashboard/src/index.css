@@ -2,6 +2,7 @@
 @import "tailwindcss";
 
 :root {
+  --dashboard-nature-image: url("/observatory-home-background.jpg");
   --background: 220 22% 7%;
   --foreground: 210 22% 91%;
   --card: 220 20% 10%;
@@ -272,7 +273,7 @@
   }
 }
 
-/* Desktop landscape artwork stays proportional and fills the viewport without stretching. */
+/* Use the dashboard's scenic image consistently across every background page. */
 .desktop-home-background {
   display: block;
   position: fixed;
@@ -281,13 +282,13 @@
   pointer-events: none;
   background-image:
     linear-gradient(rgba(7, 18, 30, 0.18), rgba(7, 18, 30, 0.28)),
-    url("/desktop-home-background.jpg");
+    var(--dashboard-nature-image);
   background-size: cover;
   background-position: center center;
   background-repeat: no-repeat;
 }
 
-/* The desert artwork is intentionally scoped to phone-sized home screens. */
+/* Phone layouts share the dashboard landscape, with a soft blur for legibility. */
 .mobile-home-background {
   display: none;
 }
@@ -462,10 +463,12 @@
     pointer-events: none;
     background-image:
       linear-gradient(rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.10)),
-      url("/phone-home-background.jpg");
+      var(--dashboard-nature-image);
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
+    filter: blur(2px);
+    transform: scale(1.025);
   }
 
   .home-command-header {
@@ -930,7 +933,7 @@
   pointer-events: none;
   background-image:
     linear-gradient(rgba(8,14,22,.18), rgba(8,14,22,.22)),
-    url("/desktop-home-background.jpg");
+    var(--dashboard-nature-image);
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
@@ -1265,7 +1268,7 @@
 .bench-shell::after {
   background-image:
     linear-gradient(rgba(255,255,255,.09), rgba(255,255,255,.16)),
-    url("/desktop-home-background.jpg");
+    var(--dashboard-nature-image);
 }
 
 .bench-rail,
@@ -1472,7 +1475,7 @@
   .production-not-found::before {
     background-image:
       linear-gradient(rgba(8,14,22,.18), rgba(8,14,22,.22)),
-      url("/phone-home-background.jpg");
+      var(--dashboard-nature-image);
     background-position: center;
   }
 
@@ -1812,7 +1815,7 @@
 .stream-production-shell::before {
   background-image:
     linear-gradient(rgba(8,14,22,.18), rgba(8,14,22,.22)),
-    url("/desktop-home-background.jpg");
+    var(--dashboard-nature-image);
 }
 
 .stream-production-shell::after {

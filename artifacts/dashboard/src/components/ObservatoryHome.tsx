@@ -30,7 +30,7 @@ function fmtRiskPct(v: number | null | undefined, signed = false) { return v == 
 function fmtRiskDate(v: string | null | undefined) { if (!v) return null; const d = new Date(v); return Number.isNaN(d.getTime()) ? v : d.toISOString().slice(0, 10); }
 
 const dashboardOverviewCss = `
-.observatory{padding-top:10px}
+.observatory{padding-top:10px;background-image:linear-gradient(rgba(7,24,31,.34),rgba(7,24,31,.48)),var(--dashboard-nature-image)}
 .obs-topline{margin-bottom:8px}
 .obs-brand{font-size:0}
 .obs-session>span{display:none}

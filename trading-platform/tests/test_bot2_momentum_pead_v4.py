@@ -3,11 +3,13 @@ from datetime import date, timedelta
 import pytest
 
 from core.equity_universe import set_screen_data
+import analysis.bot2_momentum_pead_v4 as momentum_v4
 import analysis.bot2_momentum_rank500_backtest as rank500_backtest
 from analysis.bot2_momentum_pead_v4 import (
     Bar,
     MomentumCache,
     Series,
+    append_spy_sleeve_exploration_runs,
     _cooldown_expiry_index,
     _cooldown_filtered_weights,
     _is_cooling_down,
@@ -95,6 +97,42 @@ def _momentum_result(
         rebalance_frequency=rebalance_frequency,
         **(simulation_options or {}),
     )
+
+
+def _sleeve_fixture():
+    days = [
+        date(2020, 1, 2),
+        date(2020, 1, 3),
+        date(2020, 2, 3),
+        date(2020, 2, 4),
+    ]
+    equity_prices = [100.0, 110.0, 120.0, 130.0]
+    spy_prices = [100.0, 120.0, 150.0, 150.0]
+    equities = {
+        "AAA": Series(
+            "AAA",
+            [
+                Bar(day, price, price, price, price, 1_000_000)
+                for day, price in zip(days, equity_prices)
+            ],
+        )
+    }
+    spy = Series(
+        "SPY",
+        [
+            Bar(day, price, price, price, price, 1_000_000)
+            for day, price in zip(days, spy_prices)
+        ],
+    )
+    cache = MomentumCache(
+        lookback_bars=252,
+        skip_bars=22,
+        top_n=1,
+        rebalance_frequency="monthly",
+    )
+    cache[days[0]] = [("AAA", 0.2, 0.1)]
+    cache[days[2]] = [("AAA", 0.2, 0.1)]
+    return equities, spy, cache, days
 
 
 def test_default_arguments_match_explicit_defaults():
@@ -219,6 +257,8 @@ def test_new_momentum_options_are_off_without_changing_defaults():
             "margin_interest_rate": 0.0,
             "maintenance_margin_ratio": None,
             "cooldown_days": 0,
+            "spy_sleeve_weight": 0.0,
+            "spy_sleeve_leverage": 1.0,
         },
     )
 
@@ -226,6 +266,8 @@ def test_new_momentum_options_are_off_without_changing_defaults():
     assert explicit["margin_interest_paid"] == 0.0
     assert explicit["margin_calls"] == 0
     assert explicit["borrowed_days"] == 0
+    assert explicit["spy_sleeve_weight"] == 0.0
+    assert explicit["spy_price_source"] is None
 
 
 def test_margin_interest_accrues_only_on_borrowed_cash_and_calendar_days():
@@ -326,6 +368,251 @@ def test_margin_call_is_recorded_and_reduces_exposure_to_one_x(monkeypatch):
         "MARGIN_CALL"
     ) == 1
     assert result["daily_deployment"][-1]["deployed_pct"] == pytest.approx(1.0)
+
+
+def test_spy_sleeve_rebalances_and_leaves_the_residual_equity_for_momentum(monkeypatch):
+    data, spy, cache, days = _sleeve_fixture()
+    monkeypatch.setattr(momentum_v4, "SLIP", 0.0)
+    monkeypatch.setattr(momentum_v4, "_load_spy_reference_series", lambda end: spy)
+
+    result = simulate_momentum(
+        data,
+        {"AAA"},
+        universe_size=500,
+        start=days[0],
+        end=days[-1],
+        ranking_cache=cache,
+        top_n=1,
+        idle_capital="cash",
+        spy_sleeve_weight=0.20,
+        spy_sleeve_leverage=1.0,
+    )
+
+    deployments = {item["date"]: item for item in result["daily_deployment"]}
+    assert deployments[days[0].isoformat()]["momentum_budget"] == pytest.approx(
+        80_000.0
+    )
+    momentum_entries = [
+        event
+        for event in result["event_log"]
+        if event["action"] == "ENTER_MOMENTUM"
+    ]
+    assert momentum_entries[0]["notional"] == pytest.approx(80_000.0)
+    assert deployments[days[1].isoformat()]["spy_market_value"] / deployments[
+        days[1].isoformat()
+    ]["equity"] != pytest.approx(0.20)
+    assert deployments[days[2].isoformat()]["spy_market_value"] / deployments[
+        days[2].isoformat()
+    ]["equity"] == pytest.approx(0.20)
+    assert len(
+        [event for event in result["event_log"] if event["action"] == "REBALANCE_SPY"]
+    ) == 2
+
+
+def test_spy_sleeve_interest_is_paid_only_when_cash_is_borrowed(monkeypatch):
+    data, spy, cache, days = _sleeve_fixture()
+    monkeypatch.setattr(momentum_v4, "SLIP", 0.0)
+    monkeypatch.setattr(momentum_v4, "_load_spy_reference_series", lambda end: spy)
+
+    borrowed = simulate_momentum(
+        data,
+        {"AAA"},
+        universe_size=500,
+        start=days[0],
+        end=days[-1],
+        ranking_cache=cache,
+        top_n=1,
+        idle_capital="cash",
+        margin_interest_rate=0.0625,
+        maintenance_margin_ratio=0.30,
+        spy_sleeve_weight=0.20,
+        spy_sleeve_leverage=1.5,
+    )
+    unborrowed = simulate_momentum(
+        data,
+        {"AAA"},
+        universe_size=500,
+        start=days[0],
+        end=days[-1],
+        ranking_cache=cache,
+        top_n=1,
+        idle_capital="cash",
+        margin_interest_rate=0.0625,
+        maintenance_margin_ratio=0.30,
+        spy_sleeve_weight=0.20,
+        spy_sleeve_leverage=0.5,
+    )
+
+    assert borrowed["daily_deployment"][0]["borrowed_amount"] == pytest.approx(
+        10_000.0
+    )
+    assert borrowed["daily_deployment"][0]["margin_interest_paid"] == 0.0
+    assert borrowed["daily_deployment"][1]["margin_interest_paid"] == pytest.approx(
+        10_000.0 * 0.0625 / 365.0
+    )
+    assert borrowed["margin_interest_paid"] > 0
+    assert borrowed["borrowed_days"] > 0
+    assert unborrowed["borrowed_days"] == 0
+    assert unborrowed["margin_interest_paid"] == 0.0
+
+
+def test_spy_sleeve_maintenance_check_reduces_total_exposure(monkeypatch):
+    data, spy, cache, days = _sleeve_fixture()
+    data["AAA"] = Series(
+        "AAA",
+        [
+            Bar(day, price, price, price, price, 1_000_000)
+            for day, price in zip(days, (100.0, 5.0, 5.0, 5.0))
+        ],
+    )
+    spy = Series(
+        "SPY",
+        [
+            Bar(day, price, price, price, price, 1_000_000)
+            for day, price in zip(days, (100.0, 5.0, 5.0, 5.0))
+        ],
+    )
+    monkeypatch.setattr(momentum_v4, "SLIP", 0.0)
+    monkeypatch.setattr(momentum_v4, "_load_spy_reference_series", lambda end: spy)
+
+    result = simulate_momentum(
+        data,
+        {"AAA"},
+        universe_size=500,
+        start=days[0],
+        end=days[1],
+        ranking_cache=cache,
+        top_n=1,
+        idle_capital="cash",
+        maintenance_margin_ratio=0.30,
+        spy_sleeve_weight=0.20,
+        spy_sleeve_leverage=1.5,
+    )
+
+    margin_call = next(
+        event for event in result["event_log"] if event["action"] == "MARGIN_CALL"
+    )
+    assert margin_call["maintenance_ratio_before"] < 0.30
+    assert margin_call["target_leverage"] == 1.0
+    assert result["margin_calls"] == 1
+    assert result["daily_deployment"][-1]["invested_value"] == pytest.approx(0.0)
+
+
+def test_spy_returns_do_not_change_the_momentum_volatility_scaling(monkeypatch):
+    data = _parameter_universe()
+    spy = _series("SPY", count=800, slope=0.55)
+    monkeypatch.setattr(momentum_v4, "SLIP", 0.0)
+    monkeypatch.setattr(momentum_v4, "_load_spy_reference_series", lambda end: spy)
+    cache = build_momentum_cache(
+        data,
+        set(data),
+        universe_size=500,
+        end=date(2020, 1, 31),
+        top_n=20,
+    )
+    common = {
+        "universe_size": 500,
+        "start": date(2019, 1, 1),
+        "end": date(2020, 1, 31),
+        "ranking_cache": cache,
+        "top_n": 20,
+        "target_volatility": 0.12,
+        "realized_volatility_window": 126,
+        "multiplier_cap": 1.0,
+        "idle_capital": "cash",
+    }
+
+    momentum_only = simulate_momentum(data, set(data), **common)
+    with_spy = simulate_momentum(
+        data,
+        set(data),
+        **common,
+        spy_sleeve_weight=0.20,
+        spy_sleeve_leverage=1.5,
+    )
+
+    assert with_spy["rebalance_multipliers"] == momentum_only["rebalance_multipliers"]
+
+
+def test_spy_sleeve_rows_append_with_strict_sql_placeholder_validation(monkeypatch):
+    class StrictCursor:
+        def __init__(self):
+            self.executions = []
+            self.row = None
+            self.insert_count = 0
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def execute(self, query, parameters=()):
+            if query.count("%s") != len(parameters):
+                raise AssertionError(
+                    f"{query.count('%s')} placeholders for {len(parameters)} parameters"
+                )
+            self.executions.append((query, parameters))
+            if query.lstrip().startswith("SELECT COUNT"):
+                self.row = (0,)
+            else:
+                self.insert_count += 1
+                self.row = (900 + self.insert_count,)
+
+        def fetchone(self):
+            return self.row
+
+    class FakeConnection:
+        def __init__(self):
+            self.fake_cursor = StrictCursor()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def cursor(self):
+            return self.fake_cursor
+
+    connection = FakeConnection()
+    monkeypatch.setattr(momentum_v4, "get_conn", lambda: connection)
+    rows = [
+        {
+            "parameters": {
+                "reference_run_id": 139,
+                "spy_sleeve_weight": 0.20,
+                "spy_sleeve_leverage": leverage,
+            },
+            "data_window": {
+                "backtest_start": "2019-02-01",
+                "backtest_end": "2026-07-31",
+            },
+            "result": {
+                "return": 0.25,
+                "sharpe": 0.8,
+                "max_drawdown": 0.2,
+                "margin_calls": 0,
+                "margin_interest_paid": 1.5,
+            },
+        }
+        for leverage in (1.0, 1.5)
+    ]
+
+    run_ids = append_spy_sleeve_exploration_runs(
+        rows,
+        reference_run_id=139,
+    )
+
+    assert run_ids == [901, 902]
+    assert connection.fake_cursor.insert_count == 2
+    assert [query.count("%s") for query, _ in connection.fake_cursor.executions] == [
+        3,
+        9,
+        9,
+    ]
+    with pytest.raises(AssertionError, match="placeholders for"):
+        connection.fake_cursor.execute("SELECT %s, %s", (1,))
 
 
 def test_experiment_18_default_sharpe_reproduces_exactly():

@@ -11,6 +11,7 @@ PEAD position closes and the next monthly rebalance returns to momentum.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import multiprocessing
@@ -38,7 +39,10 @@ from core.equity_universe import (  # noqa: E402
     set_screen_data,
 )
 from analysis.bot2_data_pipeline import EARNINGS_SYMBOLS, EARNINGS_TABLE  # noqa: E402
-from analysis.bot2_sp500_data import REFERENCE_PRICE_SOURCES  # noqa: E402
+from analysis.bot2_sp500_data import (  # noqa: E402
+    REFERENCE_PRICE_SOURCES,
+    YAHOO_PRICE_SOURCE,
+)
 from analysis.bot2_momentum_pead_v3 import (  # noqa: E402
     ALPACA_BARS_URL,
     ASSET_TABLE,
@@ -77,6 +81,7 @@ STARTING_EQUITY = 100_000.0
 CONTROL_ITERATIONS = 1_000
 RANDOM_SEED = 271_2026
 BORROW_EPSILON = 1e-8
+SPY_SLEEVE_STRATEGY_FAMILY = "bot2_momentum_spy_sleeve_v1"
 PEAD_SYMBOLS = EARNINGS_SYMBOLS
 WINDOWS: tuple[tuple[str, date, date], ...] = (
     ("2019_2020", date(2019, 1, 1), date(2020, 12, 31)),
@@ -786,6 +791,86 @@ def _trim_holdings_to_one_x(
     return cash, turnover, cost_paid
 
 
+def _trim_momentum_and_spy_to_one_x(
+    holdings: dict[str, Holding],
+    series: dict[str, Series],
+    spy_series: Series,
+    spy_qty: float,
+    day: date,
+    cash: float,
+    trade_returns: list[float],
+    event_log: list[dict[str, Any]],
+    turnover: float,
+    cost_paid: float,
+) -> tuple[float, float, float, float]:
+    """Reduce both invested sleeves proportionally to 1.0x after a margin call."""
+    spy_bar = _bar_open(spy_series, day)
+    if spy_bar is None:
+        raise RuntimeError(f"cannot execute a maintenance reduction for SPY on {day}")
+    momentum_invested = _holding_value(holdings, series, day)
+    spy_invested = spy_qty * spy_bar.close
+    invested = momentum_invested + spy_invested
+    equity = cash + invested
+    if invested <= 0:
+        return cash, spy_qty, turnover, cost_paid
+
+    sale_notional = (
+        invested
+        if equity <= 0
+        else min(invested, (invested - equity) / (1.0 - SLIP))
+    )
+    if sale_notional <= 0:
+        return cash, spy_qty, turnover, cost_paid
+
+    fraction_to_sell = min(1.0, sale_notional / invested)
+    sold_total = 0.0
+    remaining: dict[str, Holding] = {}
+    for symbol, holding in holdings.items():
+        bar = _bar_open(series[symbol], day)
+        if bar is None:
+            raise RuntimeError(
+                f"cannot execute a maintenance reduction for {symbol} on {day}"
+            )
+        qty_sold = holding.qty * fraction_to_sell
+        notional = qty_sold * bar.close
+        proceeds = notional * (1.0 - SLIP)
+        cash += proceeds
+        turnover += notional
+        cost_paid += notional * SLIP
+        sold_total += notional
+        if qty_sold > 0:
+            trade_returns.append(proceeds / (qty_sold * holding.entry_exec) - 1)
+        remaining_qty = holding.qty - qty_sold
+        if remaining_qty > 1e-12:
+            holding.qty = remaining_qty
+            remaining[symbol] = holding
+
+    holdings.clear()
+    holdings.update(remaining)
+    spy_qty_sold = spy_qty * fraction_to_sell
+    spy_notional_sold = spy_qty_sold * spy_bar.close
+    cash += spy_notional_sold * (1.0 - SLIP)
+    turnover += spy_notional_sold
+    cost_paid += spy_notional_sold * SLIP
+    sold_total += spy_notional_sold
+    spy_qty -= spy_qty_sold
+    event_log.append(
+        {
+            "date": day.isoformat(),
+            "action": "MARGIN_CALL",
+            "symbol": None,
+            "cash_after": cash,
+            "notional": sold_total,
+            "equity_before": equity,
+            "invested_before": invested,
+            "maintenance_ratio_before": equity / invested,
+            "target_leverage": 1.0,
+            "spy_qty_after": spy_qty,
+        }
+    )
+    return cash, spy_qty, turnover, cost_paid
+
+
 def _sell(
     holding: Holding,
     data: Series,
@@ -909,6 +994,31 @@ def _load_sgov_series(end: date) -> Series:
     if not rows:
         raise RuntimeError("SGOV idle-capital mode requires stored SGOV reference bars")
     return Series("SGOV", [Bar(row[0], *map(float, row[1:])) for row in rows])
+
+
+def _load_spy_reference_series(end: date) -> Series:
+    """Load SPY from the same Yahoo adjusted reference source as run 139."""
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT DISTINCT ON (date)
+                       date, open, high, low, close, volume
+                  FROM {PRICE_TABLE}
+                 WHERE symbol='SPY'
+                   AND date <= %s
+                   AND source = %s
+                 ORDER BY date
+                """,
+                (end, YAHOO_PRICE_SOURCE),
+            )
+            rows = cur.fetchall()
+    if not rows:
+        raise RuntimeError(
+            "SPY sleeve requires stored SPY bars from "
+            f"{YAHOO_PRICE_SOURCE}; no external-price fallback is permitted"
+        )
+    return Series("SPY", [Bar(row[0], *map(float, row[1:])) for row in rows])
 
 
 def _sgov_daily_return(series: Series, day: date) -> float:
@@ -1174,6 +1284,8 @@ def simulate_momentum(
     margin_interest_rate: float = 0.0,
     maintenance_margin_ratio: float | None = None,
     cooldown_days: int = 0,
+    spy_sleeve_weight: float = 0.0,
+    spy_sleeve_leverage: float = 1.0,
 ) -> dict[str, Any]:
     """One-cash momentum book; selector is used only for controls.
 
@@ -1201,6 +1313,10 @@ def simulate_momentum(
         raise ValueError("cooldown_days must be a non-negative integer")
     if cooldown_days < 0:
         raise ValueError("cooldown_days must be a non-negative integer")
+    if not math.isfinite(spy_sleeve_weight) or not 0 <= spy_sleeve_weight < 1:
+        raise ValueError("spy_sleeve_weight must be finite and in [0, 1)")
+    if not math.isfinite(spy_sleeve_leverage) or spy_sleeve_leverage <= 0:
+        raise ValueError("spy_sleeve_leverage must be finite and positive")
     if not isinstance(ranking_cache, MomentumCache):
         raise TypeError(
             "ranking_cache must be built by build_momentum_cache so its "
@@ -1229,6 +1345,38 @@ def simulate_momentum(
             f"cache={ranking_cache.rebalance_frequency!r}, "
             f"simulation={rebalance_frequency!r}"
         )
+    spy_series = (
+        _load_spy_reference_series(end) if spy_sleeve_weight > 0 else None
+    )
+    momentum_reference_values: dict[date, float] = {}
+    if spy_series is not None and target_volatility is not None:
+        momentum_reference = simulate_momentum(
+            series,
+            symbols,
+            universe_size,
+            start,
+            end,
+            ranking_cache,
+            selector,
+            lookback_bars=lookback_bars,
+            skip_bars=skip_bars,
+            top_n=top_n,
+            rebalance_frequency=rebalance_frequency,
+            target_volatility=target_volatility,
+            realized_volatility_window=realized_volatility_window,
+            idle_capital=idle_capital,
+            multiplier_cap=multiplier_cap,
+            margin_interest_rate=margin_interest_rate,
+            maintenance_margin_ratio=maintenance_margin_ratio,
+            cooldown_days=cooldown_days,
+        )
+        momentum_reference_values = {
+            date.fromisoformat(item["date"]): float(item["equity"])
+            for item in momentum_reference["daily_deployment"]
+        }
+    momentum_reference_days = sorted(momentum_reference_values)
+    momentum_reference_curve: list[float] = []
+    momentum_reference_index = 0
     calendar = _all_days(series, end)
     rebalance_days = _rebalance_days(calendar, rebalance_frequency)
     day_indices = {day: index for index, day in enumerate(calendar)}
@@ -1253,6 +1401,7 @@ def simulate_momentum(
     margin_calls = 0
     borrowed_days = 0
     previous_day: date | None = None
+    spy_qty = 0.0
 
     for day in calendar:
         if day < start:
@@ -1299,8 +1448,23 @@ def simulate_momentum(
                 multiplier = 1.0
                 fallback = False
             else:
+                if spy_series is not None:
+                    while (
+                        momentum_reference_index < len(momentum_reference_days)
+                        and momentum_reference_days[momentum_reference_index] < day
+                    ):
+                        reference_day = momentum_reference_days[
+                            momentum_reference_index
+                        ]
+                        momentum_reference_curve.append(
+                            momentum_reference_values[reference_day]
+                        )
+                        momentum_reference_index += 1
+                    scaling_curve = momentum_reference_curve
+                else:
+                    scaling_curve = curve
                 multiplier, fallback = _volatility_multiplier(
-                    curve,
+                    scaling_curve,
                     target_volatility,
                     realized_volatility_window,
                     multiplier_cap,
@@ -1312,37 +1476,134 @@ def simulate_momentum(
                 weights = _cooldown_filtered_weights(
                     selected, top_n, day_indices[day], cooldown_until
                 )
+            if spy_series is not None:
+                spy_bar = spy_series.by_date.get(day)
+                if spy_bar is None:
+                    raise RuntimeError(
+                        f"SPY reference data has no bar for monthly rebalance on {day}"
+                    )
+                equity_for_spy_target = (
+                    cash
+                    + _holding_value(holdings, series, day)
+                    + spy_qty * spy_bar.close
+                )
+                target_spy_notional = (
+                    max(0.0, equity_for_spy_target)
+                    * spy_sleeve_weight
+                    * spy_sleeve_leverage
+                )
+                target_spy_qty = target_spy_notional / spy_bar.open
+                qty_delta = target_spy_qty - spy_qty
+                if qty_delta > 1e-12:
+                    notional = qty_delta * spy_bar.open
+                    cost = notional * SLIP
+                    cash -= notional + cost
+                    turnover += notional
+                    cost_paid += cost
+                elif qty_delta < -1e-12:
+                    notional = -qty_delta * spy_bar.open
+                    cost = notional * SLIP
+                    cash += notional - cost
+                    turnover += notional
+                    cost_paid += cost
+                else:
+                    notional = 0.0
+                spy_qty = target_spy_qty
+                if abs(qty_delta) > 1e-12:
+                    event_log.append(
+                        {
+                            "date": day.isoformat(),
+                            "action": "REBALANCE_SPY",
+                            "symbol": "SPY",
+                            "side": "BUY" if qty_delta > 0 else "SELL",
+                            "cash_after": cash,
+                            "notional": notional,
+                            "target_notional": target_spy_notional,
+                            "target_qty": target_spy_qty,
+                            "equity_basis": equity_for_spy_target,
+                            "weight": spy_sleeve_weight,
+                            "leverage": spy_sleeve_leverage,
+                        }
+                    )
             for symbol, weight in weights.items():
-                equity_open = cash + _holding_value(holdings, series, day)
+                if spy_series is None:
+                    equity_open = cash + _holding_value(holdings, series, day)
+                    momentum_budget = equity_open
+                else:
+                    equity_open = (
+                        cash
+                        + _holding_value(holdings, series, day)
+                        + spy_qty * spy_bar.close
+                    )
+                    momentum_budget = max(0.0, equity_open) * (
+                        1.0 - spy_sleeve_weight
+                    )
                 cash, turnover, cost_paid = _buy(
                     symbol,
                     "momentum",
-                    equity_open * weight * multiplier,
+                    momentum_budget * weight * multiplier,
                     series[symbol],
                     day,
                     cash, holdings, event_log, turnover, cost_paid,
-                    allow_margin=multiplier > 1.0,
+                    allow_margin=multiplier > 1.0 or spy_series is not None,
                 )
-        equity_close = cash + _holding_value(holdings, series, day)
-        invested_close = _holding_value(holdings, series, day)
+        if spy_series is None:
+            spy_market_value = 0.0
+            equity_close = cash + _holding_value(holdings, series, day)
+            invested_close = _holding_value(holdings, series, day)
+        else:
+            spy_mark = _bar_open(spy_series, day)
+            if spy_mark is None:
+                raise RuntimeError(f"SPY reference data is unavailable on {day}")
+            spy_market_value = spy_qty * spy_mark.close
+            invested_close = (
+                _holding_value(holdings, series, day) + spy_market_value
+            )
+            equity_close = cash + invested_close
         if (
             maintenance_margin_ratio is not None
             and invested_close > 0
             and equity_close / invested_close < maintenance_margin_ratio
         ):
-            cash, turnover, cost_paid = _trim_holdings_to_one_x(
-                holdings,
-                series,
-                day,
-                cash,
-                trade_returns,
-                event_log,
-                turnover,
-                cost_paid,
-            )
+            if spy_series is None:
+                cash, turnover, cost_paid = _trim_holdings_to_one_x(
+                    holdings,
+                    series,
+                    day,
+                    cash,
+                    trade_returns,
+                    event_log,
+                    turnover,
+                    cost_paid,
+                )
+            else:
+                cash, spy_qty, turnover, cost_paid = (
+                    _trim_momentum_and_spy_to_one_x(
+                        holdings,
+                        series,
+                        spy_series,
+                        spy_qty,
+                        day,
+                        cash,
+                        trade_returns,
+                        event_log,
+                        turnover,
+                        cost_paid,
+                    )
+                )
             margin_calls += 1
-            equity_close = cash + _holding_value(holdings, series, day)
-            invested_close = _holding_value(holdings, series, day)
+            if spy_series is None:
+                equity_close = cash + _holding_value(holdings, series, day)
+                invested_close = _holding_value(holdings, series, day)
+            else:
+                spy_mark = _bar_open(spy_series, day)
+                if spy_mark is None:
+                    raise RuntimeError(f"SPY reference data is unavailable on {day}")
+                spy_market_value = spy_qty * spy_mark.close
+                invested_close = (
+                    _holding_value(holdings, series, day) + spy_market_value
+                )
+                equity_close = cash + invested_close
         deployed = (equity_close - cash) / equity_close if equity_close else 0.0
         borrowed_amount = -cash if cash < -BORROW_EPSILON else 0.0
         borrowed_days += int(borrowed_amount > 0)
@@ -1350,24 +1611,51 @@ def simulate_momentum(
         mode_days[str(day.year)]["momentum"] += 1
         if not holdings:
             mode_days[str(day.year)]["cash"] += 1
-        daily_deployment.append(
-            {
-                "date": day.isoformat(),
-                "mode": "momentum" if holdings else "cash",
-                "cash": cash,
-                "equity": equity_close,
-                "deployed_pct": deployed,
-                "positions": len(holdings),
-                "invested_value": invested_close,
-                "borrowed_amount": borrowed_amount,
-                "margin_interest_paid": interest_paid_today,
-            }
-        )
+        deployment = {
+            "date": day.isoformat(),
+            "mode": "momentum" if holdings else "cash",
+            "cash": cash,
+            "equity": equity_close,
+            "deployed_pct": deployed,
+            "positions": len(holdings) + int(spy_qty > 1e-12),
+            "invested_value": invested_close,
+            "borrowed_amount": borrowed_amount,
+            "margin_interest_paid": interest_paid_today,
+        }
+        if spy_series is not None:
+            deployment.update(
+                {
+                    "spy_market_value": spy_market_value,
+                    "spy_qty": spy_qty,
+                    "momentum_budget": max(0.0, equity_close)
+                    * (1.0 - spy_sleeve_weight),
+                }
+            )
+        daily_deployment.append(deployment)
         previous_day = day
     for symbol, holding in list(holdings.items()):
         cash, turnover, cost_paid = _sell(
             holding, series[symbol], end, cash, trade_returns, event_log,
             turnover, cost_paid, "WINDOW_CLOSE",
+        )
+    if spy_series is not None and spy_qty > 0:
+        spy_exit_bar = _bar_open(spy_series, end)
+        if spy_exit_bar is None:
+            raise RuntimeError(f"cannot execute a window close for SPY on {end}")
+        spy_exit_notional = spy_qty * spy_exit_bar.close
+        spy_exit_cost = spy_exit_notional * SLIP
+        cash += spy_exit_notional - spy_exit_cost
+        turnover += spy_exit_notional
+        cost_paid += spy_exit_cost
+        event_log.append(
+            {
+                "date": end.isoformat(),
+                "action": "WINDOW_CLOSE",
+                "symbol": "SPY",
+                "cash_after": cash,
+                "notional": spy_exit_notional,
+                "cost_paid": spy_exit_cost,
+            }
         )
     result = _metrics(
         curve, trade_returns, turnover, cost_paid, daily_deployment,
@@ -1406,6 +1694,9 @@ def simulate_momentum(
     result["maintenance_margin_ratio"] = maintenance_margin_ratio
     result["margin_calls"] = margin_calls
     result["cooldown_days"] = cooldown_days
+    result["spy_sleeve_weight"] = spy_sleeve_weight
+    result["spy_sleeve_leverage"] = spy_sleeve_leverage
+    result["spy_price_source"] = YAHOO_PRICE_SOURCE if spy_series is not None else None
     return result
 
 
@@ -1863,6 +2154,130 @@ def _jsonable(value: Any) -> Any:
     if isinstance(value, (list, tuple, set)):
         return [_jsonable(item) for item in value]
     return value
+
+
+def append_spy_sleeve_exploration_runs(
+    runs: list[dict[str, Any]],
+    *,
+    reference_run_id: int,
+) -> list[int]:
+    """Append the 1.0x and 1.5x SPY sleeve variants to research only."""
+    if reference_run_id <= 0:
+        raise ValueError("reference_run_id must be positive")
+    if len(runs) != 2:
+        raise ValueError("exactly two SPY sleeve variants must be appended")
+    leverages = sorted(
+        float(run["parameters"]["spy_sleeve_leverage"]) for run in runs
+    )
+    if leverages != [1.0, 1.5]:
+        raise ValueError("the stored SPY sleeve leverages must be 1.0x and 1.5x")
+
+    prepared: list[tuple[dict[str, Any], dict[str, Any], dict[str, Any], str, str]] = []
+    for run in runs:
+        parameters = dict(run["parameters"])
+        data_window = dict(run["data_window"])
+        result = dict(run["result"])
+        if float(parameters.get("spy_sleeve_weight", -1)) != 0.20:
+            raise ValueError("stored SPY sleeve weight must be 20%")
+        if int(parameters.get("reference_run_id", -1)) != reference_run_id:
+            raise ValueError("each variant must name the same reference run")
+        if not data_window or any(
+            not math.isfinite(float(result[key]))
+            for key in ("return", "sharpe", "max_drawdown")
+        ):
+            raise ValueError("run data and persisted metrics must be finite")
+        spec_json = json.dumps(
+            {
+                "strategy_family": SPY_SLEEVE_STRATEGY_FAMILY,
+                "parameters": parameters,
+                "data_window": data_window,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+        spec_hash = hashlib.sha256(spec_json.encode("utf-8")).hexdigest()
+        notes = json.dumps(
+            {
+                "classification": "descriptive SPY sleeve exploration",
+                "reference_run_id": reference_run_id,
+                "metrics": {
+                    "total_return_pct": float(result["return"]) * 100.0,
+                    "sharpe": float(result["sharpe"]),
+                    "max_drawdown": float(result["max_drawdown"]),
+                    "cagr": result.get("cagr"),
+                    "worst_month": result.get("worst_month"),
+                    "borrow_days_pct": result.get("borrow_days_pct"),
+                    "borrow_days": result.get("borrow_days"),
+                    "margin_calls": int(result["margin_calls"]),
+                    "margin_interest_paid": float(result["margin_interest_paid"]),
+                    "return_2020_02_15_to_2020_04_30": result.get(
+                        "return_2020_02_15_to_2020_04_30"
+                    ),
+                    "return_2022": result.get("return_2022"),
+                    "momentum_spy_daily_correlation": result.get(
+                        "momentum_spy_daily_correlation"
+                    ),
+                },
+                "cagr_method": "calendar years between first and last close observations",
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+        prepared.append((parameters, data_window, result, spec_hash, notes[:4000]))
+
+    run_ids: list[int] = []
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT COUNT(*)
+                  FROM public.exploration_runs
+                 WHERE strategy_family=%s
+                   AND parameters->>'reference_run_id'=%s
+                   AND parameters->>'spy_sleeve_weight'=%s
+                """,
+                (
+                    SPY_SLEEVE_STRATEGY_FAMILY,
+                    str(reference_run_id),
+                    "0.2",
+                ),
+            )
+            existing = cur.fetchone()
+            if existing is None or int(existing[0]) != 0:
+                raise RuntimeError(
+                    "matching SPY sleeve exploration rows already exist; "
+                    "refusing to append duplicates"
+                )
+            for parameters, data_window, result, spec_hash, notes in prepared:
+                cur.execute(
+                    """
+                    INSERT INTO public.exploration_runs
+                        (strategy_family, parameters, data_window, spec_hash, source,
+                         sharpe, return_pct, max_drawdown, notes)
+                    VALUES (%s, %s::jsonb, %s::jsonb, %s, %s, %s, %s, %s, %s)
+                    RETURNING run_id
+                    """,
+                    (
+                        SPY_SLEEVE_STRATEGY_FAMILY,
+                        json.dumps(parameters, sort_keys=True, allow_nan=False),
+                        json.dumps(data_window, sort_keys=True, allow_nan=False),
+                        spec_hash,
+                        "analysis/bot2_momentum_pead_v4.py",
+                        float(result["sharpe"]),
+                        float(result["return"]) * 100.0,
+                        float(result["max_drawdown"]),
+                        notes,
+                    ),
+                )
+                row = cur.fetchone()
+                if row is None:
+                    raise RuntimeError("exploration_runs insert returned no run_id")
+                run_ids.append(int(row[0]))
+    if len(run_ids) != 2:
+        raise RuntimeError("not all SPY sleeve rows were appended")
+    return run_ids
 
 
 def _register_or_resume(

@@ -21,12 +21,13 @@ import os
 import random
 import re
 import statistics
+import subprocess
 import sys
 import time
 from bisect import bisect_left
 from collections import defaultdict, deque
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
@@ -37,8 +38,13 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT / "trading-platform") not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT / "trading-platform"))
 
-from db.research_postgres import get_research_conn as get_conn  # noqa: E402
+from db.research_postgres import (  # noqa: E402
+    EXPECTED_DATABASE as RESEARCH_DATABASE_LABEL,
+    get_research_conn as get_conn,
+)
+from core.bot2_universe_gate import BOT2_UNIVERSE_GATE_FILE  # noqa: E402
 from core.equity_universe import (  # noqa: E402
+    eligible_asset_records,
     last_screen_observations,
     screen_universe as shared_screen_universe,
     set_screen_data,
@@ -60,12 +66,14 @@ from analysis.research_ledger import (  # noqa: E402
 
 ANALYSIS_START = date(2018, 1, 1)
 ANALYSIS_END = date.today() - timedelta(days=1)
-UNIVERSE_GATE_FILE = (
-    Path(__file__).resolve().parents[1] / ".local" / "bot2_universe_gate.json"
+SCORED_START = date(2019, 2, 1)
+AUDIT_DIAGNOSTICS_FILE = (
+    _REPO_ROOT / "trading-platform" / ".local" / "bot2_universe_gate_audit.json"
 )
 CALIBRATION_DATE = date(2019, 6, 3)
 LOOKBACK_SESSIONS = 252
 LIQUIDITY_SESSIONS = 60
+MIN_MEDIAN_CLOSE = 5.0
 UNIVERSE_SIZE = 500
 MAX_ADJUSTED_CLOSE_RATIO = 10.0
 TARGET_UNIVERSE = UNIVERSE_SIZE
@@ -355,9 +363,10 @@ def load_asset_symbols() -> set[str]:
             return {row[0] for row in cur.fetchall()}
 
 
-def load_stored_assets() -> list[Asset]:
+def load_stored_assets(*, ensure_table: bool = True) -> list[Asset]:
     """Load the audited ordinary-equity metadata without loading price bars."""
-    ensure_asset_table()
+    if ensure_table:
+        ensure_asset_table()
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -648,7 +657,7 @@ def _screen_with_shared_universe(
 ) -> tuple[set[str], dict[str, Any], dict[str, dict[str, Any]]]:
     _set_research_screen_data(series, candidates)
     selected, funnel = shared_screen_universe(
-        as_of, universe_size, LOOKBACK_SESSIONS, 5.0
+        as_of, universe_size, LOOKBACK_SESSIONS, MIN_MEDIAN_CLOSE
     )
     return selected, funnel, last_screen_observations()
 
@@ -781,8 +790,20 @@ def _stored_rank_audit(
             cur.execute(
                 f"""
                 SELECT DISTINCT date
-                  FROM {PRICE_TABLE}
-                 WHERE source = ANY(%s)
+                  FROM (
+                        SELECT DISTINCT ON (symbol, date)
+                               symbol, date, open, high, low, close, volume
+                          FROM {PRICE_TABLE}
+                         WHERE source = ANY(%s)
+                         ORDER BY symbol, date,
+                                  CASE WHEN source = 'alpaca_sip_adjusted'
+                                       THEN 0 ELSE 1 END
+                       ) AS preferred_bars
+                 WHERE open IS NOT NULL
+                   AND high IS NOT NULL
+                   AND low IS NOT NULL
+                   AND close IS NOT NULL
+                   AND volume IS NOT NULL
                  ORDER BY date
                 """,
                 (list(PRICE_SOURCES),),
@@ -803,11 +824,31 @@ def _stored_rank_audit(
     targets = sorted(
         set(monthly_days)
         | set(annual_days.values())
+        | set(SAMPLE_DATES)
+        | {ANALYSIS_END}
         | {CALIBRATION_DATE, date.today()}
     )
     snapshots: dict[str, dict[str, Any]] = {}
     histories: dict[str, deque[tuple[date, float, float]]] = {}
-    candidate_list = sorted(candidate_symbols)
+    session_counts: dict[str, int] = defaultdict(int)
+    seen_symbols: set[str] = set()
+    last_panel_day: dict[str, date] = {}
+    candidate_asset_records = [
+        {
+            "symbol": symbol,
+            "name": _RESEARCH_ASSET_RECORDS.get(symbol, {}).get("name", ""),
+            "status": "active",
+            "asset_class": "us_equity",
+            "tradable": True,
+            "exchange": _RESEARCH_ASSET_RECORDS.get(symbol, {}).get("exchange")
+            or "NASDAQ",
+        }
+        for symbol in sorted(candidate_symbols)
+    ]
+    eligible_records, asset_counts = eligible_asset_records(candidate_asset_records)
+    candidate_list = sorted(
+        str(record["symbol"]).strip().upper() for record in eligible_records
+    )
 
     def snapshot(as_of: date) -> None:
         observations: dict[str, dict[str, Any]] = {}
@@ -815,16 +856,22 @@ def _stored_rank_audit(
         fewer_than_252 = 0
         artifacts = 0
         below_min_price = 0
+        history_eligible = 0
         ranked: list[tuple[str, float]] = []
         for symbol in candidate_list:
             history = histories.get(symbol)
             if not history:
                 no_price_data += 1
                 continue
-            if len(history) < LOOKBACK_SESSIONS:
+            sessions_available = session_counts[symbol]
+            if sessions_available < LOOKBACK_SESSIONS:
                 fewer_than_252 += 1
                 continue
+            history_eligible += 1
             window = list(history)
+            valid_closes = [
+                close for _, close, _ in window if close is not None and close > 0
+            ]
             if any(
                 previous_close > 0
                 and current_close > 0
@@ -832,36 +879,50 @@ def _stored_rank_audit(
                     current_close / previous_close > MAX_ADJUSTED_CLOSE_RATIO
                     or current_close / previous_close < 1 / MAX_ADJUSTED_CLOSE_RATIO
                 )
-                for (_, previous_close, _), (_, current_close, _) in zip(
-                    window, window[1:]
+                for previous_close, current_close in zip(
+                    valid_closes, valid_closes[1:]
                 )
             ):
                 artifacts += 1
                 continue
             trailing = window[-LIQUIDITY_SESSIONS:]
-            median_close = float(statistics.median(item[1] for item in trailing))
+            valid_trailing = [
+                (close, volume)
+                for _, close, volume in trailing
+                if close is not None
+                and volume is not None
+                and close > 0
+                and volume >= 0
+            ]
+            if len(valid_trailing) < LIQUIDITY_SESSIONS:
+                continue
+            median_close = float(
+                statistics.median(close for close, _ in valid_trailing)
+            )
             median_dollar_volume = float(
-                statistics.median(item[1] * item[2] for item in trailing)
+                statistics.median(close * volume for close, volume in valid_trailing)
             )
             observations[symbol] = {
                 "last_data_day": window[-1][0],
-                "sessions_available": len(history),
+                "sessions_available": sessions_available,
                 "median_close_60": median_close,
                 "median_dollar_volume_60": median_dollar_volume,
                 "uses_future_data": False,
                 "name": _RESEARCH_ASSET_RECORDS.get(symbol, {}).get("name", ""),
             }
-            if median_close <= 5:
+            if median_close <= MIN_MEDIAN_CLOSE:
                 below_min_price += 1
             else:
                 ranked.append((symbol, median_dollar_volume))
         ranked.sort(key=lambda item: (-item[1], item[0]))
         selected = {symbol for symbol, _ in ranked[:UNIVERSE_SIZE]}
         cutoff = ranked[UNIVERSE_SIZE - 1][1] if len(ranked) >= UNIVERSE_SIZE else None
-        funnel = {
-            "total_assets": len(candidate_list),
-            "asset_eligible_records": len(candidate_list),
-            "history_eligible": len(observations) + artifacts,
+        future_rows = sum(
+            int(item["last_data_day"] >= as_of) for item in observations.values()
+        )
+        funnel = dict(asset_counts)
+        funnel.update({
+            "history_eligible": history_eligible,
             "no_price_data": no_price_data,
             "fewer_than_min_sessions": fewer_than_252,
             "missing_current_bar": 0,
@@ -870,12 +931,12 @@ def _stored_rank_audit(
             "ranked_candidates": len(ranked),
             "rank_cutoff_dollar_volume": cutoff,
             "qualifying_symbols": len(selected),
-        }
+        })
         snapshots[as_of.isoformat()] = {
             "qualified": sorted(selected),
             "qualified_count": len(selected),
             "history_eligible": funnel["history_eligible"],
-            "future_rows": 0,
+            "future_rows": future_rows,
             "observations": {symbol: observations[symbol] for symbol in selected},
             "funnel": funnel,
         }
@@ -884,9 +945,16 @@ def _stored_rank_audit(
         with conn.cursor(name="bot2_rank_audit") as cur:
             cur.execute(
                 f"""
-                SELECT symbol, date, close, volume
-                  FROM {PRICE_TABLE}
-                 WHERE symbol = ANY(%s) AND source = ANY(%s)
+                SELECT symbol, date, open, high, low, close, volume
+                  FROM (
+                        SELECT DISTINCT ON (symbol, date)
+                               symbol, date, open, high, low, close, volume, source
+                          FROM {PRICE_TABLE}
+                         WHERE symbol = ANY(%s) AND source = ANY(%s)
+                         ORDER BY symbol, date,
+                                  CASE WHEN source = 'alpaca_sip_adjusted'
+                                       THEN 0 ELSE 1 END
+                       ) AS preferred_bars
                  ORDER BY date, symbol
                 """,
                 (candidate_list, list(PRICE_SOURCES)),
@@ -895,13 +963,33 @@ def _stored_rank_audit(
             next_row = next(rows, None)
             for target in targets:
                 while next_row is not None and next_row[1] < target:
-                    symbol, day, close, volume = next_row
-                    if close is not None and volume is not None:
+                    symbol, day, opn, high, low, close, volume = next_row
+                    if all(value is not None for value in (opn, high, low, close, volume)):
+                        symbol = str(symbol)
+                        seen_symbols.add(symbol)
+                        last_panel_day[symbol] = day
                         histories.setdefault(
-                            str(symbol), deque(maxlen=LOOKBACK_SESSIONS)
+                            symbol, deque(maxlen=LOOKBACK_SESSIONS)
                         ).append((day, float(close), float(volume)))
+                        session_counts[symbol] += 1
                     next_row = next(rows, None)
                 snapshot(target)
+            while next_row is not None:
+                symbol, day, opn, high, low, close, volume = next_row
+                if all(value is not None for value in (opn, high, low, close, volume)):
+                    symbol = str(symbol)
+                    seen_symbols.add(symbol)
+                    last_panel_day[symbol] = day
+                next_row = next(rows, None)
+
+    no_price_data_count = len(set(candidate_list) - seen_symbols)
+    for snapshot_data in snapshots.values():
+        funnel = snapshot_data["funnel"]
+        previously_unseen = funnel["no_price_data"]
+        funnel["no_price_data"] = no_price_data_count
+        funnel["fewer_than_min_sessions"] += (
+            previously_unseen - no_price_data_count
+        )
 
     def sector_map(symbols: set[str]) -> dict[str, str]:
         path = Path(__file__).resolve().parents[1] / ".local" / "bot2_fullmarket_sector_cache.json"
@@ -951,19 +1039,22 @@ def _stored_rank_audit(
             )
     current_rows.sort(key=lambda row: (-row["momentum"], row["symbol"]))
     print("universe_rule | rank=trailing_60_session_median_dollar_volume | top_n=500")
-    print("monthly | as_of | count")
+    print("monthly | as_of | count | scope")
+    monthly_counts: dict[str, int] = {}
     monthly = {}
     for day in monthly_days:
         count = snapshots[day.isoformat()]["qualified_count"]
-        monthly[day.isoformat()] = count
-        print(f"monthly | {day} | {count}")
+        scope = "warm-up, not scored" if day < SCORED_START else "scored"
+        monthly_counts[day.isoformat()] = count
+        monthly[day.isoformat()] = {"count": count, "scope": scope}
+        print(f"monthly | {day} | {count} | {scope}")
     first_full = next(
-        (day for day in monthly_days if monthly[day.isoformat()] == UNIVERSE_SIZE),
+        (
+            day
+            for day in monthly_days
+            if monthly_counts[day.isoformat()] == UNIVERSE_SIZE
+        ),
         None,
-    )
-    print(
-        f"monthly_first_full_500 | as_of={first_full or 'NONE'} "
-        f"| count={UNIVERSE_SIZE if first_full else 0}"
     )
     print(
         f"today_rank_cutoff | dollar_volume="
@@ -990,10 +1081,15 @@ def _stored_rank_audit(
             "implied_rank_500_dollar_volume": row["funnel"][
                 "rank_cutoff_dollar_volume"
             ],
+            "scope": "warm-up, not scored" if day < SCORED_START else "scored",
         }
         print(
             f"annual_implied_floor | {year} | {day} | "
             f"{annual[str(year)]['implied_rank_500_dollar_volume'] or 'NONE'}"
+        )
+        print(
+            f"annual_count | {year} | {day} | {len(selected)} | "
+            f"{annual[str(year)]['scope']}"
         )
         previous = selected
     sample = snapshots[CALIBRATION_DATE.isoformat()]
@@ -1006,6 +1102,7 @@ def _stored_rank_audit(
                 "name": row.get("name", ""),
             }
             for symbol, row in sample["observations"].items()
+            if symbol in sample["qualified"]
         ),
         key=lambda row: (-row["dollar_volume"], row["symbol"]),
     )[:TOP_N]
@@ -1034,13 +1131,28 @@ def _stored_rank_audit(
     early_delisted = sorted(
         symbol
         for symbol in first_set
-        if symbol in histories
-        and histories[symbol]
-        and histories[symbol][-1][0] < SAMPLE_DATES[-1]
+        if symbol in last_panel_day
+        and last_panel_day[symbol] < SAMPLE_DATES[-1]
     )
     print(
         f"delisted_era_members | early_date={SAMPLE_DATES[0]} "
         f"| late_date={SAMPLE_DATES[-1]} | count={len(early_delisted)}"
+    )
+    dropouts = sorted(first_set - last_set)
+    missing_price_symbols = sorted(set(candidate_list) - seen_symbols)
+    artifact_flags = {
+        "candidate_symbols": len(candidate_symbols),
+        "eligible_asset_records": len(candidate_list),
+        "price_backed_symbols": len(seen_symbols),
+        "missing_price_history": len(missing_price_symbols),
+        "missing_price_examples": missing_price_symbols[:30],
+        "panel_symbols_with_no_bars": missing_price_symbols,
+    }
+    print(
+        f"data_artifact_flags | candidate_symbols={artifact_flags['candidate_symbols']} "
+        f"| price_backed={artifact_flags['price_backed_symbols']} "
+        f"| missing_price_history={artifact_flags['missing_price_history']} "
+        f"| panel_empty={len(artifact_flags['panel_symbols_with_no_bars'])}"
     )
     return {
         "universe_size": UNIVERSE_SIZE,
@@ -1055,17 +1167,166 @@ def _stored_rank_audit(
         },
         "sample_dates": snapshots,
         "early_delisted": early_delisted,
+        "dropouts": dropouts,
+        "artifact_flags": artifact_flags,
     }
 
 
+def mechanical_gate_from_rank_audit(
+    report: dict[str, Any],
+) -> tuple[bool, int, dict[str, Any]]:
+    """Apply the full mechanical checks to the bounded-memory historical audit."""
+    checks: dict[str, dict[str, Any]] = {}
+
+    def record(name: str, value: Any, passed: bool) -> None:
+        result = "PASS" if passed else "STOP"
+        checks[name] = {"value": _jsonable(value), "result": result}
+        print(
+            f"mechanical_check | {name} | "
+            f"value={json.dumps(_jsonable(value), sort_keys=True)} | {result}"
+        )
+
+    print(
+        "universe_rule | "
+        f"min_prior_sessions={LOOKBACK_SESSIONS} | "
+        f"liquidity_sessions={LIQUIDITY_SESSIONS} | "
+        f"min_median_close=${MIN_MEDIAN_CLOSE:.2f} | top_n={UNIVERSE_SIZE}"
+    )
+    valid = True
+    rules = {
+        "minimum_prior_sessions": LOOKBACK_SESSIONS,
+        "trailing_liquidity_sessions": LIQUIDITY_SESSIONS,
+        "minimum_median_close": MIN_MEDIAN_CLOSE,
+        "universe_size": UNIVERSE_SIZE,
+    }
+    rules_ok = (
+        LOOKBACK_SESSIONS == 252
+        and LIQUIDITY_SESSIONS == 60
+        and MIN_MEDIAN_CLOSE == 5.0
+        and UNIVERSE_SIZE == 500
+    )
+    record("screen_rules", rules, rules_ok)
+    valid = valid and rules_ok
+    snapshots = report["sample_dates"]
+    for as_of in SAMPLE_DATES:
+        snapshot = snapshots[as_of.isoformat()]
+        count = int(snapshot["qualified_count"])
+        future_rows = int(snapshot["future_rows"])
+        funnel = snapshot["funnel"]
+        print(
+            f"mechanical_sample | as_of={as_of} | qualified={count} "
+            f"| history_eligible={snapshot['history_eligible']} "
+            f"| rank_cutoff_dollar_volume={funnel['rank_cutoff_dollar_volume']} "
+            f"| future_rows={future_rows} "
+            f"| funnel={json.dumps(funnel, sort_keys=True)}"
+        )
+        nonempty_ok = count > 0
+        future_ok = future_rows == 0
+        record(f"sample_nonempty_{as_of}", {"qualified": count}, nonempty_ok)
+        record(f"future_data_{as_of}", {"future_rows": future_rows}, future_ok)
+        valid = valid and nonempty_ok and future_ok
+
+        expected = PARITY_REFERENCE_COUNTS[as_of]
+        lower, upper = expected * 0.80, expected * 1.20
+        parity_ok = lower <= count <= upper
+        record(
+            f"parity_{as_of}",
+            {
+                "expected": expected,
+                "observed": count,
+                "tolerance": "20%",
+                "allowed_range": [lower, upper],
+            },
+            parity_ok,
+        )
+        valid = valid and parity_ok
+
+    dropouts = report["dropouts"]
+    early_delisted = report["early_delisted"]
+    record(
+        "dropout",
+        {
+            "early_date": SAMPLE_DATES[0].isoformat(),
+            "late_date": SAMPLE_DATES[-1].isoformat(),
+            "early_members_later_absent": len(dropouts),
+            "examples": dropouts[:30],
+        },
+        bool(dropouts),
+    )
+    record(
+        "delisted_members",
+        {
+            "early_date": SAMPLE_DATES[0].isoformat(),
+            "late_date": SAMPLE_DATES[-1].isoformat(),
+            "observed": len(early_delisted),
+            "minimum": 3,
+            "examples": early_delisted[:30],
+        },
+        len(early_delisted) >= 3,
+    )
+    first_full = report["first_full_500"]
+    record(
+        "monthly_full_universe",
+        {"first_full_500": first_full, "required_count": UNIVERSE_SIZE},
+        first_full is not None,
+    )
+    report["mechanical_gate_checks"] = checks
+    print(f"mechanical_gate_result | {'PASS' if valid else 'STOP'}")
+    return valid, UNIVERSE_SIZE, report
+
+
+def _current_git_commit() -> str:
+    result = subprocess.run(
+        ["git", "-C", str(_REPO_ROOT), "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    commit = result.stdout.strip()
+    if not commit:
+        raise RuntimeError("git returned an empty commit for universe-gate provenance")
+    return commit
+
+
 def persist_universe_gate(valid: bool, report: dict[str, Any]) -> None:
-    """Write a local development gate consumed by the paused live module."""
-    UNIVERSE_GATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    UNIVERSE_GATE_FILE.write_text(
+    """Write the full mechanical-gate result and its reproducibility metadata."""
+    BOT2_UNIVERSE_GATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    BOT2_UNIVERSE_GATE_FILE.write_text(
         json.dumps(
             {
                 "status": "PASS" if valid else "STOP",
-                "historical_parity_required": True,
+                "generated_at": datetime.now(timezone.utc)
+                .isoformat()
+                .replace("+00:00", "Z"),
+                "mode": "full",
+                "research_database": RESEARCH_DATABASE_LABEL,
+                "scored_window": {
+                    "start": SCORED_START.isoformat(),
+                    "end": ANALYSIS_END.isoformat(),
+                },
+                "sample_dates": [day.isoformat() for day in SAMPLE_DATES],
+                "git_commit": _current_git_commit(),
+                "report": _jsonable(report),
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+def persist_universe_gate_diagnostics(report: dict[str, Any]) -> None:
+    """Write audit-only results separately; this path can never authorize Bot 2."""
+    AUDIT_DIAGNOSTICS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    AUDIT_DIAGNOSTICS_FILE.write_text(
+        json.dumps(
+            {
+                "generated_at": datetime.now(timezone.utc)
+                .isoformat()
+                .replace("+00:00", "Z"),
+                "mode": "audit_only",
+                "research_database": RESEARCH_DATABASE_LABEL,
                 "report": _jsonable(report),
             },
             indent=2,
@@ -1090,7 +1351,10 @@ def mechanical_gate(
 ) -> tuple[bool, int, dict[str, Any]]:
     universe_size = UNIVERSE_SIZE
     print(
-        f"universe_rule | rank=trailing_{LIQUIDITY_SESSIONS}_session_median_dollar_volume "
+        f"universe_rule | min_prior_sessions={LOOKBACK_SESSIONS} "
+        f"| liquidity_sessions={LIQUIDITY_SESSIONS} "
+        f"| min_median_close=${MIN_MEDIAN_CLOSE:.2f} "
+        f"| rank=trailing_{LIQUIDITY_SESSIONS}_session_median_dollar_volume "
         f"| top_n={universe_size} | retuning=disabled"
     )
     snapshots: dict[str, Any] = {}
@@ -1119,7 +1383,17 @@ def mechanical_gate(
             f"{funnel['counts']['rank_cutoff_dollar_volume']} | {future_rows} "
             f"| funnel={json.dumps(funnel['counts'], sort_keys=True)}"
         )
-        if future_rows or len(qualified) == 0:
+        future_ok = future_rows == 0
+        nonempty_ok = len(qualified) > 0
+        print(
+            f"future_data_gate | as_of={as_of} | future_rows={future_rows} "
+            f"| {'PASS' if future_ok else 'STOP'}"
+        )
+        print(
+            f"sample_nonempty_gate | as_of={as_of} | qualified={len(qualified)} "
+            f"| {'PASS' if nonempty_ok else 'STOP'}"
+        )
+        if not future_ok or not nonempty_ok:
             valid = False
 
         expected = PARITY_REFERENCE_COUNTS.get(as_of)
@@ -1152,33 +1426,38 @@ def mechanical_gate(
         "mechanical_dropout_symbols | "
         + ",".join(early_delisted[:30] if early_delisted else ["NONE"])
     )
-    if len(dropouts) == 0:
-        print("mechanical_dropout_gate | STOP | no symbols drop out over time")
+    dropout_ok = bool(dropouts)
+    print(
+        f"mechanical_dropout_gate | early_qualified_later_absent={len(dropouts)} "
+        f"| {'PASS' if dropout_ok else 'STOP'}"
+    )
+    if not dropout_ok:
         valid = False
-    if len(early_delisted) < 3:
-        print(
-            "mechanical_delisted_gate | STOP | "
-            f"expected_at_least=3 observed={len(early_delisted)}"
-        )
+    delisted_ok = len(early_delisted) >= 3
+    print(
+        f"mechanical_delisted_gate | observed={len(early_delisted)} "
+        f"| expected_at_least=3 | {'PASS' if delisted_ok else 'STOP'}"
+    )
+    if not delisted_ok:
         valid = False
-    else:
-        print(f"mechanical_delisted_gate | PASS | observed={len(early_delisted)}")
 
-    monthly: dict[str, int] = {}
+    monthly: dict[str, dict[str, Any]] = {}
     first_full_500: str | None = None
-    print("monthly | as_of | count")
+    print("monthly | as_of | count | scope")
     for as_of in _monthly_rebalance_days(_daily_dates(series)):
         if as_of < ANALYSIS_START or as_of > ANALYSIS_END:
             continue
         funnel = screen_funnel(series, candidate_symbols, as_of, universe_size)
         count = len(funnel["qualified"])
-        monthly[as_of.isoformat()] = count
-        print(f"monthly | {as_of} | {count}")
+        scope = "warm-up, not scored" if as_of < SCORED_START else "scored"
+        monthly[as_of.isoformat()] = {"count": count, "scope": scope}
+        print(f"monthly | {as_of} | {count} | {scope}")
         if first_full_500 is None and count == universe_size:
             first_full_500 = as_of.isoformat()
     print(
         f"monthly_first_full_500 | as_of={first_full_500 or 'NONE'} "
-        f"| count={universe_size if first_full_500 else 0}"
+        f"| count={universe_size if first_full_500 else 0} "
+        f"| {'PASS' if first_full_500 else 'STOP'}"
     )
     if first_full_500 is None:
         valid = False
@@ -1186,7 +1465,10 @@ def mechanical_gate(
     annual: dict[str, Any] = {}
     previous: set[str] = set()
     print("annual_implied_floor | year | as_of | rank_500_dollar_volume")
-    print("year | as_of | universe_count | additions | drops | median_dollar_volume | artifacts")
+    print(
+        "year | as_of | universe_count | additions | drops | "
+        "median_dollar_volume | artifacts | scope"
+    )
     for year in range(ANALYSIS_START.year, ANALYSIS_END.year + 1):
         as_of = _first_available_day(series, year, month=1)
         current, observations = screen_universe(
@@ -1213,6 +1495,7 @@ def mechanical_gate(
                 "rank_cutoff_dollar_volume"
             ],
             "data_artifact_symbols": artifacts,
+            "scope": "warm-up, not scored" if as_of < SCORED_START else "scored",
         }
         implied_floor = annual_funnel["counts"]["rank_cutoff_dollar_volume"]
         print(
@@ -1221,7 +1504,8 @@ def mechanical_gate(
         )
         print(
             f"{year} | {as_of} | {len(current)} | {additions} | {drops} | "
-            f"{annual[str(year)]['median_dollar_volume']} | missing_history={artifacts}"
+            f"{annual[str(year)]['median_dollar_volume']} | missing_history={artifacts} "
+            f"| {annual[str(year)]['scope']}"
         )
         previous = current
 
@@ -1263,7 +1547,7 @@ def mechanical_gate(
             f"sample_2019 | {symbol} | ${row['dollar_volume']:,.2f} "
             f"| ${row['price']:,.2f} | {row['name'] or 'unknown'}"
         )
-    return valid, universe_size, {
+    report = {
         "universe_size": universe_size,
         "sample_dates": snapshots,
         "monthly": monthly,
@@ -1274,6 +1558,8 @@ def mechanical_gate(
         "sample_2019": sample_rows,
         "artifact_flags": artifact_flags,
     }
+    print(f"mechanical_gate_result | {'PASS' if valid else 'STOP'}")
+    return valid, universe_size, report
 
 
 def audit_earnings() -> dict[str, Any]:
@@ -1842,14 +2128,22 @@ def run_research(
     refresh_assets: bool = True,
     ingest_expanded: bool = False,
     audit_only: bool = False,
+    gate_only: bool = False,
 ) -> dict[str, Any]:
-    ensure_asset_table()
+    if audit_only and gate_only:
+        raise ValueError("audit_only and gate_only are mutually exclusive")
+    if gate_only and refresh_assets:
+        raise ValueError("gate_only requires stored research assets")
+    if gate_only and ingest_expanded:
+        raise ValueError("gate_only cannot ingest or modify research price data")
+    if not gate_only:
+        ensure_asset_table()
     series: dict[str, Series] = {}
     if refresh_assets:
         assets = fetch_tradable_us_equities()
         persist_assets(assets)
     else:
-        assets = load_stored_assets()
+        assets = load_stored_assets(ensure_table=not gate_only)
     _RESEARCH_ASSET_RECORDS.clear()
     _RESEARCH_ASSET_RECORDS.update(
         {
@@ -1861,10 +2155,11 @@ def run_research(
     panel_symbols = set(series) & candidate_symbols
     print(
         f"asset_expansion | ordinary_equity_assets={len(candidate_symbols)} "
-        f"| historical_panel_symbols={'streamed' if audit_only else len(panel_symbols)} "
+        f"| historical_panel_symbols="
+        f"{'streamed' if audit_only or gate_only else len(panel_symbols)} "
         f"| candidate_union={len(candidate_symbols)}"
     )
-    if ingest_expanded and not audit_only:
+    if ingest_expanded and not audit_only and not gate_only:
         print(f"expanded_price_ingest | {ingest_expanded_prices(assets)}")
 
     if audit_only:
@@ -1881,8 +2176,7 @@ def run_research(
         audit_report["live_execution"] = False
         audit_report["orders_placed"] = 0
         audit_report["stop_coverage"] = "8/8"
-        persist_universe_gate(
-            False,
+        persist_universe_gate_diagnostics(
             {
                 key: value
                 for key, value in audit_report.items()
@@ -1896,6 +2190,21 @@ def run_research(
         return {
             "status": "STOP",
             "mechanical_gate": audit_report,
+            "live_execution": False,
+            "orders_placed": 0,
+        }
+
+    if gate_only:
+        rank_audit = _stored_rank_audit(candidate_symbols)
+        gate_ok, _, gate_report = mechanical_gate_from_rank_audit(rank_audit)
+        persist_universe_gate(gate_ok, gate_report)
+        print(
+            f"full_gate_run | status={'PASS' if gate_ok else 'STOP'} "
+            f"| database={RESEARCH_DATABASE_LABEL} | database_writes=gate_file_only"
+        )
+        return {
+            "status": "PASS" if gate_ok else "STOP",
+            "mechanical_gate": gate_report,
             "live_execution": False,
             "orders_placed": 0,
         }
@@ -1943,7 +2252,7 @@ def run_research(
             "as_of_rule": "only bars with date strictly before rebalance date",
             "minimum_prior_sessions": LOOKBACK_SESSIONS,
             "trailing_liquidity_sessions": LIQUIDITY_SESSIONS,
-            "trailing_median_close_min": 5.0,
+            "trailing_median_close_min": MIN_MEDIAN_CLOSE,
             "universe_size": universe_size,
             "ranking_metric": "trailing_60_session_median_dollar_volume",
         },
@@ -2114,12 +2423,20 @@ def main() -> int:
         action="store_true",
         help="Run the bounded rank-coverage audit without loading the full panel or backtesting.",
     )
+    parser.add_argument(
+        "--full-gate-only",
+        action="store_true",
+        help="Run and persist the full mechanical gate without backtesting or research-ledger writes.",
+    )
     args = parser.parse_args()
     result = run_research(
-        refresh_assets=not args.use_stored_assets,
+        refresh_assets=not args.use_stored_assets and not args.full_gate_only,
         ingest_expanded=args.ingest_expanded,
         audit_only=args.audit_only,
+        gate_only=args.full_gate_only,
     )
+    if args.full_gate_only:
+        return 0 if result["status"] == "PASS" else 2
     return 0 if result["status"] != "STOP" and result.get("evaluation", {}).get("outcome") == "PASS" else (
         2 if result["status"] == "STOP" else 4
     )

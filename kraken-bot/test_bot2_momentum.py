@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+import logging
 import pathlib
 import re
 import sys
@@ -21,6 +23,7 @@ from core.equity_universe import (  # noqa: E402
     screen_universe as shared_screen_universe,
     set_screen_data,
 )
+from core.bot2_universe_gate import BOT2_UNIVERSE_GATE_FILE
 
 
 def _bars(count: int = 260, close: float = 100.0, volume: int = 1_000_000):
@@ -706,6 +709,56 @@ def test_pause_is_first_branch_and_does_not_construct_client(monkeypatch) -> Non
     )
 
     assert result == {"status": "paused", "orders": 0}
+
+
+def test_universe_gate_requires_full_provenance_and_pass(monkeypatch, tmp_path, caplog):
+    gate_file = tmp_path / "bot2_universe_gate.json"
+    assert bot2.BOT2_UNIVERSE_GATE_FILE == BOT2_UNIVERSE_GATE_FILE
+    monkeypatch.setattr(bot2, "BOT2_UNIVERSE_GATE_FILE", gate_file)
+    caplog.set_level(logging.INFO, logger="bot2.momentum")
+
+    assert not bot2.universe_gate_is_passed()
+
+    valid_payload = {
+        "status": "PASS",
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "mode": "full",
+        "research_database": "heliumdb",
+        "scored_window": {"start": "2019-02-01", "end": "2026-10-03"},
+        "sample_dates": ["2019-06-03", "2022-06-01"],
+        "git_commit": "a" * 40,
+    }
+    gate_file.write_text(json.dumps(valid_payload), encoding="utf-8")
+    assert bot2.universe_gate_is_passed()
+
+    invalid_payloads = []
+    missing_provenance = valid_payload.copy()
+    del missing_provenance["sample_dates"]
+    invalid_payloads.append(missing_provenance)
+    non_full = valid_payload.copy()
+    non_full["mode"] = "audit_only"
+    invalid_payloads.append(non_full)
+    failed_gate = valid_payload.copy()
+    failed_gate["status"] = "STOP"
+    invalid_payloads.append(failed_gate)
+    for payload in invalid_payloads:
+        gate_file.write_text(json.dumps(payload), encoding="utf-8")
+        assert not bot2.universe_gate_is_passed()
+
+    assert "universe gate age=" in caplog.text
+
+
+def test_paused_cycle_logs_gate_age_every_cycle(monkeypatch, tmp_path, caplog):
+    monkeypatch.setattr(bot2, "BOT2_UNIVERSE_GATE_FILE", tmp_path / "missing.json")
+    monkeypatch.setattr(bot2, "BOT_PAUSED", True)
+    caplog.set_level(logging.INFO, logger="bot2.momentum")
+
+    first = bot2.run_bot2_cycle()
+    second = bot2.run_bot2_cycle()
+
+    assert first == {"status": "paused", "orders": 0}
+    assert second == {"status": "paused", "orders": 0}
+    assert caplog.text.count("universe gate age=") == 2
 
 
 class _EntryClient:

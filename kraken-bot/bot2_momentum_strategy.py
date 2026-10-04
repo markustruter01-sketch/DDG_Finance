@@ -44,6 +44,7 @@ from core.equity_universe import (  # noqa: E402
     set_screen_data,
 )
 from core.cash_park import CASH_PARK_SYMBOLS, is_cash_park  # noqa: E402
+from core.bot2_universe_gate import BOT2_UNIVERSE_GATE_FILE  # noqa: E402
 
 try:
     from core.order_ids import submit_with_unique_client_order_id
@@ -144,19 +145,58 @@ def _prior_bars(bars: list[dict[str, Any]], as_of: date) -> list[dict[str, Any]]
     )
 
 
-UNIVERSE_GATE_FILE = (
-    _ROOT / "trading-platform" / ".local" / "bot2_universe_gate.json"
-)
-
-
 def universe_gate_is_passed() -> bool:
-    """Require a development parity artifact before any future activation."""
+    """Require a full, provenance-complete parity artifact before activation."""
     try:
-        payload = json.loads(UNIVERSE_GATE_FILE.read_text(encoding="utf-8"))
+        payload = json.loads(
+            BOT2_UNIVERSE_GATE_FILE.read_text(encoding="utf-8")
+        )
     except (OSError, ValueError):
+        logger.info("Bot 2 | universe gate age=unknown | status=unreadable")
         return False
-    return payload.get("status") == "PASS" and bool(
-        payload.get("historical_parity_required")
+    if not isinstance(payload, dict):
+        logger.info("Bot 2 | universe gate age=unknown | status=invalid_payload")
+        return False
+
+    generated_at = payload.get("generated_at")
+    age_seconds: float | None = None
+    try:
+        timestamp = datetime.fromisoformat(str(generated_at).replace("Z", "+00:00"))
+        if timestamp.tzinfo is None or timestamp.utcoffset() != timedelta(0):
+            raise ValueError("generated_at must be UTC")
+        age_seconds = (datetime.now(timezone.utc) - timestamp).total_seconds()
+    except (TypeError, ValueError):
+        pass
+    logger.info(
+        "Bot 2 | universe gate age=%s | status=%s | mode=%s",
+        f"{age_seconds:.0f}s" if age_seconds is not None else "unknown",
+        payload.get("status", "missing"),
+        payload.get("mode", "missing"),
+    )
+
+    scored_window = payload.get("scored_window")
+    sample_dates = payload.get("sample_dates")
+    git_commit = payload.get("git_commit")
+    provenance_present = (
+        isinstance(generated_at, str)
+        and age_seconds is not None
+        and isinstance(payload.get("research_database"), str)
+        and bool(payload["research_database"].strip())
+        and isinstance(scored_window, dict)
+        and isinstance(scored_window.get("start"), str)
+        and bool(scored_window["start"].strip())
+        and isinstance(scored_window.get("end"), str)
+        and bool(scored_window["end"].strip())
+        and isinstance(sample_dates, list)
+        and bool(sample_dates)
+        and all(isinstance(day, str) and day.strip() for day in sample_dates)
+        and isinstance(git_commit, str)
+        and bool(git_commit.strip())
+    )
+    return (
+        payload.get("status") == "PASS"
+        and payload.get("mode") == "full"
+        and provenance_present
     )
 
 
@@ -1817,6 +1857,7 @@ def run_bot2_cycle(
     now: datetime | None = None,
 ) -> dict[str, Any]:
     """Live-shaped cycle with the permanent pause as the first executable branch."""
+    gate_passed = universe_gate_is_passed()
     if BOT_PAUSED:
         logger.info("Bot 2 | BOT_PAUSED=True — no client, account read, or order activity")
         return {"status": "paused", "orders": 0}
@@ -1824,7 +1865,7 @@ def run_bot2_cycle(
     now = now or datetime.now(timezone.utc)
     if not us_equity_session_open(now):
         return {"status": "deferred", "orders": 0, "reason": "US_equity_market_closed"}
-    if not universe_gate_is_passed():
+    if not gate_passed:
         logger.critical(
             "Bot 2 | historical universe parity gate is not PASS — execution blocked"
         )

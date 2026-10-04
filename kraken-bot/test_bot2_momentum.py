@@ -697,6 +697,8 @@ def test_buy_guard_excludes_cash_park_using_canonical_symbol() -> None:
 
 
 def test_pause_is_first_branch_and_does_not_construct_client(monkeypatch) -> None:
+    monkeypatch.setattr(bot2, "BOT_PAUSED", True)
+
     class ExplodingClient:
         def __init__(self, *args, **kwargs):
             raise AssertionError("paused Bot 2 must not create an Alpaca client")

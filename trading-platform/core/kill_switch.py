@@ -20,6 +20,7 @@ from config.settings import settings
 from core.symbols import canonical_symbol, same_symbol
 from core.cash_park import is_cash_park
 from core.bot_config import load_bot_profiles
+from core.bot_registry import active_bot_ids
 
 DUST_QTY = 1e-6
 # Alpaca only accepts whole-share GTC stops on equities
@@ -30,8 +31,9 @@ EQUITY_STOP_SHORTFALL_TOLERANCE = 1.0
 MISSING_STOP_SECONDS = 60.0
 MISMATCH_REQUIRED_CHECKS = 2
 RESET_CONFIRMATION_ENV_VAR = "KILL_SWITCH_RESET_CONFIRMATION"
-# Keep this Alpaca kill-switch set unchanged; Phase 2b adds forex_ai coverage.
-ACTIVE_BOTS = ("oracle", "spy_qqq_trend", "jerome_macro")
+# Registry list includes paused, non-retired bots so the safety monitor still
+# observes Forex while its strategy remains paused.
+ACTIVE_BOTS = tuple(active_bot_ids())
 ACCOUNT_ENV = {
     "oracle": ("ALPACA_API_KEY", "ALPACA_SECRET_KEY"),
     "spy_qqq_trend": ("ALPACA_BB_API_KEY", "ALPACA_BB_SECRET_KEY"),
@@ -43,10 +45,12 @@ _BOT_PROFILE_KEYS = {
     "jerome_macro": "jerome_macro",
 }
 _BOT_PROFILES = load_bot_profiles()
+ALPACA_BOTS = tuple(bot_id for bot_id in ACTIVE_BOTS if bot_id in ACCOUNT_ENV)
 MAX_DEPLOYMENT = {
     bot_id: float(_BOT_PROFILES[_BOT_PROFILE_KEYS[bot_id]]["MAX_DEPLOYMENT"])
-    for bot_id in ACTIVE_BOTS
+    for bot_id in ALPACA_BOTS
 }
+FOREX_MAX_GROSS = float(_BOT_PROFILES["forex_ai"]["FOREX_MAX_GROSS"])
 
 _state: dict[str, Any] = {
     "tripped": False,
@@ -67,6 +71,49 @@ def _is_protective(order: dict[str, Any]) -> bool:
 
 
 def _covers(position: dict[str, Any], order: dict[str, Any]) -> bool:
+    if str(position.get("asset_class") or "").lower() == "forex":
+        trade_id = str(position.get("trade_id") or "")
+        order_trade_id = str(order.get("trade_id") or "")
+        order_id = order.get("id")
+        order_type = str(order.get("type") or "").lower().replace("-", "_")
+        status = str(order.get("status") or "").lower()
+        if (
+            not trade_id
+            or not order_trade_id
+            or order_trade_id != trade_id
+            or order_id in (None, "")
+            or status != "pending"
+            or order_type not in {"stop_loss", "stop_loss_order"}
+        ):
+            return False
+        try:
+            signed_units = float(
+                position.get("signed_units", position.get("qty") or 0)
+            )
+        except (TypeError, ValueError):
+            return False
+        if signed_units == 0 or not math.isfinite(signed_units):
+            return False
+        position_side = str(position.get("side") or "").lower()
+        if not position_side:
+            position_side = "long" if signed_units > 0 else "short"
+        if position_side not in {"long", "short"}:
+            return False
+        expected_side = "sell" if position_side == "long" else "buy"
+        raw_order_side = str(order.get("side") or "").lower()
+        if raw_order_side and raw_order_side != expected_side:
+            return False
+        try:
+            position_qty = abs(signed_units)
+            order_qty = abs(float(order.get("qty") or 0))
+        except (TypeError, ValueError):
+            return False
+        return (
+            math.isfinite(order_qty)
+            and order_qty > 0
+            and order_qty + DUST_QTY >= position_qty
+        )
+
     if not _is_protective(order) or not same_symbol(position.get("symbol"), order.get("symbol")):
         return False
     position_side = str(position.get("side", "long")).lower()
@@ -81,6 +128,345 @@ def _covers(position: dict[str, Any], order: dict[str, Any]) -> bool:
     if "crypto" in asset_class:
         return order_qty + tolerance >= position_qty
     return order_qty + tolerance > position_qty
+
+
+def _oanda_mid_price(client: Any, instrument: str) -> float:
+    quote = client.current_bid_ask(instrument)
+    bid = float(quote.get("bid"))
+    ask = float(quote.get("ask"))
+    if not math.isfinite(bid) or not math.isfinite(ask) or bid <= 0 or ask < bid:
+        raise ValueError(f"invalid OANDA price for {instrument}")
+    return (bid + ask) / 2.0
+
+
+def _oanda_quote_to_usd(client: Any, currency: str, price_cache: dict[str, float]) -> float:
+    if currency == "USD":
+        return 1.0
+
+    direct = f"{currency}_USD"
+    inverse = f"USD_{currency}"
+    try:
+        rate = price_cache.get(direct)
+        if rate is None:
+            rate = _oanda_mid_price(client, direct)
+            price_cache[direct] = rate
+        return rate
+    except Exception:
+        rate = price_cache.get(inverse)
+        if rate is None:
+            rate = _oanda_mid_price(client, inverse)
+            price_cache[inverse] = rate
+        if rate <= 0 or not math.isfinite(rate):
+            raise ValueError(f"invalid USD conversion price for {currency}")
+        return 1.0 / rate
+
+
+def read_oanda_account_snapshot(client: Any | None = None) -> dict[str, Any]:
+    """Read and normalize the Forex account without exposing any write methods."""
+    owns_client = client is None
+    if client is None:
+        from core.oanda_client import OandaClient
+
+        client = OandaClient()
+    try:
+        summary = client.account_summary()
+        if str(summary.get("currency") or "").upper() != "USD":
+            raise ValueError("OANDA account currency must be USD")
+        nav = float(summary.get("nav"))
+        balance = float(summary.get("balance"))
+        if not math.isfinite(nav) or nav <= 0 or not math.isfinite(balance):
+            raise ValueError("OANDA account NAV or balance is invalid")
+
+        raw_trades = client.open_trades()
+        if not isinstance(raw_trades, list):
+            raise ValueError("OANDA open trades are unavailable")
+
+        price_cache: dict[str, float] = {}
+        positions: list[dict[str, Any]] = []
+        orders: list[dict[str, Any]] = []
+        open_trades: list[dict[str, Any]] = []
+        gross_exposure_usd = 0.0
+        for raw_trade in raw_trades:
+            if not isinstance(raw_trade, dict):
+                raise ValueError("OANDA returned an invalid open trade")
+            trade_id = str(raw_trade.get("id") or "").strip()
+            instrument = str(raw_trade.get("instrument") or "").strip().upper()
+            try:
+                base_currency, quote_currency = instrument.split("_")
+                signed_units = float(raw_trade.get("currentUnits"))
+                entry_price = float(raw_trade.get("price"))
+            except (ValueError, TypeError):
+                raise ValueError("OANDA open trade is missing valid identity or units") from None
+            if (
+                not trade_id
+                or not base_currency
+                or not quote_currency
+                or not math.isfinite(signed_units)
+                or signed_units == 0
+                or not math.isfinite(entry_price)
+                or entry_price <= 0
+            ):
+                raise ValueError("OANDA open trade is missing valid identity, units, or entry price")
+
+            if base_currency == "USD":
+                trade_gross_usd = abs(signed_units)
+            else:
+                pair_mid = price_cache.get(instrument)
+                if pair_mid is None:
+                    pair_mid = _oanda_mid_price(client, instrument)
+                    price_cache[instrument] = pair_mid
+                quote_to_usd = _oanda_quote_to_usd(client, quote_currency, price_cache)
+                trade_gross_usd = abs(signed_units) * pair_mid * quote_to_usd
+            if not math.isfinite(trade_gross_usd) or trade_gross_usd < 0:
+                raise ValueError(f"invalid USD gross exposure for {instrument}")
+            gross_exposure_usd += trade_gross_usd
+
+            side = "long" if signed_units > 0 else "short"
+            protective_side = "sell" if side == "long" else "buy"
+            stop = raw_trade.get("stopLossOrder")
+            normalized_stop = None
+            stop_order_id = None
+            if isinstance(stop, dict):
+                raw_stop_units = stop.get("units", signed_units)
+                try:
+                    stop_qty = abs(float(raw_stop_units))
+                except (TypeError, ValueError):
+                    stop_qty = 0.0
+                stop_order_id = (
+                    str(stop.get("id")).strip()
+                    if stop.get("id") not in (None, "")
+                    else None
+                )
+                normalized_stop = {
+                    "id": stop_order_id,
+                    "trade_id": str(
+                        stop.get("tradeID") or stop.get("trade_id") or trade_id
+                    ),
+                    "symbol": instrument,
+                    "qty": stop_qty,
+                    "side": str(stop.get("side") or protective_side).lower(),
+                    "type": str(stop.get("type") or "STOP_LOSS"),
+                    "status": str(stop.get("state") or "").lower(),
+                }
+                orders.append(normalized_stop)
+
+            trade = {
+                "trade_id": trade_id,
+                "instrument": instrument,
+                "signed_units": signed_units,
+                "qty": abs(signed_units),
+                "side": side,
+                "entry_price": entry_price,
+                "stop_order_id": stop_order_id,
+                "stop_loss_order": normalized_stop,
+                "status": "open",
+                "opened_at": raw_trade.get("openTime"),
+                "asset_class": "forex",
+                "market_value": trade_gross_usd,
+            }
+            open_trades.append(trade)
+            positions.append(
+                {
+                    "symbol": instrument,
+                    "qty": abs(signed_units),
+                    "signed_units": signed_units,
+                    "side": side,
+                    "trade_id": trade_id,
+                    "asset_class": "forex",
+                    "market_value": trade_gross_usd,
+                    "stop_order_id": stop_order_id,
+                }
+            )
+
+        if not math.isfinite(gross_exposure_usd):
+            raise ValueError("OANDA gross exposure is invalid")
+        return {
+            "bot_id": "forex_ai",
+            "currency": "USD",
+            "cash": balance,
+            "equity": nav,
+            "nav": nav,
+            "gross_exposure_usd": gross_exposure_usd,
+            "positions": positions,
+            "orders": orders,
+            "open_trades": open_trades,
+        }
+    finally:
+        if owns_client:
+            client.close()
+
+
+def _evaluate_forex_account(account: dict[str, Any], now: float) -> list[dict[str, Any]]:
+    bot_id = account.get("bot_id", "forex_ai")
+    triggers: list[dict[str, Any]] = []
+    try:
+        nav = float(account.get("nav", account.get("equity")))
+        gross = float(account.get("gross_exposure_usd"))
+    except (TypeError, ValueError):
+        nav = gross = float("nan")
+    if not math.isfinite(nav) or nav <= 0 or not math.isfinite(gross) or gross < 0:
+        return [{
+            "trigger": "forex_account_data_unknown",
+            "bot_id": bot_id,
+            "detail": "OANDA NAV or USD gross exposure is missing or invalid",
+        }]
+    positions = account.get("positions")
+    orders = account.get("orders")
+    if (
+        not isinstance(positions, list)
+        or not isinstance(orders, list)
+        or any(not isinstance(position, dict) for position in positions)
+        or any(not isinstance(order, dict) for order in orders)
+    ):
+        return [{
+            "trigger": "forex_account_data_unknown",
+            "bot_id": bot_id,
+            "detail": "OANDA positions or attached stop data is unavailable",
+        }]
+    if gross > FOREX_MAX_GROSS * nav:
+        triggers.append(
+            {
+                "trigger": "forex_gross_exposure",
+                "bot_id": bot_id,
+                "detail": (
+                    f"gross_usd={gross:.2f} nav_usd={nav:.2f} "
+                    f"cap={FOREX_MAX_GROSS:.4f}x"
+                ),
+            }
+        )
+
+    for position in positions:
+        try:
+            qty = abs(float(position.get("signed_units", position.get("qty"))))
+            trade_id = str(position.get("trade_id") or "")
+            symbol = str(position.get("symbol") or "")
+            if not trade_id or not symbol:
+                raise ValueError
+        except (TypeError, ValueError):
+            triggers.append(
+                {
+                    "trigger": "forex_account_data_unknown",
+                    "bot_id": bot_id,
+                    "detail": f"invalid trade units for {position.get('trade_id', 'unknown')}",
+                }
+            )
+            continue
+        if not math.isfinite(qty) or qty < DUST_QTY:
+            continue
+        key = f"{bot_id}:{trade_id}"
+        if any(_covers(position, order) for order in orders):
+            _state["missing_stop_since"].pop(key, None)
+            continue
+        first_seen = _state["missing_stop_since"].setdefault(key, now)
+        if now - first_seen > MISSING_STOP_SECONDS:
+            triggers.append(
+                {
+                    "trigger": "missing_protective_stop",
+                    "bot_id": bot_id,
+                    "trade_id": trade_id or None,
+                    "symbol": position.get("symbol"),
+                    "detail": (
+                        f"{position.get('symbol')} trade {trade_id or 'unknown'} "
+                        f"unprotected for {now - first_seen:.1f}s"
+                    ),
+                }
+            )
+    return triggers
+
+
+def forex_trade_mismatches(
+    broker_trades: list[dict[str, Any]],
+    ledger_trades: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Compare open OANDA trades with the read-only Forex ledger."""
+    def indexed(rows: list[dict[str, Any]], source: str) -> dict[str, dict[str, Any]]:
+        result: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            if not isinstance(row, dict):
+                raise ValueError(f"{source} contains an unreadable trade row")
+            trade_id = str(row.get("trade_id") or row.get("id") or "").strip()
+            if not trade_id:
+                raise ValueError(f"{source} trade is missing trade_id")
+            if trade_id in result:
+                raise ValueError(f"{source} contains duplicate trade_id {trade_id}")
+            instrument = str(row.get("instrument") or "").strip()
+            try:
+                signed_units = float(row.get("signed_units"))
+            except (TypeError, ValueError):
+                raise ValueError(f"{source} trade {trade_id} has unreadable signed units") from None
+            if (
+                not instrument
+                or not math.isfinite(signed_units)
+                or signed_units == 0
+            ):
+                raise ValueError(f"{source} trade {trade_id} is incomplete")
+            result[trade_id] = row
+        return result
+
+    broker = indexed(broker_trades, "OANDA")
+    ledger = indexed(ledger_trades, "forex_ai_trades")
+    findings: list[dict[str, Any]] = []
+    for trade_id in sorted(set(broker) | set(ledger)):
+        live = broker.get(trade_id)
+        stored = ledger.get(trade_id)
+        if live is None:
+            findings.append(
+                {
+                    "bot_id": "forex_ai",
+                    "trade_id": trade_id,
+                    "kind": "ledger_trade_without_oanda",
+                }
+            )
+            continue
+        if stored is None:
+            findings.append(
+                {
+                    "bot_id": "forex_ai",
+                    "trade_id": trade_id,
+                    "instrument": live.get("instrument"),
+                    "kind": "oanda_trade_without_ledger",
+                }
+            )
+            continue
+        differences: dict[str, dict[str, Any]] = {}
+        live_instrument = str(live.get("instrument") or "").upper()
+        ledger_instrument = str(stored.get("instrument") or "").upper()
+        if live_instrument != ledger_instrument:
+            differences["instrument"] = {
+                "oanda": live_instrument,
+                "ledger": ledger_instrument,
+            }
+        try:
+            live_units = float(live.get("signed_units"))
+            ledger_units = float(stored.get("signed_units"))
+            if not math.isfinite(live_units) or not math.isfinite(ledger_units):
+                raise ValueError
+        except (TypeError, ValueError):
+            raise ValueError(f"trade {trade_id} has unreadable signed units") from None
+        if abs(live_units - ledger_units) > DUST_QTY:
+            differences["signed_units"] = {
+                "oanda": live_units,
+                "ledger": ledger_units,
+            }
+        live_stop = live.get("stop_order_id")
+        ledger_stop = stored.get("stop_order_id")
+        live_stop = str(live_stop) if live_stop not in (None, "") else None
+        ledger_stop = str(ledger_stop) if ledger_stop not in (None, "") else None
+        if live_stop != ledger_stop:
+            differences["stop_order_id"] = {
+                "oanda": live_stop,
+                "ledger": ledger_stop,
+            }
+        if differences:
+            findings.append(
+                {
+                    "bot_id": "forex_ai",
+                    "trade_id": trade_id,
+                    "kind": "forex_trade_mismatch",
+                    "differences": differences,
+                }
+            )
+    return findings
 
 
 def _vault_symbols(bot_id: str) -> set[str]:
@@ -106,6 +492,8 @@ def evaluate_account(account: dict[str, Any], now: float | None = None) -> list[
     """Return trigger records for one normalized account snapshot."""
     now = _now() if now is None else now
     bot_id = account["bot_id"]
+    if bot_id == "forex_ai":
+        return _evaluate_forex_account(account, now)
     equity = float(account.get("equity") or 0)
     cash = float(account.get("cash") or 0)
     lmv = float(account.get("long_market_value") or 0)

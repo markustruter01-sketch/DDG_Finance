@@ -26,6 +26,7 @@ import argparse
 import contextlib
 import io
 import json
+import math
 import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -55,6 +56,8 @@ PROPOSED_CRYPTO_DRIFT_BAND = 0.055
 CRYPTO_EXPOSURE_LIMIT = 0.05
 CYCLE_FRESHNESS_MULTIPLIER = 3.0
 PROPOSED_RECON_MAX_AGE_MINUTES = 90.0
+# Forex is monitored through OANDA, not a cycle-producing strategy runner.
+CYCLE_BOTS = tuple(bot_id for bot_id in ACTIVE_BOTS if bot_id != "forex_ai")
 INVARIANT_SCHEDULE_MINUTES = 15
 DUST_QTY = 1e-6
 UNRESOLVED_HIGH_SEVERITIES = frozenset({"high", "critical", "error"})
@@ -84,7 +87,9 @@ class InvariantInputs:
     now: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     broker_positions: dict[str, list[dict[str, Any]]] | None = None
     broker_orders: dict[str, list[dict[str, Any]]] | None = None
+    oanda_trades: list[dict[str, Any]] | None = None
     ledger_positions: dict[str, list[dict[str, Any]]] | None = None
+    forex_ai_trades: list[dict[str, Any]] | None = None
     vault_symbols: dict[str, set[str]] | None = None
     fleet_equity: float | None = None
     cycle_rows: dict[str, dict[str, Any]] | None = None
@@ -289,11 +294,25 @@ def check_stop_coverage(inputs: InvariantInputs) -> dict[str, Any]:
         "covering_stop": True,
         "excluded": ["vault holdings", "cash-park holdings", f"dust qty < {DUST_QTY}"],
     }
-    problem = _source_problem(inputs, "broker_positions", "broker_orders", "vault_symbols")
-    if inputs.broker_positions is None or inputs.broker_orders is None or inputs.vault_symbols is None:
+    problem = _source_problem(
+        inputs,
+        "broker_positions",
+        "broker_orders",
+        "oanda_trades",
+        "vault_symbols",
+    )
+    if (
+        inputs.broker_positions is None
+        or inputs.broker_orders is None
+        or inputs.oanda_trades is None
+        or inputs.vault_symbols is None
+    ):
         return _unknown(
             name,
-            actual={"source_error": problem or "broker positions, orders, or vault holdings unreadable"},
+            actual={
+                "source_error": problem
+                or "broker positions, orders, OANDA trades, or vault holdings unreadable"
+            },
             expected=expected,
             difference={"unreadable_sources": 1},
             message="Cannot verify stop coverage because a required read was unavailable.",
@@ -335,6 +354,64 @@ def check_stop_coverage(inputs: InvariantInputs) -> dict[str, Any]:
                         "covering_stop": False,
                     }
                 )
+
+    for trade in inputs.oanda_trades:
+        try:
+            signed_units = float(trade.get("signed_units"))
+            qty = abs(signed_units)
+            trade_id = str(trade.get("trade_id") or trade.get("id") or "")
+            instrument = str(trade.get("instrument") or "").upper()
+            if (
+                not trade_id
+                or not instrument
+                or not math.isfinite(signed_units)
+                or qty == 0
+            ):
+                raise ValueError
+        except (TypeError, ValueError):
+            return _unknown(
+                name,
+                actual={
+                    "source_error": "OANDA returned an unreadable trade identity or units",
+                    "trade": trade,
+                },
+                expected=expected,
+                difference={"unreadable_sources": 1},
+                message="Cannot verify Forex stop coverage from an unreadable OANDA trade.",
+                source_key="stop_coverage",
+            )
+        if qty < DUST_QTY:
+            continue
+        checked += 1
+        position = {
+            "asset_class": "forex",
+            "trade_id": trade_id,
+            "symbol": instrument,
+            "signed_units": signed_units,
+            "qty": qty,
+            "side": "long" if signed_units > 0 else "short",
+        }
+        stop = trade.get("stop_loss_order")
+        if not isinstance(stop, dict):
+            missing.append(
+                {
+                    "bot_id": "forex_ai",
+                    "trade_id": trade_id,
+                    "symbol": instrument,
+                    "position_qty": qty,
+                }
+            )
+        elif not kill_switch._covers(position, stop):
+            mismatched.append(
+                {
+                    "bot_id": "forex_ai",
+                    "trade_id": trade_id,
+                    "symbol": instrument,
+                    "position_qty": qty,
+                    "stop_quantities": [float(stop.get("qty") or 0)],
+                    "covering_stop": False,
+                }
+            )
 
     actual = {
         "checked_positions": checked,
@@ -483,7 +560,7 @@ def check_cycle_freshness(inputs: InvariantInputs) -> dict[str, Any]:
         "multiplier": CYCLE_FRESHNESS_MULTIPLIER,
         "thresholds_seconds": {
             bot_id: CYCLE_FRESHNESS_MULTIPLIER * intervals[bot_id]
-            for bot_id in ACTIVE_BOTS
+            for bot_id in CYCLE_BOTS
         },
     }
     problem = _source_problem(inputs, "cycle_rows")
@@ -501,7 +578,7 @@ def check_cycle_freshness(inputs: InvariantInputs) -> dict[str, Any]:
     paused: list[dict[str, Any]] = []
     stale: list[dict[str, Any]] = []
     unreadable: list[dict[str, Any]] = []
-    for bot_id in ACTIVE_BOTS:
+    for bot_id in CYCLE_BOTS:
         if inputs.pause_states is not None and inputs.pause_states.get(bot_id) is True:
             paused.append({"bot_id": bot_id, "reason": "intentionally paused"})
             continue
@@ -554,7 +631,7 @@ def check_cycle_freshness(inputs: InvariantInputs) -> dict[str, Any]:
             message=f"{len(stale)} bot cycle record(s) exceed 3 × their configured interval.",
             source_key="cycle_freshness",
         )
-    if len(paused) == len(ACTIVE_BOTS):
+    if len(paused) == len(CYCLE_BOTS):
         return _passed(
             name,
             actual=actual,
@@ -632,6 +709,43 @@ def check_reconciliation_health(inputs: InvariantInputs) -> dict[str, Any]:
         "clean_difference": 0 if clean is True else 1,
     }
     if clean is not True:
+        flags = row.get("flags")
+        if isinstance(flags, str):
+            try:
+                flags = json.loads(flags)
+            except (TypeError, ValueError):
+                flags = None
+        unknown_forex_flags = [
+            flag
+            for flag in flags
+            if isinstance(flag, dict)
+            and flag.get("bot_id") == "forex_ai"
+            and flag.get("status") == "UNKNOWN"
+            and flag.get("kind")
+            in {
+                "oanda_read_failed",
+                "forex_trade_ledger_read_failed",
+                "forex_trade_comparison_unknown",
+            }
+        ] if isinstance(flags, list) else []
+        other_unknown_flags = [
+            flag
+            for flag in flags
+            if isinstance(flag, dict)
+            and flag.get("trigger") == "fleet_equity_unknown"
+        ] if isinstance(flags, list) else []
+        if (
+            unknown_forex_flags
+            and len(unknown_forex_flags) + len(other_unknown_flags) == len(flags)
+        ):
+            return _unknown(
+                name,
+                actual=actual,
+                expected=expected,
+                difference=difference,
+                message="The latest reconciliation could not read Forex broker or ledger data.",
+                source_key="reconciliation",
+            )
         return _failed(
             name,
             actual=actual,
@@ -764,15 +878,27 @@ def check_ledger_broker_presence(inputs: InvariantInputs) -> dict[str, Any]:
         "broker_without_ledger": 0,
         "excluded": ["vault holdings", f"dust qty < {DUST_QTY}"],
     }
-    problem = _source_problem(inputs, "broker_positions", "ledger_positions", "vault_symbols")
+    problem = _source_problem(
+        inputs,
+        "broker_positions",
+        "ledger_positions",
+        "oanda_trades",
+        "forex_ai_trades",
+        "vault_symbols",
+    )
     if (
         inputs.broker_positions is None
         or inputs.ledger_positions is None
+        or inputs.oanda_trades is None
+        or inputs.forex_ai_trades is None
         or inputs.vault_symbols is None
     ):
         return _unknown(
             name,
-            actual={"source_error": problem or "ledger, broker, or vault holdings unreadable"},
+            actual={
+                "source_error": problem
+                or "ledger, broker, OANDA trades, Forex ledger, or vault holdings unreadable"
+            },
             expected=expected,
             difference={"unmatched_symbols": None},
             message="Cannot compare ledger and broker position presence.",
@@ -792,11 +918,26 @@ def check_ledger_broker_presence(inputs: InvariantInputs) -> dict[str, Any]:
             missing_ledger.append({"bot_id": bot_id, "symbol": symbol, "broker_qty": broker[bot_id][symbol]})
         for symbol in sorted(set(ledger.get(bot_id, {})) - set(broker.get(bot_id, {}))):
             missing_broker.append({"bot_id": bot_id, "symbol": symbol, "ledger_qty": ledger[bot_id][symbol]})
+    try:
+        forex_mismatches = kill_switch.forex_trade_mismatches(
+            inputs.oanda_trades, inputs.forex_ai_trades
+        )
+    except Exception as exc:
+        return _unknown(
+            name,
+            actual={"source_error": f"Forex broker/ledger comparison unreadable: {exc}"},
+            expected=expected,
+            difference={"unmatched_symbols": None},
+            message="Cannot compare OANDA trades with the Forex trade ledger.",
+            source_key="ledger_broker_presence",
+        )
     actual = {
         "ledger_without_broker": missing_broker,
         "broker_without_ledger": missing_ledger,
     }
-    unmatched = len(missing_broker) + len(missing_ledger)
+    if forex_mismatches:
+        actual["forex_trade_mismatches"] = forex_mismatches
+    unmatched = len(missing_broker) + len(missing_ledger) + len(forex_mismatches)
     if unmatched:
         return _failed(
             name,
@@ -1105,6 +1246,7 @@ def read_database_inputs(now: datetime | None = None) -> dict[str, Any]:
 
     result: dict[str, Any] = {
         "ledger_positions": {bot_id: [] for bot_id in ACTIVE_BOTS},
+        "forex_ai_trades": None,
         "vault_symbols": {bot_id: set() for bot_id in ACTIVE_BOTS},
         "cycle_rows": {},
         "reconciliation_rows": [],
@@ -1236,6 +1378,39 @@ def read_database_inputs(now: datetime | None = None) -> dict[str, Any]:
                 for row in cur.fetchall()
             ]
 
+    # Keep the new Forex table read independent so its absence is UNKNOWN for
+    # Forex checks without hiding the legacy audit inputs.
+    try:
+        with psycopg2.connect(dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT trade_id, instrument, signed_units::double precision,
+                           stop_order_id, entry_price::double precision,
+                           leverage_tier, status, opened_at, closed_at
+                    FROM forex_ai_trades
+                    WHERE lower(status) = 'open'
+                    ORDER BY trade_id
+                    """
+                )
+                result["forex_ai_trades"] = [
+                    {
+                        "trade_id": row[0],
+                        "instrument": row[1],
+                        "signed_units": row[2],
+                        "stop_order_id": row[3],
+                        "entry_price": row[4],
+                        "leverage_tier": row[5],
+                        "status": row[6],
+                        "opened_at": row[7],
+                        "closed_at": row[8],
+                    }
+                    for row in cur.fetchall()
+                ]
+    except Exception as exc:
+        result["forex_ai_trades"] = None
+        result["_forex_ai_trades_error"] = str(exc)
+
     # Keep this read independent from the legacy database inputs above.  A
     # production database that predates this feature should produce UNKNOWN for
     # this invariant without hiding all of the other read-only audit results.
@@ -1314,7 +1489,7 @@ def read_broker_inputs() -> dict[str, Any]:
     positions: dict[str, list[dict[str, Any]]] = {}
     orders: dict[str, list[dict[str, Any]]] = {}
     fleet_equity = 0.0
-    for bot_id in ACTIVE_BOTS:
+    for bot_id in kill_switch.ALPACA_BOTS:
         client = _broker_client(bot_id)
         account = client.get_account()
         fleet_equity += float(account.equity)
@@ -1377,6 +1552,8 @@ def collect_inputs(now: datetime | None = None) -> InvariantInputs:
         for key, value in database.items():
             if key == "_runner_heartbeat_error":
                 inputs.source_errors["runner_heartbeat"] = value
+            elif key == "_forex_ai_trades_error":
+                inputs.source_errors["forex_ai_trades"] = value
             elif key != "_runner_heartbeat_error":
                 setattr(inputs, key, value)
     except Exception as exc:
@@ -1389,6 +1566,13 @@ def collect_inputs(now: datetime | None = None) -> InvariantInputs:
     except Exception as exc:
         inputs.source_errors["broker"] = str(exc)
         logger.error(f"Invariants | broker read failed: {exc}")
+    try:
+        oanda_snapshot = kill_switch.read_oanda_account_snapshot()
+        inputs.oanda_trades = oanda_snapshot["open_trades"]
+    except Exception as exc:
+        inputs.oanda_trades = None
+        inputs.source_errors["oanda_trades"] = str(exc)
+        logger.error(f"Invariants | OANDA read failed: {exc}")
     try:
         # Loading the kill-switch module also loads the shared bot config,
         # whose legacy import-time banner must not pollute the CLI report.

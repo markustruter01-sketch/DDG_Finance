@@ -56,11 +56,13 @@ def base_inputs() -> InvariantInputs:
             "spy_qqq_trend": [],
             "jerome_macro": [],
         },
+        oanda_trades=[],
         ledger_positions={
             "oracle": [{"symbol": "SPY", "qty": 10.0}],
             "spy_qqq_trend": [],
             "jerome_macro": [],
         },
+        forex_ai_trades=[],
         vault_symbols={
             "oracle": {"BIL"},
             "spy_qqq_trend": {"BIL"},

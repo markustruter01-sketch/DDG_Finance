@@ -14,6 +14,8 @@ from core.kill_switch import (
     DUST_QTY,
     MAX_DEPLOYMENT,
     _vault_symbols,
+    forex_trade_mismatches,
+    read_oanda_account_snapshot,
 )
 from config.settings import settings
 from core.bot_registry import resolve_bot_id
@@ -55,6 +57,39 @@ def _client_for(bot_id: str):
     if not key or not secret:
         raise RuntimeError(f"missing credentials for {bot_id}")
     return TradingClient(key, secret, paper=True)
+
+
+def _forex_ai_ledger_rows() -> list[dict[str, Any]]:
+    """Read open OANDA trade ownership rows without mutating the ledger."""
+    from db.postgres import get_conn
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT trade_id, instrument, signed_units::double precision,
+                       stop_order_id, entry_price::double precision,
+                       leverage_tier, status, opened_at, closed_at
+                FROM forex_ai_trades
+                WHERE lower(status) = 'open'
+                ORDER BY trade_id
+                """
+            )
+            columns = (
+                "trade_id",
+                "instrument",
+                "signed_units",
+                "stop_order_id",
+                "entry_price",
+                "leverage_tier",
+                "status",
+                "opened_at",
+                "closed_at",
+            )
+            return [
+                dict(zip(columns, row, strict=True))
+                for row in cur.fetchall()
+            ]
 
 
 def _orders(client) -> list[dict[str, Any]]:
@@ -672,6 +707,53 @@ def collect_live_snapshot() -> dict[str, Any]:
     mismatches = []
     account_findings = []
     for bot_id in ACTIVE_BOTS:
+        if bot_id == "forex_ai":
+            try:
+                account = read_oanda_account_snapshot()
+            except Exception as exc:
+                logger.critical(f"Reconciliation | OANDA account unavailable: {exc}")
+                account_findings.append(
+                    {
+                        "bot_id": bot_id,
+                        "kind": "oanda_read_failed",
+                        "status": "UNKNOWN",
+                        "detail": str(exc),
+                    }
+                )
+                continue
+
+            accounts.append(account)
+            try:
+                ledger_trades = _forex_ai_ledger_rows()
+            except Exception as exc:
+                logger.critical(
+                    f"Reconciliation | Forex trade ledger unavailable: {exc}"
+                )
+                account_findings.append(
+                    {
+                        "bot_id": bot_id,
+                        "kind": "forex_trade_ledger_read_failed",
+                        "status": "UNKNOWN",
+                        "detail": str(exc),
+                    }
+                )
+                continue
+            try:
+                mismatches.extend(
+                    forex_trade_mismatches(account["open_trades"], ledger_trades)
+                )
+            except Exception as exc:
+                logger.critical(f"Reconciliation | OANDA trade comparison unknown: {exc}")
+                account_findings.append(
+                    {
+                        "bot_id": bot_id,
+                        "kind": "forex_trade_comparison_unknown",
+                        "status": "UNKNOWN",
+                        "detail": str(exc),
+                    }
+                )
+            continue
+
         vault_symbols: set[str] | None
         try:
             vault_symbols = _vault_symbols(bot_id)
@@ -813,7 +895,7 @@ def reconcile(
         grouped_flags.setdefault((flag_bot_id, str(flag_cycle_id)), []).append(flag)
     would_alert = [
         {
-            "component": "alpaca",
+            "component": "oanda" if bot_id == "forex_ai" else "alpaca",
             "severity": "critical",
             "error_type": "reconciliation_mismatch",
             "bot_id": bot_id,

@@ -712,6 +712,19 @@ CREATE TABLE IF NOT EXISTS bot_portfolio (
   data_source    TEXT NOT NULL DEFAULT 'unknown'
 );
 
+-- Read-only OANDA reconciliation ledger; order/trade writes are not performed here.
+CREATE TABLE IF NOT EXISTS forex_ai_trades (
+  trade_id       TEXT PRIMARY KEY,
+  instrument     TEXT NOT NULL,
+  signed_units   NUMERIC NOT NULL,
+  entry_price    NUMERIC NOT NULL,
+  stop_order_id  TEXT,
+  leverage_tier  TEXT,
+  status         TEXT NOT NULL DEFAULT 'open',
+  opened_at      TIMESTAMPTZ NOT NULL,
+  closed_at      TIMESTAMPTZ
+);
+
 INSERT INTO bot_portfolio (bot_id, starting_usd, cash_usd, equity_usd, positions, data_source, is_live_broker)
 VALUES
   ('oracle',          100000, 100000, 100000, '[]'::jsonb, 'alpaca_api',   FALSE),

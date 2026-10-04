@@ -213,6 +213,21 @@ def test_collect_live_snapshot_keeps_other_bots_when_vault_read_fails(monkeypatc
     monkeypatch.setattr(reconciliation, "_mismatches", lambda *_args: [])
     monkeypatch.setattr(
         reconciliation,
+        "read_oanda_account_snapshot",
+        lambda: {
+            "bot_id": "forex_ai",
+            "equity": 100.0,
+            "nav": 100.0,
+            "cash": 100.0,
+            "gross_exposure_usd": 0.0,
+            "positions": [],
+            "orders": [],
+            "open_trades": [],
+        },
+    )
+    monkeypatch.setattr(reconciliation, "_forex_ai_ledger_rows", lambda: [])
+    monkeypatch.setattr(
+        reconciliation,
         "_authoritative_quantity_mismatches",
         lambda *_args: [],
     )

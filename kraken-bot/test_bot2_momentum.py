@@ -614,6 +614,7 @@ class _EntryClient:
         return [{
             "symbol": "AAPL",
             "qty": self.qty,
+            "qty_available": self.qty,
             "entry_price": 100.0,
             "current_price": 100.0,
             "market_value": self.qty * 100.0,
@@ -624,6 +625,172 @@ class _EntryClient:
 
     def cancel_confirm(self, order_id):
         return True
+
+
+class _SellGuardClient:
+    def __init__(
+        self,
+        *,
+        qty: int = 10,
+        available_qty: float = 10,
+        order_statuses: dict[str, str] | None = None,
+        cancel_statuses: dict[str, str] | None = None,
+        open_orders: list[dict[str, str]] | None = None,
+        order_symbols: dict[str, str] | None = None,
+        failed_get_ids: set[str] | None = None,
+    ) -> None:
+        self.qty = qty
+        self.available_qty = available_qty
+        self.order_statuses = dict(order_statuses or {})
+        self.cancel_statuses = dict(cancel_statuses or {})
+        self.orders = list(open_orders or [])
+        self.order_symbols = dict(order_symbols or {})
+        self.failed_get_ids = set(failed_get_ids or ())
+        self.events: list[tuple] = []
+        self.submissions: list[tuple[str, str, int, str]] = []
+
+    def account(self):
+        return {
+            "equity": 100_000.0,
+            "cash": 90_000.0,
+            "long_market_value": self.qty * 100.0,
+        }
+
+    def positions(self):
+        if self.qty < 1:
+            return []
+        return [{
+            "symbol": "AAPL",
+            "qty": str(self.qty),
+            "qty_available": str(self.available_qty),
+            "market_value": self.qty * 100.0,
+        }]
+
+    def open_orders(self):
+        return [dict(order) for order in self.orders]
+
+    def get_order(self, order_id):
+        self.events.append(("get", order_id, self.order_statuses.get(order_id)))
+        if order_id in self.failed_get_ids:
+            raise RuntimeError("synthetic order GET failure")
+        return {
+            "id": order_id,
+            "symbol": self.order_symbols.get(order_id, "AAPL"),
+            "status": self.order_statuses[order_id],
+        }
+
+    def cancel_confirm(self, order_id):
+        self.events.append(("cancel", order_id))
+        self.order_statuses[order_id] = self.cancel_statuses.get(
+            order_id, "canceled"
+        )
+        return True
+
+    def submit(self, symbol, side, qty, order_type, **extra):
+        self.events.append(("submit", symbol, side, int(qty), order_type))
+        self.submissions.append((symbol, side, int(qty), order_type))
+        if side == "sell":
+            self.qty = max(0, self.qty - int(qty))
+            self.available_qty = max(0, self.available_qty - int(qty))
+        return {"id": "market-sell-1"}
+
+    def wait_for_fill(self, order_id):
+        return {"status": "filled", "filled_avg_price": "100"}
+
+
+def _sell_guard_position(stop_order_id: str | None = "stop-1"):
+    return {
+        "symbol": "AAPL",
+        "qty": 10,
+        "entry_price": 100.0,
+        "stop_order_id": stop_order_id,
+    }
+
+
+def test_sell_gets_and_cancels_recorded_stop_missing_from_list_before_sale(
+    monkeypatch,
+) -> None:
+    client = _SellGuardClient(
+        order_statuses={"stop-1": "new", "open-2": "accepted"},
+        open_orders=[
+            {"id": "open-2", "symbol": "aApL"},
+            {"id": "unrelated", "symbol": "MSFT"},
+        ],
+    )
+    recorded = []
+    monkeypatch.setattr(
+        bot2,
+        "record_close",
+        lambda symbol, reason, pnl: recorded.append((symbol, reason, pnl)),
+    )
+
+    assert bot2._sell_confirmed(
+        client, _sell_guard_position(), "fell_out_of_top_50"
+    )
+
+    assert [event[1] for event in client.events if event[0] == "cancel"] == [
+        "stop-1",
+        "open-2",
+    ]
+    assert client.submissions == [("AAPL", "sell", 10, "market")]
+    assert recorded == [("AAPL", "fell_out_of_top_50", 0.0)]
+    assert client.events.index(("get", "stop-1", "new")) < client.events.index(
+        ("cancel", "stop-1")
+    )
+    assert client.events.index(("get", "stop-1", "canceled")) < client.events.index(
+        ("submit", "AAPL", "sell", 10, "market")
+    )
+
+
+def test_confirmed_cancelled_order_in_stale_list_does_not_block_sell(
+    monkeypatch,
+) -> None:
+    client = _SellGuardClient(
+        order_statuses={"stop-1": "canceled"},
+        open_orders=[{"id": "stop-1", "symbol": "AAPL"}],
+    )
+    monkeypatch.setattr(bot2, "record_close", lambda *args: None)
+
+    assert bot2._sell_confirmed(
+        client, _sell_guard_position(), "fell_out_of_top_50"
+    )
+
+    assert not any(event[0] == "cancel" for event in client.events)
+    assert client.submissions == [("AAPL", "sell", 10, "market")]
+
+
+def test_failed_order_get_blocks_sale(monkeypatch) -> None:
+    client = _SellGuardClient(failed_get_ids={"stop-1"})
+
+    assert not bot2._sell_confirmed(
+        client, _sell_guard_position(), "fell_out_of_top_50"
+    )
+
+    assert client.submissions == []
+
+
+def test_nonfinal_post_cancel_status_blocks_sale(monkeypatch) -> None:
+    client = _SellGuardClient(
+        order_statuses={"stop-1": "new"},
+        cancel_statuses={"stop-1": "pending_cancel"},
+    )
+
+    assert not bot2._sell_confirmed(
+        client, _sell_guard_position(), "fell_out_of_top_50"
+    )
+
+    assert client.submissions == []
+
+
+def test_available_quantity_short_of_sale_blocks_order(monkeypatch) -> None:
+    client = _SellGuardClient(available_qty=9)
+    monkeypatch.setattr(bot2, "record_close", lambda *args: None)
+
+    assert not bot2._sell_confirmed(
+        client, _sell_guard_position(stop_order_id=None), "fell_out_of_top_50"
+    )
+
+    assert client.submissions == []
 
 
 def test_confirmed_entry_records_only_after_fill_and_stop(monkeypatch) -> None:

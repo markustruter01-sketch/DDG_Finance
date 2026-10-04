@@ -879,11 +879,207 @@ def _owned_stop(
     return None
 
 
-def _cancel_owned_stop(
-    client: AlpacaMomentumClient, symbol: str, recorded_id: str | None
+def _prepare_symbol_for_sell(
+    client: AlpacaMomentumClient,
+    symbol: str,
+    sell_qty: int,
+    recorded_stop_id: str | None = None,
 ) -> bool:
-    order = _owned_stop(client, symbol, recorded_id)
-    return order is None or client.cancel_confirm(str(order["id"]))
+    """Cancel and confirm symbol orders, then verify shares are free to sell."""
+    symbol = canonical_symbol(symbol)
+    if sell_qty < 1:
+        return False
+
+    final_statuses = {
+        "canceled",
+        "cancelled",
+        "expired",
+        "filled",
+        "rejected",
+        "done_for_day",
+    }
+    confirmed_order_ids: set[str] = set()
+
+    def confirm_order_final(order_id: str) -> bool:
+        try:
+            order = client.get_order(order_id)
+        except Exception as exc:
+            logger.critical(
+                "Bot 2 | sell blocked: order GET failed symbol=%s id=%s error=%s",
+                symbol,
+                order_id,
+                exc,
+            )
+            return False
+        if (
+            not isinstance(order, dict)
+            or str(order.get("id") or "") != order_id
+            or canonical_symbol(order.get("symbol", "")) != symbol
+        ):
+            logger.critical(
+                "Bot 2 | sell blocked: order GET did not confirm symbol/id "
+                "symbol=%s id=%s",
+                symbol,
+                order_id,
+            )
+            return False
+
+        status = str(order.get("status", "")).lower()
+        if status not in final_statuses:
+            if not client.cancel_confirm(order_id):
+                logger.critical(
+                    "Bot 2 | sell blocked: order cancellation unconfirmed "
+                    "symbol=%s id=%s status=%s",
+                    symbol,
+                    order_id,
+                    status,
+                )
+                return False
+            try:
+                order = client.get_order(order_id)
+            except Exception as exc:
+                logger.critical(
+                    "Bot 2 | sell blocked: post-cancel GET failed "
+                    "symbol=%s id=%s error=%s",
+                    symbol,
+                    order_id,
+                    exc,
+                )
+                return False
+            if (
+                not isinstance(order, dict)
+                or str(order.get("id") or "") != order_id
+                or canonical_symbol(order.get("symbol", "")) != symbol
+            ):
+                logger.critical(
+                    "Bot 2 | sell blocked: post-cancel GET did not confirm "
+                    "symbol/id symbol=%s id=%s",
+                    symbol,
+                    order_id,
+                )
+                return False
+            status = str(order.get("status", "")).lower()
+
+        if status not in final_statuses:
+            logger.critical(
+                "Bot 2 | sell blocked: order is not final symbol=%s id=%s status=%s",
+                symbol,
+                order_id,
+                status or "missing",
+            )
+            return False
+        confirmed_order_ids.add(order_id)
+        return True
+
+    if recorded_stop_id:
+        if not confirm_order_final(str(recorded_stop_id)):
+            return False
+
+    def confirm_listed_symbol_orders() -> bool:
+        try:
+            open_orders = client.open_orders()
+        except Exception as exc:
+            logger.critical(
+                "Bot 2 | sell blocked: open-order listing failed symbol=%s error=%s",
+                symbol,
+                exc,
+            )
+            return False
+        if not isinstance(open_orders, list):
+            logger.critical(
+                "Bot 2 | sell blocked: invalid open-order listing symbol=%s",
+                symbol,
+            )
+            return False
+        for order in open_orders:
+            if not isinstance(order, dict) or not order.get("symbol"):
+                logger.critical(
+                    "Bot 2 | sell blocked: open order lacks a usable symbol symbol=%s",
+                    symbol,
+                )
+                return False
+            if canonical_symbol(order["symbol"]) != symbol:
+                continue
+            order_id = str(order.get("id") or "")
+            if not order_id:
+                logger.critical(
+                    "Bot 2 | sell blocked: matching open order lacks an id symbol=%s",
+                    symbol,
+                )
+                return False
+            if order_id in confirmed_order_ids:
+                continue
+            if not confirm_order_final(order_id):
+                return False
+        return True
+
+    # Re-read after cancellations. A stale collection response is harmless
+    # only for IDs whose order-specific GET already proved a final status.
+    if not confirm_listed_symbol_orders():
+        return False
+    if not confirm_listed_symbol_orders():
+        return False
+
+    try:
+        matching_positions = [
+            position
+            for position in client.positions()
+            if canonical_symbol(position.get("symbol", "")) == symbol
+        ]
+    except Exception as exc:
+        logger.critical(
+            "Bot 2 | sell blocked: position read failed symbol=%s error=%s",
+            symbol,
+            exc,
+        )
+        return False
+    if len(matching_positions) != 1:
+        logger.critical(
+            "Bot 2 | sell blocked: expected one broker position symbol=%s count=%d",
+            symbol,
+            len(matching_positions),
+        )
+        return False
+
+    broker_position = matching_positions[0]
+    if "qty_available" not in broker_position:
+        logger.critical(
+            "Bot 2 | sell blocked: Alpaca position lacks qty_available "
+            "symbol=%s available_fields=%s",
+            symbol,
+            sorted(broker_position),
+        )
+        return False
+    try:
+        available_qty = float(broker_position["qty_available"])
+    except (TypeError, ValueError):
+        logger.critical(
+            "Bot 2 | sell blocked: invalid qty_available symbol=%s value=%r",
+            symbol,
+            broker_position["qty_available"],
+        )
+        return False
+    if (
+        not math.isfinite(available_qty)
+        or available_qty < 0
+        or available_qty + 1e-9 < sell_qty
+    ):
+        logger.critical(
+            "Bot 2 | sell blocked: qty_available=%s is below sell_qty=%s symbol=%s",
+            available_qty,
+            sell_qty,
+            symbol,
+        )
+        return False
+    logger.info(
+        "Bot 2 | sell precheck passed symbol=%s sell_qty=%s "
+        "qty_available=%s confirmed_orders=%d",
+        symbol,
+        sell_qty,
+        available_qty,
+        len(confirmed_order_ids),
+    )
+    return True
 
 
 def _arm_stop(client: AlpacaMomentumClient, symbol: str, qty: int, entry_price: float) -> dict[str, Any]:
@@ -896,15 +1092,19 @@ def _arm_stop(client: AlpacaMomentumClient, symbol: str, qty: int, entry_price: 
     )
 
 
-def _flatten_after_stop_failure(client: AlpacaMomentumClient, symbol: str) -> None:
-    for order in client.open_orders():
-        if canonical_symbol(order.get("symbol")) == canonical_symbol(symbol):
-            if not client.cancel_confirm(str(order["id"])):
-                raise RuntimeError(f"{symbol}: could not cancel order before flatten")
+def _flatten_after_stop_failure(
+    client: AlpacaMomentumClient,
+    symbol: str,
+    recorded_stop_id: str | None = None,
+) -> None:
     for attempt in range(2):
         qty = _broker_qty(client, symbol)
         if qty < 1:
             return
+        if not _prepare_symbol_for_sell(client, symbol, qty, recorded_stop_id):
+            raise RuntimeError(
+                f"{symbol}: sell precheck failed before emergency flatten"
+            )
         sell = client.submit(symbol, "sell", qty, "market")
         fill = client.wait_for_fill(str(sell["id"]))
         if str(fill.get("status", "")).lower() in {"filled", "partially_filled"} and _broker_qty(client, symbol) < 1:
@@ -1020,7 +1220,9 @@ def _reconcile_protective_stops(
                     symbol, exc,
                 )
         if stop is None:
-            _flatten_after_stop_failure(client, symbol)
+            _flatten_after_stop_failure(
+                client, symbol, position.get("stop_order_id")
+            )
             record_close(symbol, "stop_arm_failed_flattened", None)
             raise RuntimeError(
                 f"{symbol}: restart stop reconciliation failed: {first_error}"
@@ -1036,9 +1238,6 @@ def _sell_confirmed(
     client: AlpacaMomentumClient, position: dict[str, Any], reason: str
 ) -> bool:
     symbol = canonical_symbol(position["symbol"])
-    if not _cancel_owned_stop(client, symbol, position.get("stop_order_id")):
-        logger.critical("Bot 2 | sell blocked because stop cancellation was unconfirmed symbol=%s", symbol)
-        return False
     qty = min(int(position["qty"]), _broker_qty(client, symbol))
     if qty < 1:
         return False
@@ -1053,6 +1252,10 @@ def _sell_confirmed(
         or float(long_market_value or 0) > float(account.get("equity", 0) or 0)
     ):
         logger.critical("Bot 2 | sell blocked by inconsistent fresh account state symbol=%s", symbol)
+        return False
+    if not _prepare_symbol_for_sell(
+        client, symbol, qty, position.get("stop_order_id")
+    ):
         return False
     order = client.submit(symbol, "sell", qty, "market")
     fill = client.wait_for_fill(str(order["id"]))

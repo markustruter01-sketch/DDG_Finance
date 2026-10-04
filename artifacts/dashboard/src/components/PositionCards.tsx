@@ -331,6 +331,8 @@ export function AlpacaPositionsPanel({
   closingSymbol: string | null;
 }) {
   const [open, setOpen] = useState(true);
+  const { getBotIdentity } = useBotIdentity();
+  const oracleIdentity = getBotIdentity("oracle");
   const { data: statusData } = useStatusSummary();
 
   const tradingMode = statusData?.trading_mode;

@@ -476,7 +476,7 @@ export default function StreamingHealthScreen() {
     return () => clearInterval(t);
   }, []);
 
-  const componentLabels = useMemo(() => ({
+  const componentLabels = useMemo<Record<string, string>>(() => ({
     ...COMPONENT_LABELS,
     bot_oracle: formatBotLabel(getBotIdentity("oracle")),
     bot_spy_qqq_trend: formatBotLabel(getBotIdentity("spy_qqq_trend")),

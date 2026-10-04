@@ -142,7 +142,7 @@ def test_current_bid_ask_returns_top_of_book_and_spread(credentials) -> None:
     ("method_name", "response_key", "resource"),
     [
         ("open_trades", "trades", "openTrades"),
-        ("open_orders", "orders", "openOrders"),
+        ("open_orders", "orders", "orders"),
         ("open_positions", "positions", "openPositions"),
     ],
 )

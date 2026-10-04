@@ -210,7 +210,7 @@ class OandaClient:
         return self._list_resource("openTrades", "trades")
 
     def open_orders(self) -> list[dict[str, Any]]:
-        return self._list_resource("openOrders", "orders")
+        return self._list_resource("orders", "orders")
 
     def open_positions(self) -> list[dict[str, Any]]:
         return self._list_resource("openPositions", "positions")

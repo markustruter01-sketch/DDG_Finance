@@ -1142,30 +1142,24 @@ def read_database_inputs(now: datetime | None = None) -> dict[str, Any]:
                         {"symbol": symbol, "qty": qty}
                     )
 
-            # Bot 2 has no separate authoritative strategy table while it is
-            # paused, so its canonical ledger is the durable JSON position
-            # mirror.  Do not also merge this mirror into the dedicated tables
-            # above; that would count one position twice.
+            # Bot 2's authoritative open-position ledger is its strategy table.
             cur.execute(
                 """
-                SELECT bot_id, positions
-                FROM bot_portfolio
-                WHERE bot_id = ANY(%s)
+                SELECT bot_id, symbol, qty::double precision
+                FROM bot2_momentum_positions
+                WHERE bot_id = %s AND status = 'open'
                 """,
-                (list(ACTIVE_BOTS),),
+                ("spy_qqq_trend",),
             )
-            for bot_id, positions in cur.fetchall():
-                if bot_id != "spy_qqq_trend" or not positions:
-                    continue
-                values = positions if isinstance(positions, list) else json.loads(positions)
-                result["ledger_positions"][bot_id].extend(
-                    {
-                        "symbol": value.get("symbol"),
-                        "qty": value.get("qty"),
-                    }
-                    for value in values
-                    if isinstance(value, dict)
-                )
+            for bot_id, symbol, qty in cur.fetchall():
+                if bot_id in result["ledger_positions"]:
+                    result["ledger_positions"][bot_id].append(
+                        {
+                            "symbol": symbol,
+                            "qty": qty,
+                            "table": "bot2_momentum_positions",
+                        }
+                    )
 
             cur.execute(
                 """

@@ -297,6 +297,66 @@ def test_read_database_inputs_uses_etf_current_qty_and_bot3_qty(monkeypatch):
     assert "current_qty" not in bot3_query
 
 
+def test_bot2_momentum_ledger_drives_quantity_mismatch_invariant(
+    base_inputs, monkeypatch
+):
+    connection = _DatabaseConnection(
+        rows_by_table={
+            "bot2_momentum_positions": [
+                ("spy_qqq_trend", "SPY", 10.0),
+            ],
+            # A stale portfolio mirror must not be used as Bot 2's ledger.
+            "bot_portfolio": [
+                ("spy_qqq_trend", [{"symbol": "SPY", "qty": 9.0}]),
+            ],
+        }
+    )
+    monkeypatch.setenv("DATABASE_URL", "postgresql://fake")
+
+    with patch("psycopg2.connect", return_value=connection):
+        database_inputs = read_database_inputs(
+            now=datetime(2026, 8, 31, 12, 0, tzinfo=timezone.utc)
+        )
+
+    bot2_ledger = database_inputs["ledger_positions"]["spy_qqq_trend"]
+    assert bot2_ledger == [
+        {
+            "symbol": "SPY",
+            "qty": 10.0,
+            "table": "bot2_momentum_positions",
+        }
+    ]
+    bot2_query, bot2_params = next(
+        (query, params)
+        for query, params in connection.cursor_instance.calls
+        if "FROM bot2_momentum_positions" in query
+    )
+    assert "status = 'open'" in bot2_query
+    assert bot2_params == ("spy_qqq_trend",)
+    assert not any(
+        "FROM bot_portfolio" in query
+        for query, _params in connection.cursor_instance.calls
+    )
+
+    inputs = _copy(base_inputs)
+    inputs.ledger_positions = database_inputs["ledger_positions"]
+    inputs.broker_positions["spy_qqq_trend"] = [
+        {"symbol": "SPY", "qty": 9.0}
+    ]
+    result = check_ledger_broker_quantities(inputs)
+
+    assert result["status"] == "FAIL"
+    assert result["actual"]["mismatches"] == [
+        {
+            "bot_id": "spy_qqq_trend",
+            "symbol": "SPY",
+            "broker_qty": 9.0,
+            "ledger_qty": 10.0,
+            "difference": 1.0,
+        }
+    ]
+
+
 def test_read_database_inputs_marks_unparseable_heartbeat_unreadable(monkeypatch):
     heartbeat_row = (
         "runner:v2:test",

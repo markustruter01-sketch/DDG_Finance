@@ -6,11 +6,14 @@ from typing import Any
 
 from loguru import logger
 
-ACTIVE_BOTS = ("oracle", "spy_qqq_trend", "jerome_macro")
+from core.bot_registry import active_bot_ids
+
+ACTIVE_BOTS = tuple(active_bot_ids())
 DEFAULT_CYCLE_INTERVALS = {
     "oracle": 3600,
     "spy_qqq_trend": 3600,
     "jerome_macro": 3600,
+    "forex_ai": 3600,
 }
 # Portfolio heartbeats have deliberately different tolerances because the
 # equity bots and Jerome do not run on identical market-hour schedules.
@@ -19,6 +22,7 @@ PORTFOLIO_STALE_THRESHOLDS = {
     "oracle": 108000,
     "spy_qqq_trend": 108000,
     "jerome_macro": 50000,
+    "forex_ai": 10800,
 }
 
 
@@ -97,12 +101,13 @@ def get_architecture_liveness() -> list[dict[str, Any]]:
                        h.status AS cycle_status,
                        h.consecutive_failures,
                        COALESCE(s.paused, FALSE) AS paused
-                FROM (VALUES ('oracle'), ('spy_qqq_trend'), ('jerome_macro')) AS b(bot_id)
+                FROM unnest(%s::text[]) AS b(bot_id)
                 LEFT JOIN bot_portfolio p ON p.bot_id = b.bot_id
                 LEFT JOIN bot_cycle_health h ON h.bot_id = b.bot_id
                 LEFT JOIN bots_state s ON s.bot_id = b.bot_id
                 ORDER BY b.bot_id
-                """
+                """,
+                (list(ACTIVE_BOTS),),
             )
             columns = [description[0] for description in cur.description]
             return [dict(zip(columns, row)) for row in cur.fetchall()]
@@ -126,11 +131,12 @@ def evaluate_liveness(
                     SELECT b.bot_id, COALESCE(s.paused, FALSE),
                            h.last_cycle_start, h.last_cycle_end, h.last_success_at,
                            h.cycle_count, h.consecutive_failures, h.last_error, h.status
-                    FROM (VALUES ('oracle'), ('spy_qqq_trend'), ('jerome_macro')) AS b(bot_id)
+                    FROM unnest(%s::text[]) AS b(bot_id)
                     LEFT JOIN bot_cycle_health h ON h.bot_id = b.bot_id
                     LEFT JOIN bots_state s ON s.bot_id = b.bot_id
                     ORDER BY b.bot_id
-                    """
+                    """,
+                    (list(ACTIVE_BOTS),),
                 )
                 rows = cur.fetchall()
     except Exception as exc:

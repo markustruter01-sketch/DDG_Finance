@@ -1,15 +1,18 @@
-"""Single source of truth: GET /fleet/equity aggregates equity & P&L for all 4 bots."""
+"""GET /fleet/equity aggregates every non-retired registered bot."""
 from __future__ import annotations
 
+import math
 import time
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter
 from loguru import logger
 
+from core.bot_registry import active_bot_ids
+
 fleet_equity_router = APIRouter()
 
 _STARTING = 100_000.0
-ACTIVE_BOT_IDS = {"oracle", "spy_qqq_trend", "jerome_macro"}
+ACTIVE_BOT_IDS = set(active_bot_ids())
 _CACHE_TTL = 30  # seconds
 
 _cache: dict = {"data": None, "ts": 0.0}
@@ -172,16 +175,33 @@ def _fetch_fleet_equity() -> dict:
             if portfolio.get("bot_id") in ACTIVE_BOT_IDS
         ]
 
-        if not portfolios:
-            raise RuntimeError("bot_portfolio returned empty — falling back")
+        found_bot_ids = {portfolio.get("bot_id") for portfolio in portfolios}
+        missing_bot_ids = sorted(ACTIVE_BOT_IDS - found_bot_ids)
+        if missing_bot_ids:
+            raise RuntimeError(
+                "bot_portfolio is incomplete; refusing partial fleet equity: "
+                f"missing={missing_bot_ids}"
+            )
 
         result: dict = {}
         _now_utc   = datetime.now(timezone.utc)
-        _STALE_SEC = 25 * 60  # bot cycles every 15 min; stale after 25 min without update
+        _STALE_SEC = 25 * 60  # existing equity rows become stale after 25 minutes
 
         for p in portfolios:
             bot_id = p["bot_id"]
-            eq      = float(p["equity_usd"] or _STARTING)
+            if bot_id == "forex_ai":
+                try:
+                    eq = float(p["equity_usd"])
+                except (TypeError, ValueError):
+                    raise RuntimeError(
+                        "forex_ai portfolio is missing a valid OANDA USD NAV"
+                    ) from None
+                if not math.isfinite(eq) or eq <= 0:
+                    raise RuntimeError(
+                        f"forex_ai portfolio has invalid OANDA USD NAV: {eq!r}"
+                    )
+            else:
+                eq = float(p["equity_usd"] or _STARTING)
             start   = float(p["starting_usd"] or _STARTING)
             cash    = float(p["cash_usd"] or 0.0)
             pos_raw = p.get("positions") or []
@@ -195,13 +215,15 @@ def _fetch_fleet_equity() -> dict:
                 stale = True
             elif isinstance(upd, datetime):
                 upd_aware = upd if upd.tzinfo else upd.replace(tzinfo=timezone.utc)
-                stale = (_now_utc - upd_aware).total_seconds() > _STALE_SEC
+                stale_after = 3 * 60 * 60 if bot_id == "forex_ai" else _STALE_SEC
+                stale = (_now_utc - upd_aware).total_seconds() > stale_after
             else:
                 try:
                     upd_dt = datetime.fromisoformat(str(upd).replace("Z", "+00:00"))
                     if upd_dt.tzinfo is None:
                         upd_dt = upd_dt.replace(tzinfo=timezone.utc)
-                    stale = (_now_utc - upd_dt).total_seconds() > _STALE_SEC
+                    stale_after = 3 * 60 * 60 if bot_id == "forex_ai" else _STALE_SEC
+                    stale = (_now_utc - upd_dt).total_seconds() > stale_after
                 except Exception:
                     stale = False
 
@@ -300,7 +322,7 @@ def _fetch_fleet_equity() -> dict:
 
 @fleet_equity_router.get("/fleet/equity")
 async def fleet_equity():
-    """Return consistent equity & P&L for all 9 bots. 30-second server-side cache."""
+    """Return consistent equity and P&L for all non-retired registered bots."""
     now = time.time()
     if _cache["data"] is not None and (now - _cache["ts"]) < _CACHE_TTL:
         return _cache["data"]

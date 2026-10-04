@@ -10,9 +10,11 @@ from typing import Any
 
 from loguru import logger
 
-EXPECTED_BOTS = ("oracle", "spy_qqq_trend", "jerome_macro")
-# The runner writes bot_portfolio once per cycle. All three bots use
-# LOOP_SLEEP_SECONDS = 3600 (kraken-bot/config.py lines 34, 70, 109), so a
+from core.bot_registry import active_bot_ids
+
+EXPECTED_BOTS = tuple(active_bot_ids())
+# The runner writes bot_portfolio once per cycle. Current bots use hourly
+# cycles, so a
 # healthy bot's row is routinely up to an hour old. Two missed cycles means
 # the runner has stopped, not that it is between beats. The runner itself
 # uses three intervals for lease loss (kraken-bot/runner.py:357); this is

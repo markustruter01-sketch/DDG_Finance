@@ -23,6 +23,13 @@ class _Cursor:
         return False
 
     def execute(self, sql, params=None):
+        params = () if params is None else params
+        placeholders = sql.count("%s")
+        if placeholders != len(params):
+            raise AssertionError(
+                f"SQL placeholder mismatch: {placeholders} placeholders "
+                f"for {len(params)} parameters"
+            )
         self.sql = sql
         self.params = params
 

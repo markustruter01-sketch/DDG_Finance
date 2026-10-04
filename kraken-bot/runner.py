@@ -127,19 +127,26 @@ except Exception as _lock_exc:
     _refresh_runner_lock = None
     _release_runner_locks = None
 
-# Bot registry: (canonical_bot_id, leaf_module_name, leaf_function_name).
-# Each registered strategy is checked against its profile and canonical DB row
-# before any cycle thread is allowed to start.
+# Map registered identities to leaf strategies; the registry controls which
+# non-retired bots receive a runner lease and cycle-health record.
+from core.bot_registry import active_bot_ids as _registry_active_bot_ids
+
+_BOT_RUNNERS = {
+    "oracle": ("asia_trend_strategy", "run_asia_cycle"),
+    "jerome_macro": ("bot3_hard_assets_strategy", "run_bot3_cycle"),
+    "spy_qqq_trend": ("bot2_momentum_strategy", "run_bot2_cycle"),
+    "forex_ai": ("forex_ai_strategy", "run_forex_cycle"),
+}
+_registered_ids = _registry_active_bot_ids()
+_unregistered_ids = set(_registered_ids) - set(_BOT_RUNNERS)
+if _unregistered_ids:
+    raise RuntimeError(
+        f"Runner has no leaf strategy for registered bots: {sorted(_unregistered_ids)}"
+    )
 BOTS = [
-    # Consolidated Bot 1: US Core + Asia-Pacific + Emerging Markets.
-    # bot2_spy_qqq and jerome_macro remain registered for their future
-    # validation runs, but are paused until their accounts are reset.
-    ("oracle",        "asia_trend_strategy", "run_asia_cycle"),
-    # Bot 3 wiring only: the leaf module remains permanently paused until
-    # explicit activation. It owns the same reserved Jerome profile/account
-    # but ignores the legacy EM universe and vault symbols.
-    ("jerome_macro",  "bot3_hard_assets_strategy", "run_bot3_cycle"),
-    ("spy_qqq_trend", "bot2_momentum_strategy", "run_bot2_cycle"),
+    (bot_id, *_BOT_RUNNERS[bot_id])
+    for bot_id in _BOT_RUNNERS
+    if bot_id in _registered_ids
 ]
 
 RUNNER_ENVIRONMENT = os.environ.get(
@@ -649,6 +656,12 @@ def _write_portfolio_from_alpaca(bot_id: str, profile: dict) -> bool:
 
 def _refresh_paused_portfolio(bot_id: str, profile: dict) -> None:
     """Refresh live portfolio state without affecting cycle health on failure."""
+    if bot_id == "forex_ai":
+        # The Forex cycle is read-only and is the only valid OANDA portfolio
+        # refresh path; do not send it through the Alpaca portfolio helper.
+        module = importlib.import_module("forex_ai_strategy")
+        module.run_forex_cycle(profile=profile, db_id=profile.get("db_id"))
+        return
     try:
         if not _write_portfolio_from_alpaca(bot_id, profile):
             logger.error(
@@ -849,6 +862,18 @@ def _run_bot_loop(bot_id: str, module_name: str, fn_name: str):
                     consecutive_errors=0,
                     error=None,
                 )
+                if bot_id == "forex_ai":
+                    # This strategy only reads account summary/open positions;
+                    # refresh its USD NAV while keeping all trading disabled.
+                    cycle_fn(profile=profile, db_id=db_id)
+                    _record_cycle_liveness(
+                        bot_id,
+                        cycle_started_at,
+                        datetime.now(timezone.utc),
+                        cycle_count,
+                        "read_only",
+                        success=True,
+                    )
             elif profile_paused or db_paused:
                 logger.info(
                     f"[{bot_id}] Paused — "

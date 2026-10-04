@@ -126,14 +126,31 @@ BOT_REGISTRY: dict[str, BotEntry] = {
         exchange="oanda",
         starting_capital=100_000,
         db_id=None,
-        status="active",
+        status="retired",
         display_order=4,
         legacy_aliases=("navigator", "Navigator"),
         trading_hours="forex_session",
         cycle_minutes=720,
         color="blue",
     ),
-
+    "forex_ai": BotEntry(
+        id="forex_ai",
+        display_name="Forex",
+        short_name="Forex",
+        icon="💱",
+        strategy_label="AI Currency Trading",
+        asset_class="forex",
+        exchange="oanda",
+        starting_capital=100_000,
+        db_id=None,
+        status="paused",
+        display_order=4,
+        legacy_aliases=(),
+        trading_hours="forex_session",
+        cycle_minutes=60,
+        color="blue",
+        subtitle="AI Currency Trading",
+    ),
 }
 
 
@@ -161,6 +178,10 @@ def all_bots() -> list[BotEntry]:
 def active_bots() -> list[BotEntry]:
     """Only currently-active bots."""
     return [b for b in all_bots() if b.status == "active"]
+
+def active_bot_ids() -> list[str]:
+    """Canonical IDs for every non-retired bot, including paused bots."""
+    return [bot.id for bot in all_bots()]
 
 def paused_bots() -> list[BotEntry]:
     """Only paused bots."""

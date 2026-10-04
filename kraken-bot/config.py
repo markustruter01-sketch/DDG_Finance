@@ -120,6 +120,15 @@ BOT_PROFILES = {
         "BOT_PAUSED":        False,
     },
 
+    "forex_ai": {
+        "display_name":      "Forex",
+        "db_id":             None,
+        "strategy_type":     "read_only_oanda",
+        "strategy_label":    "AI Currency Trading",
+        "LOOP_SLEEP_SECONDS": 3600,
+        "STARTING_CAPITAL":  100_000,
+        "BOT_PAUSED":        True,
+    },
 }
 
 BOT_ID = os.environ.get("BOT_ID", "oracle")

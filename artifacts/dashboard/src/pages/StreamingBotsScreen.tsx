@@ -14,6 +14,7 @@ const STATIC_BOTS: Array<{ id: string; exchange: string; asset_class: string; co
   { id: "oracle", exchange: "alpaca", asset_class: "stocks", color: "purple", status: "active" },
   { id: "spy_qqq_trend", exchange: "alpaca", asset_class: "equity_etf", color: "cyan", status: "active" },
   { id: "jerome_macro", exchange: "alpaca", asset_class: "macro_etf", color: "orange", status: "active" },
+  { id: "forex_ai", exchange: "oanda", asset_class: "forex", color: "blue", status: "paused" },
   // Retired identities stay out of the runtime fallback.
 ];
 
@@ -298,6 +299,18 @@ export default function StreamingBotsScreen() {
       recentTradesAttributionUnavailable: journalHasUnattributedTrades,
       recentTradesLoading: journalQuery.isLoading,
       recentTradesError: journalQuery.isError,
+    },
+    forex_ai: {
+      equity:             fleetEq?.forex_ai?.equity ?? null,
+      pnl:                fleetEq?.forex_ai?.pnl ?? null,
+      pnl_pct:            fleetEq?.forex_ai?.pnl_pct ?? null,
+      ...(fleetEq?.forex_ai?.paused != null ? { paused: fleetEq.forex_ai.paused } : {}),
+      statusUnknown:      fleetEq?.forex_ai?.paused == null,
+      openPositionCount:  fleetEq?.forex_ai?.positions ?? null,
+      openPositionSymbols: [],
+      recentTrades:       [],
+      recentTradesLoading: false,
+      recentTradesError: false,
     },
     // Retired identities stay out of the runtime map.
   };

@@ -14,6 +14,7 @@ from typing import Any
 
 from loguru import logger
 
+# Deliberately remains an Alpaca-only allowlist; forex_ai has no Alpaca vault.
 ACTIVE_BOT_IDS = ("oracle", "spy_qqq_trend", "jerome_macro")
 SKIM_RATE = 0.20
 SEED_RATE = 0.05

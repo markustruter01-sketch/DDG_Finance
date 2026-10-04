@@ -1264,12 +1264,13 @@ async def _snapshot_fleet_equity(*, dry_run: bool = False) -> dict[str, object]:
     """
     Job 7 — fires daily at 19:00 ET.
     Writes one fleet_equity_history row (date, total_equity) for the sparkline.
-    Uses all three active bot_portfolio rows as the source of truth (same as
+    Uses every non-retired bot_portfolio row as the source of truth (same as
     /fleet/equity route). Stale rows remain valid last-known equity.
     ON CONFLICT DO UPDATE keeps the latest value for each calendar date.
     """
     logger.info("Scheduler | JOB STARTING: nightly_fleet_equity_snapshot")
-    active_bot_ids = ("oracle", "spy_qqq_trend", "jerome_macro")
+    from core.bot_registry import active_bot_ids as registry_active_bot_ids
+    active_ids = registry_active_bot_ids()
     try:
         from db.postgres import get_conn, is_pg_available
         if not is_pg_available():
@@ -1281,16 +1282,16 @@ async def _snapshot_fleet_equity(*, dry_run: bool = False) -> dict[str, object]:
                 cur.execute("""
                     SELECT bot_id, equity_usd, last_updated
                     FROM bot_portfolio
-                    WHERE bot_id IN (%s, %s, %s)
-                """, active_bot_ids)
+                    WHERE bot_id = ANY(%s)
+                """, (active_ids,))
                 portfolio_rows = cur.fetchall()
 
             contributed = len(portfolio_rows)
-            if contributed < len(active_bot_ids):
-                missing = sorted(set(active_bot_ids) - {row[0] for row in portfolio_rows})
+            if contributed < len(active_ids):
+                missing = sorted(set(active_ids) - {row[0] for row in portfolio_rows})
                 logger.error(
                     "Scheduler | fleet_equity_snapshot: refusing partial total — "
-                    f"found {contributed}/{len(active_bot_ids)} active bots; missing={missing}"
+                    f"found {contributed}/{len(active_ids)} active bots; missing={missing}"
                 )
                 return {
                     "status": "skipped",
@@ -1343,7 +1344,7 @@ async def _snapshot_fleet_equity(*, dry_run: bool = False) -> dict[str, object]:
             logger.info(
                 "Scheduler | fleet_equity_snapshot: "
                 f"{'would write' if dry_run else 'writing'} ${total:,.2f} "
-                f"from {contributed}/{len(active_bot_ids)} bots; stale={stale_bots or 'none'}"
+                f"from {contributed}/{len(active_ids)} bots; stale={stale_bots or 'none'}"
             )
 
             if dry_run:

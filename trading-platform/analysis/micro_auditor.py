@@ -12,8 +12,9 @@ from typing import Any
 from loguru import logger
 
 from db.postgres import get_conn, is_pg_available
+from core.bot_registry import active_bot_ids
 
-ACTIVE_BOTS = ("oracle", "spy_qqq_trend", "jerome_macro")
+ACTIVE_BOTS = tuple(active_bot_ids())
 _LOG_DIR = Path(__file__).parent.parent / "logs"
 _LOG_DIR.mkdir(exist_ok=True)
 _MICRO_AUDIT_FILE = _LOG_DIR / "micro_audit.json"

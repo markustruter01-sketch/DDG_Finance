@@ -9,6 +9,7 @@ export const ACTIVE_BOT_IDS = [
   "oracle",
   "spy_qqq_trend",
   "jerome_macro",
+  "forex_ai",
 ] as const;
 
 export type ActiveBotId = (typeof ACTIVE_BOT_IDS)[number];

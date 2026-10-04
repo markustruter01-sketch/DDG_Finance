@@ -30,6 +30,7 @@ EQUITY_STOP_SHORTFALL_TOLERANCE = 1.0
 MISSING_STOP_SECONDS = 60.0
 MISMATCH_REQUIRED_CHECKS = 2
 RESET_CONFIRMATION_ENV_VAR = "KILL_SWITCH_RESET_CONFIRMATION"
+# Keep this Alpaca kill-switch set unchanged; Phase 2b adds forex_ai coverage.
 ACTIVE_BOTS = ("oracle", "spy_qqq_trend", "jerome_macro")
 ACCOUNT_ENV = {
     "oracle": ("ALPACA_API_KEY", "ALPACA_SECRET_KEY"),

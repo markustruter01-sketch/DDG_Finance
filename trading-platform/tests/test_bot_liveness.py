@@ -21,7 +21,13 @@ class _Cursor:
     def __exit__(self, *args):
         return False
 
-    def execute(self, *_args):
+    def execute(self, query, params=()):
+        placeholders = query.count("%s")
+        if placeholders != len(params):
+            raise AssertionError(
+                f"SQL placeholder mismatch: {placeholders} placeholders "
+                f"for {len(params)} parameters"
+            )
         return None
 
     def fetchall(self):

@@ -126,6 +126,7 @@ export interface FleetEquityData {
   oracle: BotEquity;
   spy_qqq_trend: BotEquity;
   jerome_macro: BotEquity;
+  forex_ai: BotEquity;
   buck_futures?: BotEquity;
   fleet_total: BotEquity;
   generated_at: string;

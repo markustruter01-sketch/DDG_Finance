@@ -22,11 +22,10 @@ _TP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _TP not in sys.path:
     sys.path.insert(0, _TP)
 
-from core.bot_registry import normalise_bot_id
+from core.bot_registry import active_bot_ids, normalise_bot_id
 
-# Only these currently active bots belong in fleet equity. If crypto bots are
-# added later, append their bot_ids to this allowlist.
-ACTIVE_BOT_IDS = {"spy_qqq_trend", "oracle", "jerome_macro"}
+# Includes paused but registered bots; retired identities stay excluded.
+ACTIVE_BOT_IDS = set(active_bot_ids())
 
 
 def _canonical(bot_id: str) -> str:

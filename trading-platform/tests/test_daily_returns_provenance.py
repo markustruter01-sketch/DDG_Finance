@@ -6,9 +6,10 @@ import re
 import pytest
 
 from analysis import research_ledger
+from core.bot_registry import active_bot_ids
 
 
-BOT_IDS = ("oracle", "spy_qqq_trend", "jerome_macro")
+BOT_IDS = tuple(active_bot_ids())
 SNAPSHOT_DATE = date(2026, 9, 8)
 
 
@@ -98,6 +99,7 @@ def _portfolio_rows(
         "oracle": 100_000.0,
         "spy_qqq_trend": 101_000.0,
         "jerome_macro": 102_000.0,
+        "forex_ai": 103_000.0,
     }
     last_updated = last_updated or datetime.now(timezone.utc)
     return [
@@ -136,6 +138,7 @@ def test_fresh_portfolio_writes_provenance_and_computes_return(monkeypatch):
             "oracle": 99_000.0,
             "spy_qqq_trend": 100_000.0,
             "jerome_macro": 101_000.0,
+            "forex_ai": 102_000.0,
         },
     )
     degradation_calls = []
@@ -197,14 +200,14 @@ def test_stale_portfolio_writes_null_return_and_records_degradation(monkeypatch)
     result = _run_snapshot(monkeypatch, cursor, degradation_calls)
     oracle = _insert_for(cursor, "oracle")
 
-    assert result["stale_count"] == 3
+    assert result["stale_count"] == len(BOT_IDS)
     assert result["skipped_count"] == 0
     assert oracle[3] == 100_000.0
     assert oracle[4] is None
     assert oracle[12] == "bot_portfolio_stale:last_updated_exceeded_threshold"
     assert oracle[13] == "equity_pct_change_stale_last_known"
     assert oracle[14] == stale_at
-    assert len(degradation_calls) == 3
+    assert len(degradation_calls) == len(BOT_IDS)
     assert {call["error_type"] for call in degradation_calls} == {
         "daily_return_portfolio_stale"
     }
@@ -218,6 +221,7 @@ def test_portfolio_51_minutes_old_is_fresh_and_gets_return(monkeypatch):
             "oracle": 99_000.0,
             "spy_qqq_trend": 100_000.0,
             "jerome_macro": 101_000.0,
+            "forex_ai": 102_000.0,
         },
     )
     degradation_calls = []
@@ -259,6 +263,7 @@ def test_unusable_equity_skips_row_and_records_degradation(monkeypatch, bad_equi
         "oracle": bad_equity,
         "spy_qqq_trend": 101_000.0,
         "jerome_macro": 102_000.0,
+        "forex_ai": 103_000.0,
     }
     cursor = _SnapshotCursor(
         _portfolio_rows(equities=equities),
@@ -272,7 +277,7 @@ def test_unusable_equity_skips_row_and_records_degradation(monkeypatch, bad_equi
     assert result["outcomes"][0]["bot_id"] == "oracle"
     assert result["outcomes"][0]["status"] == "skipped"
     assert all(params[1] != "oracle" for params in cursor.insert_params)
-    assert len(cursor.insert_params) == 2
+    assert len(cursor.insert_params) == len(BOT_IDS) - 1
     assert len(degradation_calls) == 1
     assert degradation_calls[0]["error_type"] == "daily_return_invalid_equity"
     assert degradation_calls[0]["bot_id"] == "oracle"
@@ -297,7 +302,7 @@ def test_canonical_existing_row_is_not_overwritten(monkeypatch):
         "status": "skipped",
         "reason": "canonical_row_exists",
     }
-    assert len(cursor.insert_params) == 3
+    assert len(cursor.insert_params) == len(BOT_IDS)
     assert any(
         call["error_type"] == "daily_return_canonical_conflict"
         for call in degradation_calls
@@ -311,6 +316,7 @@ def test_one_stale_bot_does_not_block_other_bots(monkeypatch):
         ("oracle", 100_000.0, 50_000.0, [], fresh),
         ("spy_qqq_trend", 101_000.0, 50_000.0, [], stale),
         ("jerome_macro", 102_000.0, 50_000.0, [], fresh),
+        ("forex_ai", 103_000.0, 50_000.0, [], fresh),
     ]
     cursor = _SnapshotCursor(
         rows,
@@ -320,7 +326,7 @@ def test_one_stale_bot_does_not_block_other_bots(monkeypatch):
 
     result = _run_snapshot(monkeypatch, cursor, degradation_calls)
 
-    assert len(cursor.insert_params) == 3
+    assert len(cursor.insert_params) == len(BOT_IDS)
     assert result["stale_count"] == 1
     assert result["skipped_count"] == 0
     assert {outcome["bot_id"] for outcome in result["outcomes"]} == set(BOT_IDS)

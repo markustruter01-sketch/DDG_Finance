@@ -149,13 +149,10 @@ async def status() -> dict:
 
 
 from core.scheduler import is_auto_trading_enabled
+from core.bot_registry import active_bot_ids
 
 
-_HEALTH_ACTIVE_BOTS = (
-    "oracle",
-    "spy_qqq_trend",
-    "jerome_macro",
-)
+_HEALTH_ACTIVE_BOTS = tuple(active_bot_ids())
 from core.bot_liveness import PORTFOLIO_STALE_THRESHOLDS
 
 _HEALTH_STALE_THRESHOLDS = PORTFOLIO_STALE_THRESHOLDS
@@ -1346,13 +1343,13 @@ async def fleet_weekly_review():
                     COALESCE(SUM(equity_usd), 0),
                     COALESCE(SUM(equity_usd) FILTER (WHERE bot_id = 'oracle'), 0)
                 FROM fleet_equity_snapshots
-                WHERE bot_id IN ('oracle', 'spy_qqq_trend', 'jerome_macro')
+                WHERE bot_id = ANY(%s)
                   AND snapshot_ts = (
                       SELECT MAX(snapshot_ts)
                       FROM fleet_equity_snapshots
-                      WHERE bot_id IN ('oracle', 'spy_qqq_trend', 'jerome_macro')
+                      WHERE bot_id = ANY(%s)
                   )
-            """)
+            """, (list(_HEALTH_ACTIVE_BOTS), list(_HEALTH_ACTIVE_BOTS)))
             eq_row = cur.fetchone()
             total_eq  = float(eq_row[0]) if eq_row and eq_row[0] else 0.0
             oracle_eq = float(eq_row[1]) if eq_row and eq_row[1] else 0.0

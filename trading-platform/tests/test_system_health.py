@@ -19,7 +19,13 @@ class _HealthCursor:
     def __exit__(self, *args):
         return False
 
-    def execute(self, query, *_params):
+    def execute(self, query, params=()):
+        placeholders = query.count("%s")
+        if placeholders != len(params):
+            raise AssertionError(
+                f"SQL placeholder mismatch: {placeholders} placeholders "
+                f"for {len(params)} parameters"
+            )
         if "system_degradations" in query:
             self.description = [
                 ("component",), ("severity",), ("error_type",), ("message",), ("ts",),

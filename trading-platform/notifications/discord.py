@@ -175,8 +175,10 @@ COLOR_BLUE   = 0x3B82F6
 COLOR_PURPLE = 0xA855F7
 COLOR_ORANGE = 0xF97316
 
-# Active bots in display order — buck_futures retired May 2026
-_ACTIVE_BOTS = ["oracle", "spy_qqq_trend", "jerome_macro"]
+# Non-retired bot identities in registry display order, including paused bots.
+from core.bot_registry import active_bot_ids
+
+_ACTIVE_BOTS = active_bot_ids()
 
 # Dashboard/Discord use the canonical display id, while the ETF engine still
 # persists US Core positions under its leaf-strategy id.

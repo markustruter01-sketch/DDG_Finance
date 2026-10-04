@@ -83,6 +83,9 @@ UNIVERSE_SIZE = 500
 MIN_MEDIAN_CLOSE = 5.0
 MAX_DEPLOYMENT = 1.00
 STOP_LOSS_PCT = 0.20
+SPY_SLEEVE_SYMBOL = "SPY"
+SPY_SLEEVE_WEIGHT = float(BOT2_PROFILE["SPY_SLEEVE_WEIGHT"])
+SPY_SLEEVE_STOP_PCT = float(BOT2_PROFILE["SPY_SLEEVE_STOP_PCT"])
 MOMENTUM_ARTEFACT_THRESHOLD = float(
     os.environ.get("BOT2_MOMENTUM_ARTEFACT_THRESHOLD", "3.0")
 )
@@ -178,6 +181,8 @@ def rank_momentum(
     observations = last_screen_observations()
     ranked = []
     for symbol in screened:
+        if canonical_symbol(symbol) == SPY_SLEEVE_SYMBOL:
+            continue
         score = momentum_12_1(bars_by_symbol.get(symbol, []), as_of)
         if score is not None and math.isfinite(score):
             if score > MOMENTUM_ARTEFACT_THRESHOLD:
@@ -694,6 +699,7 @@ def build_stop_cooldowns(
         normalized_symbol = canonical_symbol(symbol)
         if (
             not normalized_symbol
+            or normalized_symbol == SPY_SLEEVE_SYMBOL
             or closed_at is None
             or not _is_stop_filled_exit_reason(exit_reason)
         ):
@@ -775,24 +781,43 @@ def build_target_allocation_plan(
     ranked: Sequence[dict[str, Any]],
     multiplier: float,
     benched_symbols: set[str] | frozenset[str] = frozenset(),
+    spy_sleeve_weight: float = 0.0,
 ) -> dict[str, Any]:
-    """Keep original rank slots fixed; benched/unused allocation remains in SGOV."""
+    """Keep original stock rank slots fixed and reserve the optional SPY sleeve."""
     if not math.isfinite(float(multiplier)) or not 0.0 <= float(multiplier) <= 1.0:
         raise ValueError("Bot 2 volatility multiplier must be between zero and one")
-    base = allocation_plan(equity, vault_market_value, len(ranked))
-    slot_notional = base["equal_weight_notional"]
+    if (
+        not math.isfinite(float(spy_sleeve_weight))
+        or not 0.0 <= float(spy_sleeve_weight) <= 1.0
+    ):
+        raise ValueError("Bot 2 SPY sleeve weight must be between zero and one")
+    stock_ranked = [
+        item for item in ranked
+        if canonical_symbol(item["symbol"]) != SPY_SLEEVE_SYMBOL
+    ]
+    base = allocation_plan(equity, vault_market_value, len(stock_ranked))
+    spy_target = base["target_base"] * float(spy_sleeve_weight)
+    momentum_base = max(0.0, base["target_base"] - spy_target)
+    slot_notional = momentum_base / len(stock_ranked) if stock_ranked else 0.0
     scaled_notional = slot_notional * float(multiplier)
     targets: dict[str, float] = {}
-    for item in ranked:
+    for item in stock_ranked:
         symbol = canonical_symbol(item["symbol"])
         targets[symbol] = 0.0 if symbol in benched_symbols else scaled_notional
     stock_target = sum(targets.values())
-    sgov_target = max(0.0, base["target_base"] - stock_target)
+    sgov_target = max(0.0, base["target_base"] - spy_target - stock_target)
+    planned_total = spy_target + stock_target + sgov_target
+    if planned_total > base["target_base"] + 1e-8:
+        raise RuntimeError("Bot 2 allocation exceeds the sizing base")
     return {
         **base,
+        "equal_weight_notional": slot_notional,
         "slot_notional": slot_notional,
         "scaled_position_notional": scaled_notional,
         "target_allocations": targets,
+        "spy_sleeve_weight": float(spy_sleeve_weight),
+        "spy_target": spy_target,
+        "momentum_base": momentum_base,
         "stock_target": stock_target,
         "sgov_target": sgov_target,
     }
@@ -814,6 +839,49 @@ def record_open(
                 (
                     BOT_ID, canonical_symbol(symbol), int(qty), float(entry_price),
                     int(qty) * float(entry_price), float(stop_price), stop_order_id,
+                ),
+            )
+
+
+def record_spy_open(
+    qty: int, entry_price: float, stop_price: float, stop_order_id: str
+) -> None:
+    """Upsert Bot 2's one open SPY sleeve row rather than adding monthly rows."""
+    whole_qty = math.floor(float(qty))
+    entry_price = float(entry_price)
+    stop_price = float(stop_price)
+    if (
+        whole_qty < 1
+        or not math.isfinite(entry_price)
+        or entry_price <= 0
+        or not math.isfinite(stop_price)
+        or stop_price <= 0
+        or not stop_order_id
+    ):
+        raise RuntimeError("Bot 2 SPY position recording requires quantity, broker entry, and stop")
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                INSERT INTO {STRATEGY_TABLE}
+                    (bot_id, symbol, qty, entry_price, notional_usd, stop_price, stop_order_id)
+                VALUES (%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT (bot_id, symbol) WHERE status='open'
+                DO UPDATE SET
+                    qty=EXCLUDED.qty,
+                    entry_price=EXCLUDED.entry_price,
+                    notional_usd=EXCLUDED.notional_usd,
+                    stop_price=EXCLUDED.stop_price,
+                    stop_order_id=EXCLUDED.stop_order_id
+                """,
+                (
+                    BOT_ID,
+                    SPY_SLEEVE_SYMBOL,
+                    whole_qty,
+                    entry_price,
+                    whole_qty * entry_price,
+                    stop_price,
+                    str(stop_order_id),
                 ),
             )
 
@@ -852,6 +920,54 @@ def _broker_qty(client: AlpacaMomentumClient, symbol: str) -> int:
     ))
 
 
+def _settled_broker_position(
+    client: AlpacaMomentumClient,
+    symbol: str,
+    attempts: int = 10,
+) -> dict[str, Any] | None:
+    """Return a position only after two consecutive broker reads agree."""
+    canonical = canonical_symbol(symbol)
+    previous: tuple[float, float] | None = None
+    for attempt in range(attempts):
+        try:
+            matches = [
+                position
+                for position in client.positions()
+                if canonical_symbol(position.get("symbol", "")) == canonical
+            ]
+        except Exception:
+            previous = None
+            if attempt < attempts - 1:
+                time.sleep(1)
+            continue
+        if len(matches) > 1:
+            raise RuntimeError(
+                f"{canonical}: expected one broker position, found {len(matches)}"
+            )
+        position = matches[0] if matches else None
+        try:
+            qty = float(position["qty"]) if position else 0.0
+            entry_price = (
+                float(position.get("entry_price", position.get("avg_entry_price", 0)) or 0)
+                if position
+                else 0.0
+            )
+        except (TypeError, ValueError, KeyError) as exc:
+            raise RuntimeError(f"{canonical}: invalid broker position quantity/entry") from exc
+        if not math.isfinite(qty) or qty < 0 or not math.isfinite(entry_price):
+            raise RuntimeError(f"{canonical}: non-finite or negative broker position")
+        snapshot = (qty, entry_price)
+        if previous is not None and all(
+            math.isclose(old, current, rel_tol=0.0, abs_tol=1e-9)
+            for old, current in zip(previous, snapshot)
+        ):
+            return position
+        previous = snapshot
+        if attempt < attempts - 1:
+            time.sleep(1)
+    raise RuntimeError(f"{canonical}: broker quantity/average entry did not settle")
+
+
 def _owned_stop(
     client: AlpacaMomentumClient, symbol: str, recorded_id: str | None
 ) -> dict[str, Any] | None:
@@ -879,17 +995,13 @@ def _owned_stop(
     return None
 
 
-def _prepare_symbol_for_sell(
+def _cancel_symbol_orders_confirmed(
     client: AlpacaMomentumClient,
     symbol: str,
-    sell_qty: int,
     recorded_stop_id: str | None = None,
 ) -> bool:
-    """Cancel and confirm symbol orders, then verify shares are free to sell."""
+    """Confirm all recorded and listed orders for one symbol are final."""
     symbol = canonical_symbol(symbol)
-    if sell_qty < 1:
-        return False
-
     final_statuses = {
         "canceled",
         "cancelled",
@@ -1019,6 +1131,21 @@ def _prepare_symbol_for_sell(
         return False
     if not confirm_listed_symbol_orders():
         return False
+    return True
+
+
+def _prepare_symbol_for_sell(
+    client: AlpacaMomentumClient,
+    symbol: str,
+    sell_qty: int,
+    recorded_stop_id: str | None = None,
+) -> bool:
+    """Cancel and confirm symbol orders, then verify shares are free to sell."""
+    symbol = canonical_symbol(symbol)
+    if sell_qty < 1:
+        return False
+    if not _cancel_symbol_orders_confirmed(client, symbol, recorded_stop_id):
+        return False
 
     try:
         matching_positions = [
@@ -1072,21 +1199,27 @@ def _prepare_symbol_for_sell(
         )
         return False
     logger.info(
-        "Bot 2 | sell precheck passed symbol=%s sell_qty=%s "
-        "qty_available=%s confirmed_orders=%d",
+        "Bot 2 | sell precheck passed symbol=%s sell_qty=%s qty_available=%s",
         symbol,
         sell_qty,
         available_qty,
-        len(confirmed_order_ids),
     )
     return True
 
 
-def _arm_stop(client: AlpacaMomentumClient, symbol: str, qty: int, entry_price: float) -> dict[str, Any]:
+def _arm_stop(
+    client: AlpacaMomentumClient,
+    symbol: str,
+    qty: int,
+    entry_price: float,
+    stop_loss_pct: float = STOP_LOSS_PCT,
+) -> dict[str, Any]:
     whole_qty = math.floor(abs(float(qty)))
     if whole_qty < 1:
         raise RuntimeError(f"{symbol}: no whole share available for GTC stop")
-    stop_price = round(float(entry_price) * (1.0 - STOP_LOSS_PCT), 2)
+    if not math.isfinite(float(stop_loss_pct)) or not 0.0 < float(stop_loss_pct) < 1.0:
+        raise ValueError("Bot 2 stop-loss percentage must be between zero and one")
+    stop_price = round(float(entry_price) * (1.0 - float(stop_loss_pct)), 2)
     return client.submit(
         symbol, "sell", whole_qty, "stop", stop_price=stop_price,
     )
@@ -1111,6 +1244,225 @@ def _flatten_after_stop_failure(
             return
         logger.critical("Bot 2 | flatten retry after stop failure symbol=%s attempt=%s", symbol, attempt + 1)
     raise RuntimeError(f"{symbol}: stop failure could not be recovered by confirmed flatten")
+
+
+def _rebalance_spy_sleeve(
+    client: AlpacaMomentumClient,
+    target_qty: int,
+    ledger_position: dict[str, Any] | None,
+    vault_symbols: set[str] | frozenset[str] = frozenset(),
+    spy_price: float | None = None,
+) -> dict[str, Any]:
+    """Rebalance whole SPY shares, then protect and upsert the settled holding."""
+    target_qty = int(target_qty)
+    if target_qty < 0:
+        raise ValueError("Bot 2 SPY target quantity cannot be negative")
+    recorded_stop_id = (
+        str(ledger_position["stop_order_id"])
+        if ledger_position and ledger_position.get("stop_order_id")
+        else None
+    )
+    initial_position = _settled_broker_position(client, SPY_SLEEVE_SYMBOL)
+    initial_qty = math.floor(float(initial_position["qty"])) if initial_position else 0
+    initial_entry = (
+        float(initial_position.get("entry_price", initial_position.get("avg_entry_price", 0)) or 0)
+        if initial_position
+        else 0.0
+    )
+    delta = target_qty - initial_qty
+    trade_error: Exception | None = None
+    trade_attempted = False
+    fill: dict[str, Any] = {}
+
+    if delta < 0:
+        if not _prepare_symbol_for_sell(
+            client, SPY_SLEEVE_SYMBOL, -delta, recorded_stop_id
+        ):
+            # A quantity precheck may fail after the old stop was safely canceled.
+            # Reconfirm that state before restoring protection and declining the trade.
+            if not _cancel_symbol_orders_confirmed(
+                client, SPY_SLEEVE_SYMBOL, recorded_stop_id
+            ):
+                raise RuntimeError("SPY sell blocked with an unconfirmed open order")
+            trade_error = RuntimeError("SPY sell precheck did not pass")
+    elif not _cancel_symbol_orders_confirmed(
+        client, SPY_SLEEVE_SYMBOL, recorded_stop_id
+    ):
+        raise RuntimeError("SPY rebalance blocked with an unconfirmed open order")
+
+    if delta and trade_error is None:
+        order_qty = abs(delta)
+        if delta > 0:
+            if spy_price is None:
+                spy_price = client.latest_price(SPY_SLEEVE_SYMBOL)
+            spy_price = float(spy_price)
+            if not math.isfinite(spy_price) or spy_price <= 0:
+                raise RuntimeError("SPY buy blocked without a valid live price")
+            fresh_account = client.account()
+            fresh_positions = client.positions()
+            allowed, projection = fresh_buy_guard(
+                fresh_account,
+                fresh_positions,
+                order_qty * spy_price,
+                max_deployment=MAX_DEPLOYMENT,
+                excluded_symbols=set(vault_symbols) | {PARK_SYMBOL},
+            )
+            if not allowed:
+                trade_error = RuntimeError("SPY buy blocked by cash/deployment guard")
+                logger.critical(
+                    "Bot 2 | SPY BUY BLOCKED qty=%s projected_cash=%.2f deployment=%.2f",
+                    order_qty,
+                    projection["projected_cash"],
+                    projection["projected_deployment"],
+                )
+        if trade_error is None:
+            try:
+                trade_attempted = True
+                order = client.submit(
+                    SPY_SLEEVE_SYMBOL,
+                    "buy" if delta > 0 else "sell",
+                    order_qty,
+                    "market",
+                )
+                order_id = str(order.get("id") or "")
+                if not order_id:
+                    raise RuntimeError("SPY market order returned no order ID")
+                fill = client.wait_for_fill(order_id)
+                fill_status = str(fill.get("status", "")).lower()
+                if fill_status not in {"filled", "partially_filled"}:
+                    raise RuntimeError(
+                        f"SPY market order ended with status={fill_status or 'unknown'}"
+                    )
+            except Exception as exc:
+                trade_error = exc
+                logger.critical(
+                    "Bot 2 | SPY rebalance order/fill failed; restoring protection "
+                    "from broker state error=%s",
+                    exc,
+                )
+
+    if not _cancel_symbol_orders_confirmed(
+        client, SPY_SLEEVE_SYMBOL, recorded_stop_id
+    ):
+        raise RuntimeError("SPY rebalance ended with an unconfirmed open order")
+
+    settled_position = _settled_broker_position(client, SPY_SLEEVE_SYMBOL)
+    settled_qty = math.floor(float(settled_position["qty"])) if settled_position else 0
+    broker_entry = (
+        float(
+            settled_position.get(
+                "entry_price", settled_position.get("avg_entry_price", 0)
+            )
+            or 0
+        )
+        if settled_position
+        else 0.0
+    )
+    if settled_qty > 0:
+        if not math.isfinite(broker_entry) or broker_entry <= 0:
+            _flatten_after_stop_failure(
+                client, SPY_SLEEVE_SYMBOL, recorded_stop_id
+            )
+            if ledger_position:
+                record_close(SPY_SLEEVE_SYMBOL, "stop_arm_failed_flattened", None)
+            raise RuntimeError("SPY broker average entry is invalid; position flattened")
+        stop_price = round(broker_entry * (1.0 - SPY_SLEEVE_STOP_PCT), 2)
+        stop_id: str | None = None
+        try:
+            stop = _arm_stop(
+                client,
+                SPY_SLEEVE_SYMBOL,
+                settled_qty,
+                broker_entry,
+                SPY_SLEEVE_STOP_PCT,
+            )
+            stop_id = str(stop.get("id") or "")
+            if not stop_id:
+                raise RuntimeError("SPY protective stop returned no order ID")
+            stop_order = client.get_order(stop_id)
+            stop_status = str(stop_order.get("status", "")).lower()
+            confirmed_qty = math.floor(float(stop_order.get("qty") or 0))
+            confirmed_stop_price = float(stop_order.get("stop_price") or 0)
+            if (
+                str(stop_order.get("id") or "") != stop_id
+                or canonical_symbol(stop_order.get("symbol", "")) != SPY_SLEEVE_SYMBOL
+                or str(stop_order.get("side", "")).lower() != "sell"
+                or str(stop_order.get("type", "")).lower() != "stop"
+                or str(stop_order.get("time_in_force", "")).lower() != "gtc"
+                or confirmed_qty != settled_qty
+                or not math.isclose(
+                    confirmed_stop_price,
+                    stop_price,
+                    rel_tol=0.0,
+                    abs_tol=0.01,
+                )
+                or stop_status not in {
+                    "new",
+                    "accepted",
+                    "pending_new",
+                    "accepted_for_bidding",
+                    "held",
+                }
+            ):
+                raise RuntimeError(
+                    f"SPY protective stop was not confirmed active status={stop_status or 'unknown'}"
+                )
+        except Exception as exc:
+            try:
+                _flatten_after_stop_failure(
+                    client,
+                    SPY_SLEEVE_SYMBOL,
+                    stop_id or recorded_stop_id,
+                )
+            except Exception as flatten_exc:
+                logger.critical(
+                    "Bot 2 | SPY stop confirmation and emergency flatten both failed "
+                    "stop_error=%s flatten_error=%s",
+                    exc,
+                    flatten_exc,
+                )
+                raise RuntimeError(
+                    f"SPY stop failed and emergency flatten was blocked: {flatten_exc}"
+                ) from exc
+            if ledger_position:
+                record_close(SPY_SLEEVE_SYMBOL, "stop_arm_failed_flattened", None)
+            raise RuntimeError(f"SPY protective stop failed: {exc}") from exc
+        record_spy_open(settled_qty, broker_entry, stop_price, stop_id)
+    elif ledger_position:
+        fill_price = float(fill.get("filled_avg_price") or 0)
+        realised_pnl = (
+            (fill_price - initial_entry) * initial_qty if fill_price > 0 else None
+        )
+        record_close(
+            SPY_SLEEVE_SYMBOL,
+            "rebalance_full_exit" if target_qty == 0 else "rebalance_position_flat",
+            realised_pnl,
+        )
+
+    if trade_error is not None:
+        if trade_attempted:
+            raise RuntimeError(f"SPY rebalance order did not complete: {trade_error}") from trade_error
+        return {
+            "status": "blocked",
+            "orders": 0,
+            "target_qty": target_qty,
+            "settled_qty": settled_qty,
+            "entry_price": broker_entry,
+            "reason": str(trade_error),
+        }
+    if settled_qty != target_qty:
+        raise RuntimeError(
+            f"SPY rebalance quantity mismatch target={target_qty} settled={settled_qty}"
+        )
+    return {
+        "status": "complete",
+        "orders": 1 if trade_attempted else 0,
+        "target_qty": target_qty,
+        "settled_qty": settled_qty,
+        "entry_price": broker_entry,
+        "stop_order_id": stop_id if settled_qty > 0 else None,
+        "stop_price": stop_price if settled_qty > 0 else None,
+    }
 
 
 def _place_confirmed_entry(
@@ -1203,14 +1555,99 @@ def _reconcile_protective_stops(
                         symbol, realised_pnl,
                     )
             continue
+        if symbol == SPY_SLEEVE_SYMBOL:
+            broker_position = _settled_broker_position(client, symbol)
+            if broker_position is None:
+                continue
+            stop_qty = math.floor(float(broker_position["qty"]))
+            stop_entry = float(
+                broker_position.get(
+                    "entry_price", broker_position.get("avg_entry_price", 0)
+                )
+                or 0
+            )
+            if stop_qty < 1 or not math.isfinite(stop_entry) or stop_entry <= 0:
+                raise RuntimeError(
+                    "SPY stop reconciliation requires settled broker quantity and entry"
+                )
+            expected_stop_price = round(
+                stop_entry * (1.0 - SPY_SLEEVE_STOP_PCT), 2
+            )
+            existing_stop = _owned_stop(
+                client, symbol, position.get("stop_order_id")
+            )
+            if existing_stop:
+                existing_stop_id = str(existing_stop.get("id") or "")
+                try:
+                    verified_stop = client.get_order(existing_stop_id)
+                    verified_qty = math.floor(float(verified_stop.get("qty") or 0))
+                    verified_price = float(verified_stop.get("stop_price") or 0)
+                    active_status = str(verified_stop.get("status", "")).lower() in {
+                        "new",
+                        "accepted",
+                        "pending_new",
+                        "accepted_for_bidding",
+                        "held",
+                    }
+                except Exception:
+                    verified_stop = {}
+                    verified_qty = 0
+                    verified_price = 0.0
+                    active_status = False
+                if (
+                    active_status
+                    and str(verified_stop.get("id") or "") == existing_stop_id
+                    and canonical_symbol(verified_stop.get("symbol", "")) == symbol
+                    and str(verified_stop.get("side", "")).lower() == "sell"
+                    and str(verified_stop.get("type", "")).lower() == "stop"
+                    and str(verified_stop.get("time_in_force", "")).lower() == "gtc"
+                    and verified_qty == stop_qty
+                    and math.isclose(
+                        verified_price,
+                        expected_stop_price,
+                        rel_tol=0.0,
+                        abs_tol=0.01,
+                    )
+                ):
+                    if (
+                        int(position["qty"]) != stop_qty
+                        or not math.isclose(
+                            float(position["entry_price"]),
+                            stop_entry,
+                            rel_tol=0.0,
+                            abs_tol=1e-9,
+                        )
+                        or float(position["stop_price"]) != expected_stop_price
+                        or str(position.get("stop_order_id") or "") != existing_stop_id
+                    ):
+                        record_spy_open(
+                            stop_qty,
+                            stop_entry,
+                            expected_stop_price,
+                            existing_stop_id,
+                        )
+                    continue
+            _rebalance_spy_sleeve(
+                client,
+                stop_qty,
+                position,
+            )
+            continue
         if _owned_stop(client, symbol, position.get("stop_order_id")):
             continue
+        stop_qty = int(position["qty"])
+        stop_entry = float(position["entry_price"])
+        stop_loss_pct = STOP_LOSS_PCT
         stop = None
         first_error: Exception | None = None
         for _ in range(2):
             try:
                 stop = _arm_stop(
-                    client, symbol, int(position["qty"]), float(position["entry_price"])
+                    client,
+                    symbol,
+                    stop_qty,
+                    stop_entry,
+                    stop_loss_pct,
                 )
                 break
             except Exception as exc:
@@ -1274,6 +1711,10 @@ def _build_book(
 ) -> tuple[list[dict[str, float | str]], set[str], dict[str, list[dict[str, Any]]]]:
     assets = client.assets()
     candidate_assets, asset_report = eligible_asset_records(assets)
+    candidate_assets = [
+        asset for asset in candidate_assets
+        if canonical_symbol(asset.get("symbol", "")) != SPY_SLEEVE_SYMBOL
+    ]
     logger.info(
         "Bot 2 | shared asset filter total=%d asset_eligible=%d "
         "excluded_name=%d excluded_symbol_structure=%d",
@@ -1287,13 +1728,22 @@ def _build_book(
         for asset in candidate_assets
     ]
     bars = client.daily_bars(symbols, as_of)
-    set_screen_data(assets, bars)
+    screen_assets = [
+        asset for asset in assets
+        if canonical_symbol(asset.get("symbol", "")) != SPY_SLEEVE_SYMBOL
+    ]
+    set_screen_data(screen_assets, bars)
     screened, funnel = shared_screen_universe(
         as_of,
         UNIVERSE_SIZE,
         MIN_PRIOR_SESSIONS,
         MIN_MEDIAN_CLOSE,
     )
+    screened = {
+        canonical_symbol(symbol)
+        for symbol in screened
+        if canonical_symbol(symbol) != SPY_SLEEVE_SYMBOL
+    }
     ranked = rank_momentum(screened, bars, as_of)
     logger.info(
         "Bot 2 | LIVE_FUNNEL %s ranked_top50=%d",
@@ -1408,9 +1858,15 @@ def run_bot2_cycle(
         if canonical_symbol(item["symbol"]) not in cooldowns
     ]
     volatility = load_bot2_volatility(as_of)
-    desired = {str(item["symbol"]) for item in eligible_ranked}
+    desired = {
+        canonical_symbol(item["symbol"])
+        for item in eligible_ranked
+        if canonical_symbol(item["symbol"]) != SPY_SLEEVE_SYMBOL
+    }
     orders = 0
     for position in db_positions:
+        if canonical_symbol(position["symbol"]) == SPY_SLEEVE_SYMBOL:
+            continue
         if position["symbol"] not in desired:
             if _sell_confirmed(client, position, "fell_out_of_top_50"):
                 orders += 1
@@ -1427,6 +1883,7 @@ def run_bot2_cycle(
         ranked,
         volatility["multiplier"],
         set(cooldowns),
+        spy_sleeve_weight=SPY_SLEEVE_WEIGHT,
     )
     logger.info(
         "Bot 2 | VOL_SCALE as_of=%s multiplier=%.6f annualized_volatility=%s "
@@ -1448,6 +1905,26 @@ def run_bot2_cycle(
             "Bot 2 | COOLDOWN symbol=%s exit_reason=%s release_date=%s",
             symbol, details["exit_reason"], details["release_date"],
         )
+    spy_price = client.latest_price(SPY_SLEEVE_SYMBOL)
+    if not math.isfinite(spy_price) or spy_price <= 0:
+        raise RuntimeError("Bot 2 cannot rebalance SPY without a valid live price")
+    spy_target_qty = math.floor(plan["spy_target"] / spy_price)
+    spy_ledger_position = next(
+        (
+            position for position in db_positions
+            if canonical_symbol(position["symbol"]) == SPY_SLEEVE_SYMBOL
+        ),
+        None,
+    )
+    spy_rebalance = _rebalance_spy_sleeve(
+        client,
+        spy_target_qty,
+        spy_ledger_position,
+        vault_symbols,
+        spy_price,
+    )
+    orders += int(spy_rebalance["orders"])
+    broker_positions = client.positions()
     held = {
         canonical_symbol(p["symbol"])
         for p in broker_positions
@@ -1490,6 +1967,7 @@ def run_bot2_cycle(
         "cooldown_history_available": history_available,
         "volatility": volatility,
         "allocation_plan": plan,
+        "spy_rebalance": spy_rebalance,
     }
 
 
@@ -1527,6 +2005,26 @@ def dry_run_cycle() -> dict[str, Any]:
         ranked,
         volatility["multiplier"],
         set(cooldowns),
+        spy_sleeve_weight=SPY_SLEEVE_WEIGHT,
+    )
+    if len(ranked) < MAX_POSITIONS:
+        raise RuntimeError(
+            f"Bot 2 dry run requires {MAX_POSITIONS} ranked stocks; got {len(ranked)}"
+        )
+    spy_price = client.latest_price(SPY_SLEEVE_SYMBOL)
+    if not math.isfinite(spy_price) or spy_price <= 0:
+        raise RuntimeError("Bot 2 dry run cannot plan SPY without a valid live price")
+    spy_target_qty = math.floor(plan["spy_target"] / spy_price)
+    planned_spy_notional = spy_target_qty * spy_price
+    held_spy_qty = sum(
+        max(0.0, float(position.get("qty", 0) or 0))
+        for position in positions
+        if canonical_symbol(position.get("symbol")) == SPY_SLEEVE_SYMBOL
+    )
+    held_spy_value = sum(
+        max(0.0, float(position.get("market_value", 0) or 0))
+        for position in positions
+        if canonical_symbol(position.get("symbol")) == SPY_SLEEVE_SYMBOL
     )
     current_sgov_value = sum(
         max(0.0, float(position.get("market_value", 0) or 0))
@@ -1540,8 +2038,16 @@ def dry_run_cycle() -> dict[str, Any]:
         close = float(item["price"])
         qty = math.floor(target_notional / close) if target_notional > 0 and close > 0 else 0
         planned_stock_notional += qty * close
-    sgov_target = max(0.0, plan["target_base"] - planned_stock_notional)
-    total_planned = vault_market_value + planned_stock_notional + sgov_target
+    sgov_target = max(
+        0.0,
+        plan["target_base"] - planned_spy_notional - planned_stock_notional,
+    )
+    total_planned = (
+        vault_market_value
+        + planned_spy_notional
+        + planned_stock_notional
+        + sgov_target
+    )
     observed_exit_reasons = sorted({
         str(row[2]) for row in closed_rows if row[2] is not None
     })
@@ -1554,6 +2060,15 @@ def dry_run_cycle() -> dict[str, Any]:
     print(f"DRY_RUN_VAULT | symbols={sorted(vault_symbols)} | market_value=${vault_market_value:,.2f}")
     print(f"DRY_RUN_INVESTABLE_BASE | ${plan['investable_base']:,.2f}")
     print(f"DRY_RUN_UNIVERSE_SIZE | {len(screened)}")
+    print(
+        f"DRY_RUN_SPY | weight={SPY_SLEEVE_WEIGHT:.2%} "
+        f"| stop={SPY_SLEEVE_STOP_PCT:.2%} below_broker_average_entry "
+        f"| price=${spy_price:,.2f} "
+        f"| target_notional=${plan['spy_target']:,.2f} "
+        f"| target_shares={spy_target_qty} "
+        f"| planned_value=${planned_spy_notional:,.2f} "
+        f"| held_shares={held_spy_qty:g} | held_value=${held_spy_value:,.2f}"
+    )
     print(
         "DRY_RUN_VOLATILITY | "
         f"multiplier={volatility['multiplier']:.6f} "
@@ -1620,6 +2135,7 @@ def dry_run_cycle() -> dict[str, Any]:
     )
     print(f"DRY_RUN_SLOT_NOTIONAL | ${plan['slot_notional']:,.2f}")
     print(f"DRY_RUN_SCALED_POSITION_NOTIONAL | ${plan['scaled_position_notional']:,.2f}")
+    print(f"DRY_RUN_MOMENTUM_BASE | ${plan['momentum_base']:,.2f}")
     print(f"DRY_RUN_STOCK_TARGET | ${planned_stock_notional:,.2f}")
     print(
         f"DRY_RUN_SGOV | target=${sgov_target:,.2f} "
@@ -1640,6 +2156,9 @@ def dry_run_cycle() -> dict[str, Any]:
         "benched": cooldowns,
         "volatility": volatility,
         "stock_target": planned_stock_notional,
+        "spy_target": plan["spy_target"],
+        "spy_target_qty": spy_target_qty,
+        "spy_planned_notional": planned_spy_notional,
         "sgov_target": sgov_target,
         "total_planned": total_planned,
         "orders_submitted": 0,

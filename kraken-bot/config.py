@@ -114,6 +114,8 @@ BOT_PROFILES = {
         "MIN_MEDIAN_CLOSE": 5.0,
         "STOP_LOSS_PCT":     0.20,
         "MAX_DEPLOYMENT":    1.00,
+        "SPY_SLEEVE_WEIGHT": 0.20,
+        "SPY_SLEEVE_STOP_PCT": 0.35,
         # Reserved for the separately validated Bot 2 activation.
         "BOT_PAUSED":        True,
     },

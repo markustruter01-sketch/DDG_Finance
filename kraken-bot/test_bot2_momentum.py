@@ -257,6 +257,28 @@ def test_bot2_cap_is_read_from_its_config_profile(monkeypatch) -> None:
     assert len(ranked) == 50
 
 
+def test_spy_is_excluded_from_the_top_50_stock_rank(monkeypatch) -> None:
+    symbols = {f"S{index:03d}" for index in range(50)} | {"SPY"}
+    observations = {
+        symbol: {
+            "asset_class": "us_equity",
+            "median_dollar_volume_60": 1_000_000,
+        }
+        for symbol in symbols
+    }
+    monkeypatch.setattr(bot2, "last_screen_observations", lambda: observations)
+
+    ranked = bot2.rank_momentum(
+        symbols,
+        {symbol: _bars() for symbol in symbols},
+        date(2026, 1, 1),
+        top_n=50,
+    )
+
+    assert len(ranked) == 50
+    assert all(item["symbol"] != "SPY" for item in ranked)
+
+
 def test_rank_screen_selects_exactly_top_500_and_reports_cutoff() -> None:
     as_of = date(2026, 1, 1)
     assets = [_asset(f"S{index:03d}") for index in range(501)]
@@ -303,6 +325,51 @@ def test_allocation_excludes_vault_from_sizing_base_and_equal_weights() -> None:
     assert plan["investable_base"] == 90_000
     assert plan["target_base"] == 90_000
     assert plan["equal_weight_notional"] == 4_500
+
+
+def test_spy_sleeve_uses_twenty_percent_and_momentum_scales_only_eighty_percent() -> None:
+    ranked = [{"symbol": f"S{index:02d}"} for index in range(50)]
+    ranked.append({"symbol": "SPY"})
+    plan = bot2.build_target_allocation_plan(
+        equity=100_000,
+        vault_market_value=10_000,
+        ranked=ranked,
+        multiplier=0.5,
+        benched_symbols={"S00"},
+        spy_sleeve_weight=bot2.SPY_SLEEVE_WEIGHT,
+    )
+
+    assert bot2.SPY_SLEEVE_WEIGHT == 0.20
+    assert plan["target_base"] == 90_000
+    assert plan["spy_target"] == 18_000
+    assert plan["momentum_base"] == 72_000
+    assert plan["slot_notional"] == 1_440
+    assert plan["scaled_position_notional"] == 720
+    assert plan["target_allocations"]["S00"] == 0
+    assert "SPY" not in plan["target_allocations"]
+    assert plan["stock_target"] == 49 * 720
+    assert plan["sgov_target"] == 90_000 - 18_000 - 49 * 720
+    assert (
+        plan["spy_target"] + plan["stock_target"] + plan["sgov_target"]
+        == plan["target_base"]
+    )
+
+
+def test_spy_stock_and_sgov_plan_never_exceeds_sizing_base() -> None:
+    ranked = [{"symbol": f"S{index:02d}"} for index in range(50)]
+    for multiplier in (0.0, 0.5, 1.0):
+        plan = bot2.build_target_allocation_plan(
+            equity=250_000,
+            vault_market_value=25_000,
+            ranked=ranked,
+            multiplier=multiplier,
+            benched_symbols={"S01", "S17"},
+            spy_sleeve_weight=0.20,
+        )
+        planned = plan["spy_target"] + plan["stock_target"] + plan["sgov_target"]
+
+        assert planned <= plan["target_base"] + 1e-8
+        assert planned == plan["target_base"]
 
 
 def test_volatility_multiplier_uses_run106_formula_and_caps_at_one() -> None:
@@ -374,6 +441,22 @@ def test_non_stop_exit_reasons_do_not_create_cooldowns() -> None:
     ]
 
     assert bot2.build_stop_cooldowns(rows, as_of) == {}
+
+
+def test_spy_stop_fill_never_creates_a_stock_cooldown() -> None:
+    close_date = date(2026, 1, 2)
+    closed_at = datetime.combine(
+        close_date, bot2.dt_time(16, 0), tzinfo=bot2._eastern()
+    )
+    as_of = bot2.nyse_sessions_after(close_date, 10)[-1]
+
+    cooldowns = bot2.build_stop_cooldowns(
+        [("SPY", closed_at, "stop_filled"), ("AAPL", closed_at, "stop_filled")],
+        as_of,
+    )
+
+    assert "SPY" not in cooldowns
+    assert "AAPL" in cooldowns
 
 
 def test_benched_rank_slot_stays_in_sgov_instead_of_backfilling() -> None:
@@ -483,6 +566,30 @@ class _FakeConnection:
         return self._cursor
 
 
+class _SpyUpsertCursor(_PlaceholderCheckingCursor):
+    def __init__(self):
+        super().__init__([])
+        self.rows_by_key = {}
+
+    def execute(self, query, params=()):
+        super().execute(query, params)
+        if "ON CONFLICT (bot_id, symbol) WHERE status='open'" not in query:
+            raise AssertionError("SPY ledger write must target the partial open-row index")
+        if "DO UPDATE SET" not in query:
+            raise AssertionError("SPY ledger write must update the existing open row")
+        bot_id, symbol, qty, entry, notional, stop_price, stop_id = params
+        key = (bot_id, symbol)
+        previous = self.rows_by_key.get(key)
+        self.rows_by_key[key] = {
+            "id": previous["id"] if previous else len(self.rows_by_key) + 1,
+            "qty": qty,
+            "entry_price": entry,
+            "notional_usd": notional,
+            "stop_price": stop_price,
+            "stop_order_id": stop_id,
+        }
+
+
 def test_database_fakes_enforce_placeholder_parameter_counts(monkeypatch) -> None:
     closed_rows = [
         ("AAPL", datetime(2026, 1, 2, 21, 0, tzinfo=timezone.utc), "stop_filled")
@@ -501,6 +608,26 @@ def test_database_fakes_enforce_placeholder_parameter_counts(monkeypatch) -> Non
         pass
     else:
         raise AssertionError("database fake must reject placeholder/parameter mismatch")
+
+
+def test_spy_ledger_upserts_one_open_row_and_checks_placeholder_counts(monkeypatch) -> None:
+    cursor = _SpyUpsertCursor()
+    monkeypatch.setattr(bot2, "get_conn", lambda: _FakeConnection(cursor))
+
+    bot2.record_spy_open(5, 100.0, 65.0, "spy-stop-1")
+    bot2.record_spy_open(6, 105.0, 68.25, "spy-stop-2")
+
+    assert len(cursor.rows_by_key) == 1
+    row = cursor.rows_by_key[(bot2.BOT_ID, "SPY")]
+    assert row == {
+        "id": 1,
+        "qty": 6,
+        "entry_price": 105.0,
+        "notional_usd": 630.0,
+        "stop_price": 68.25,
+        "stop_order_id": "spy-stop-2",
+    }
+    assert len(cursor.executed) == 2
 
 
 def test_stop_fill_reconciliation_records_canonical_exit_reason(monkeypatch) -> None:
@@ -698,6 +825,128 @@ class _SellGuardClient:
         return {"status": "filled", "filled_avg_price": "100"}
 
 
+class _SpyRebalanceClient:
+    def __init__(
+        self,
+        *,
+        qty: int = 0,
+        entry_price: float = 100.0,
+        cancel_allowed: bool = True,
+    ) -> None:
+        self.qty = qty
+        self.entry_price = entry_price if qty else 0.0
+        self.price = 100.0
+        self.cash = 100_000.0 - qty * self.price
+        self.cancel_allowed = cancel_allowed
+        self.orders = {}
+        self.submissions = []
+        self.events = []
+        self.next_id = 1
+
+    def seed_stop(
+        self, order_id: str, qty: int, stop_price: float = 65.0
+    ) -> None:
+        self.orders[order_id] = {
+            "id": order_id,
+            "symbol": "SPY",
+            "side": "sell",
+            "type": "stop",
+            "status": "new",
+            "qty": str(qty),
+            "stop_price": stop_price,
+            "time_in_force": "gtc",
+        }
+
+    def account(self):
+        return {
+            "equity": 100_000.0,
+            "cash": self.cash,
+            "long_market_value": self.qty * self.price,
+        }
+
+    def positions(self):
+        if self.qty < 1:
+            return []
+        reserved_qty = sum(
+            int(order.get("qty", 0))
+            for order in self.orders.values()
+            if (
+                order["symbol"] == "SPY"
+                and order["side"] == "sell"
+                and order["type"] == "stop"
+                and order["status"] == "new"
+            )
+        )
+        return [{
+            "symbol": "SPY",
+            "qty": self.qty,
+            "qty_available": max(0, self.qty - reserved_qty),
+            "entry_price": self.entry_price,
+            "current_price": self.price,
+            "market_value": self.qty * self.price,
+        }]
+
+    def open_orders(self):
+        # Include terminal orders to model a stale collection response.
+        return [dict(order) for order in self.orders.values()]
+
+    def get_order(self, order_id):
+        order = self.orders[order_id]
+        self.events.append(("get", order_id, order["status"]))
+        return dict(order)
+
+    def cancel_confirm(self, order_id):
+        self.events.append(("cancel", order_id))
+        if not self.cancel_allowed:
+            return False
+        self.orders[order_id]["status"] = "canceled"
+        return True
+
+    def submit(self, symbol, side, qty, order_type, **extra):
+        order_id = f"spy-order-{self.next_id}"
+        self.next_id += 1
+        order = {
+            "id": order_id,
+            "symbol": symbol,
+            "side": side,
+            "type": order_type,
+            "qty": str(qty),
+            "status": "new" if order_type == "stop" else "filled",
+            "time_in_force": "gtc" if order_type == "stop" else "day",
+            **extra,
+        }
+        self.orders[order_id] = order
+        self.submissions.append((symbol, side, int(qty), order_type, dict(extra)))
+        self.events.append(("submit", symbol, side, int(qty), order_type, order_id))
+        if order_type == "market":
+            if side == "buy":
+                new_qty = self.qty + int(qty)
+                self.entry_price = (
+                    (self.qty * self.entry_price + int(qty) * self.price) / new_qty
+                    if new_qty
+                    else 0.0
+                )
+                self.qty = new_qty
+                self.cash -= int(qty) * self.price
+            else:
+                if int(qty) > self.qty:
+                    raise AssertionError("test client cannot sell more shares than held")
+                self.qty -= int(qty)
+                self.cash += int(qty) * self.price
+                if self.qty == 0:
+                    self.entry_price = 0.0
+        return dict(order)
+
+    def wait_for_fill(self, order_id):
+        order = self.orders[order_id]
+        return {
+            "id": order_id,
+            "status": order["status"],
+            "filled_qty": order["qty"],
+            "filled_avg_price": str(self.price),
+        }
+
+
 def _sell_guard_position(stop_order_id: str | None = "stop-1"):
     return {
         "symbol": "AAPL",
@@ -780,6 +1029,124 @@ def test_nonfinal_post_cancel_status_blocks_sale(monkeypatch) -> None:
     )
 
     assert client.submissions == []
+
+
+def test_spy_rebalances_whole_shares_with_one_35_percent_stop_and_one_ledger_row(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(bot2.time, "sleep", lambda *_args: None)
+    client = _SpyRebalanceClient()
+    ledger = {}
+
+    def upsert(qty, entry, stop_price, stop_id):
+        ledger["SPY"] = {
+            "symbol": "SPY",
+            "qty": qty,
+            "entry_price": entry,
+            "stop_price": stop_price,
+            "stop_order_id": stop_id,
+        }
+
+    monkeypatch.setattr(bot2, "record_spy_open", upsert)
+    first = bot2._rebalance_spy_sleeve(client, 5, None, set(), 100.0)
+    second = bot2._rebalance_spy_sleeve(client, 6, ledger["SPY"], set(), 100.0)
+    third = bot2._rebalance_spy_sleeve(client, 3, ledger["SPY"], set(), 100.0)
+
+    active_stops = [
+        order
+        for order in client.orders.values()
+        if order["symbol"] == "SPY"
+        and order["side"] == "sell"
+        and order["type"] == "stop"
+        and order["status"] == "new"
+    ]
+    market_orders = [
+        item for item in client.submissions if item[3] == "market"
+    ]
+
+    assert [first["settled_qty"], second["settled_qty"], third["settled_qty"]] == [
+        5, 6, 3
+    ]
+    assert market_orders == [
+        ("SPY", "buy", 5, "market", {}),
+        ("SPY", "buy", 1, "market", {}),
+        ("SPY", "sell", 3, "market", {}),
+    ]
+    assert len(active_stops) == 1
+    assert int(active_stops[0]["qty"]) == 3
+    assert active_stops[0]["stop_price"] == 65.0
+    assert ledger["SPY"]["qty"] == 3
+    assert ledger["SPY"]["stop_price"] == 65.0
+    assert len(ledger) == 1
+    for old_id in ("spy-order-2", "spy-order-4"):
+        assert client.orders[old_id]["status"] == "canceled"
+    for stop_id, market_id in (
+        ("spy-order-2", "spy-order-3"),
+        ("spy-order-4", "spy-order-5"),
+    ):
+        assert client.events.index(("get", stop_id, "canceled")) < next(
+            index for index, event in enumerate(client.events)
+            if event[0] == "submit" and event[-1] == market_id
+        )
+
+
+def test_spy_does_not_trade_when_an_open_order_cannot_be_confirmed_cancelled(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(bot2.time, "sleep", lambda *_args: None)
+    client = _SpyRebalanceClient(qty=5, cancel_allowed=False)
+    client.seed_stop("existing-spy-stop", 5)
+    ledger_position = {
+        "symbol": "SPY",
+        "qty": 5,
+        "entry_price": 100.0,
+        "stop_order_id": "existing-spy-stop",
+    }
+
+    try:
+        bot2._rebalance_spy_sleeve(
+            client, 6, ledger_position, set(), 100.0
+        )
+    except RuntimeError as exc:
+        assert "unconfirmed open order" in str(exc)
+    else:
+        raise AssertionError("SPY must not trade while cancellation is unconfirmed")
+
+    assert client.submissions == []
+    assert client.qty == 5
+
+
+def test_spy_reconciliation_replaces_a_non_35_percent_stop(monkeypatch) -> None:
+    monkeypatch.setattr(bot2.time, "sleep", lambda *_args: None)
+    client = _SpyRebalanceClient(qty=5)
+    client.seed_stop("legacy-spy-stop", 5, stop_price=80.0)
+    recorded = []
+    monkeypatch.setattr(
+        bot2,
+        "record_spy_open",
+        lambda qty, entry, stop_price, stop_id: recorded.append(
+            (qty, entry, stop_price, stop_id)
+        ),
+    )
+    ledger_position = {
+        "symbol": "SPY",
+        "qty": 5,
+        "entry_price": 100.0,
+        "stop_price": 80.0,
+        "stop_order_id": "legacy-spy-stop",
+    }
+
+    remaining = bot2._reconcile_protective_stops(client, [ledger_position])
+
+    active_stops = [
+        order for order in client.orders.values()
+        if order["type"] == "stop" and order["status"] == "new"
+    ]
+    assert remaining == [ledger_position]
+    assert client.orders["legacy-spy-stop"]["status"] == "canceled"
+    assert len(active_stops) == 1
+    assert active_stops[0]["stop_price"] == 65.0
+    assert recorded == [(5, 100.0, 65.0, active_stops[0]["id"])]
 
 
 def test_available_quantity_short_of_sale_blocks_order(monkeypatch) -> None:

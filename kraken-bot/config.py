@@ -126,7 +126,7 @@ BOT_PROFILES = {
         "SPY_SLEEVE_WEIGHT": 0.20,
         "SPY_SLEEVE_STOP_PCT": 0.35,
         # Reserved for the separately validated Bot 2 activation.
-        "BOT_PAUSED":        False,
+        "BOT_PAUSED":        True,
     },
 
     "forex_ai": {

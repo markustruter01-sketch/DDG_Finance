@@ -73,7 +73,7 @@ def _load_bot2_profile() -> dict[str, Any]:
 
 BOT2_PROFILE = _load_bot2_profile()
 BOT_ID = "spy_qqq_trend"
-BOT_PAUSED = False
+BOT_PAUSED = True
 ALPACA_BASE_URL = "https://paper-api.alpaca.markets"
 ALPACA_DATA_BASE_URL = "https://data.alpaca.markets"
 MAX_POSITIONS = int(BOT2_PROFILE["MAX_POSITIONS"])

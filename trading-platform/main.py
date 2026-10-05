@@ -182,13 +182,56 @@ def _refresh_bot3_metals_history() -> None:
 YAHOO_STARTUP_DELAY_SECONDS = 60
 
 
+def _scheduler_enabled_for_current_environment() -> bool:
+    # Match the runner's environment resolution exactly:
+    # kraken-bot/runner.py:152-155. REPLIT_DEPLOYMENT is the shared deployment
+    # signal, with RUNNER_ENVIRONMENT as the same explicit override.
+    environment = os.environ.get(
+        "RUNNER_ENVIRONMENT",
+        "published" if os.environ.get("REPLIT_DEPLOYMENT") == "1" else "dev",
+    )
+    if environment == "published":
+        return True
+    if environment == "dev":
+        return False
+    raise RuntimeError(
+        f"Unknown RUNNER_ENVIRONMENT={environment!r}; "
+        "expected 'published' or 'dev'."
+    )
+
+
+def _start_scheduler(scheduler_enabled: bool) -> Any | None:
+    if not scheduler_enabled:
+        logger.info("scheduler disabled (workspace)")
+        return None
+
+    scheduler = get_scheduler()
+    scheduler.start()
+    logger.info(
+        f"Scheduler started — {len(scheduler.get_jobs())} trading jobs registered "
+        "(auto-trading ON by default)"
+    )
+    logger.info("Disable auto-trading via dashboard toggle or POST /auto-trading")
+    logger.info("24/7 crypto trading enabled — crypto cycles fire when stock market is closed")
+    return scheduler
+
+
+def _add_scheduler_job(scheduler: Any | None, **job: Any) -> None:
+    if scheduler is not None:
+        scheduler.add_job(**job)
+
+
 def _register_yahoo_refresh_jobs(scheduler) -> None:
     """Register Yahoo refreshes with a delayed first run, then every six hours."""
+
+    if scheduler is None:
+        return
 
     from apscheduler.triggers.interval import IntervalTrigger
 
     first_run = datetime.now(_tz.utc) + timedelta(seconds=YAHOO_STARTUP_DELAY_SECONDS)
-    scheduler.add_job(
+    _add_scheduler_job(
+        scheduler,
         func=_refresh_crypto_yahoo_history,
         trigger=IntervalTrigger(hours=6),
         id="crypto_yahoo_history_refresh",
@@ -197,7 +240,8 @@ def _register_yahoo_refresh_jobs(scheduler) -> None:
         misfire_grace_time=300,
         next_run_time=first_run,
     )
-    scheduler.add_job(
+    _add_scheduler_job(
+        scheduler,
         func=_refresh_bot3_metals_history,
         trigger=IntervalTrigger(hours=6),
         id="bot3_metals_history_refresh",
@@ -211,6 +255,7 @@ def _register_yahoo_refresh_jobs(scheduler) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    scheduler_enabled = _scheduler_enabled_for_current_environment()
     logger.add(
         settings.log_file,
         level=settings.log_level,
@@ -252,11 +297,7 @@ async def lifespan(app: FastAPI):
     from routes.entry_windows import assert_entry_window_alignment
     assert_entry_window_alignment()
 
-    scheduler = get_scheduler()
-    scheduler.start()
-    logger.info(f"Scheduler started — {len(scheduler.get_jobs())} trading jobs registered (auto-trading ON by default)")
-    logger.info("Disable auto-trading via dashboard toggle or POST /auto-trading")
-    logger.info("24/7 crypto trading enabled — crypto cycles fire when stock market is closed")
+    scheduler = _start_scheduler(scheduler_enabled)
 
     from apscheduler.triggers.interval import IntervalTrigger as _ITrigger
     def _scheduled_snapshot_export():
@@ -266,7 +307,8 @@ async def lifespan(app: FastAPI):
         except Exception as _ex:
             logger.warning(f"Learning Snapshot | Scheduled export failed: {_ex}")
 
-    scheduler.add_job(
+    _add_scheduler_job(
+        scheduler,
         func=_scheduled_snapshot_export,
         trigger=_ITrigger(hours=6),
         id="learning_snapshot_export",
@@ -274,7 +316,8 @@ async def lifespan(app: FastAPI):
         replace_existing=True,
         misfire_grace_time=300,
     )
-    logger.info("Learning snapshot auto-export registered (6-hour interval)")
+    if scheduler is not None:
+        logger.info("Learning snapshot auto-export registered (6-hour interval)")
 
     def _record_fleet_equity_snapshots():
         try:
@@ -294,7 +337,8 @@ async def lifespan(app: FastAPI):
             logger.warning(f"Fleet equity snapshot | Failed: {_e}")
 
     _record_fleet_equity_snapshots()
-    scheduler.add_job(
+    _add_scheduler_job(
+        scheduler,
         func=_record_fleet_equity_snapshots,
         trigger=_ITrigger(hours=1),
         id="hourly_equity_snapshot",
@@ -302,7 +346,8 @@ async def lifespan(app: FastAPI):
         replace_existing=True,
         misfire_grace_time=600,
     )
-    logger.info("Hourly equity snapshot job registered (active bots, every 1 hour)")
+    if scheduler is not None:
+        logger.info("Hourly equity snapshot job registered (active bots, every 1 hour)")
 
     _register_yahoo_refresh_jobs(scheduler)
 
@@ -315,8 +360,9 @@ async def lifespan(app: FastAPI):
 
     try:
         from notifications.alert_manager import start_alert_scheduler
-        start_alert_scheduler()
-        logger.info("Alert manager started (batched Telegram/Discord notifications)")
+        if scheduler is not None:
+            start_alert_scheduler()
+            logger.info("Alert manager started (batched Telegram/Discord notifications)")
     except Exception as _alert_err:
         logger.warning(f"Alert manager startup failed (non-fatal): {_alert_err}")
 
@@ -332,7 +378,8 @@ async def lifespan(app: FastAPI):
         (17, 0, "Post-Close 5:00 PM"),
     ]
     for _fc_h, _fc_m, _fc_label in _fc_schedule:
-        scheduler.add_job(
+        _add_scheduler_job(
+            scheduler,
             func=_fleet_commander_run,
             trigger=_CronTrigger(hour=_fc_h, minute=_fc_m, timezone="US/Eastern"),
             id=f"fleet_commander_{_fc_h:02d}{_fc_m:02d}",
@@ -340,7 +387,10 @@ async def lifespan(app: FastAPI):
             replace_existing=True,
             misfire_grace_time=600,
         )
-    logger.info(f"Fleet Commander registered — {len(_fc_schedule)} daily audit runs scheduled")
+    if scheduler is not None:
+        logger.info(
+            f"Fleet Commander registered — {len(_fc_schedule)} daily audit runs scheduled"
+        )
 
     # ── Stage 6: OHLCV Data Ingest — run on startup if historical_prices is empty ──
     try:
@@ -447,7 +497,8 @@ async def lifespan(app: FastAPI):
         except Exception as _se:
             logger.warning(f"M4 retention | Nightly sweep failed (non-fatal): {_se}")
 
-    scheduler.add_job(
+    _add_scheduler_job(
+        scheduler,
         func=_retention_sweep,
         trigger=_CronTrigger(hour=3, minute=15, timezone="UTC"),
         id="nightly_retention_sweep",
@@ -455,11 +506,13 @@ async def lifespan(app: FastAPI):
         replace_existing=True,
         misfire_grace_time=1800,
     )
-    logger.info("Retention | Registered: nightly_retention_sweep (3:15 AM UTC) — M4")
+    if scheduler is not None:
+        logger.info("Retention | Registered: nightly_retention_sweep (3:15 AM UTC) — M4")
 
     # ── Review Flag Scheduler — daily performance checks ─────────────────────
     from core.review_scheduler import run_scheduled_checks as _run_review_checks
-    scheduler.add_job(
+    _add_scheduler_job(
+        scheduler,
         func=_run_review_checks,
         trigger=_CronTrigger(hour=17, minute=30, timezone="America/New_York"),
         id="daily_review_flags",
@@ -467,7 +520,8 @@ async def lifespan(app: FastAPI):
         replace_existing=True,
         misfire_grace_time=300,
     )
-    logger.info("ReviewScheduler | Registered: daily_review_flags (5:30 PM ET)")
+    if scheduler is not None:
+        logger.info("ReviewScheduler | Registered: daily_review_flags (5:30 PM ET)")
 
     # ── Seed review flags immediately on startup (ensures production DB is populated) ─
     try:
@@ -501,7 +555,8 @@ async def lifespan(app: FastAPI):
             except Exception as _mae:
                 logger.warning(f"MathAuditor | deep audit failed: {_mae}")
 
-        scheduler.add_job(
+        _add_scheduler_job(
+            scheduler,
             func=_math_audit_quick,
             trigger=_ITrigger(minutes=15),
             id="math_audit_quick",
@@ -509,7 +564,8 @@ async def lifespan(app: FastAPI):
             replace_existing=True,
             misfire_grace_time=120,
         )
-        scheduler.add_job(
+        _add_scheduler_job(
+            scheduler,
             func=_math_audit_full,
             trigger=_ITrigger(minutes=15),
             id="math_audit_full",
@@ -517,7 +573,8 @@ async def lifespan(app: FastAPI):
             replace_existing=True,
             misfire_grace_time=120,
         )
-        scheduler.add_job(
+        _add_scheduler_job(
+            scheduler,
             func=_math_audit_deep,
             trigger=_ITrigger(hours=4),
             id="math_audit_deep",
@@ -525,14 +582,16 @@ async def lifespan(app: FastAPI):
             replace_existing=True,
             misfire_grace_time=600,
         )
-        logger.info("MathAuditor | 3 jobs registered: quick (60s), full (15 min), deep (4h)")
+        if scheduler is not None:
+            logger.info("MathAuditor | 3 jobs registered: quick (60s), full (15 min), deep (4h)")
     except Exception as _ma_boot_err:
         logger.warning(f"MathAuditor | Boot failed (non-fatal): {_ma_boot_err}")
 
     yield
 
-    logger.info("Shutting down scheduler...")
-    scheduler.shutdown(wait=False)
+    if scheduler is not None:
+        logger.info("Shutting down scheduler...")
+        scheduler.shutdown(wait=False)
     logger.info("Trading platform stopped.")
 
 

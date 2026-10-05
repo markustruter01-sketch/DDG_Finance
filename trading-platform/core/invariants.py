@@ -56,8 +56,7 @@ PROPOSED_CRYPTO_DRIFT_BAND = 0.055
 CRYPTO_EXPOSURE_LIMIT = 0.05
 CYCLE_FRESHNESS_MULTIPLIER = 3.0
 PROPOSED_RECON_MAX_AGE_MINUTES = 90.0
-# Forex is monitored through OANDA, not a cycle-producing strategy runner.
-CYCLE_BOTS = tuple(bot_id for bot_id in ACTIVE_BOTS if bot_id != "forex_ai")
+CYCLE_BOTS = tuple(ACTIVE_BOTS)
 INVARIANT_SCHEDULE_MINUTES = 15
 DUST_QTY = 1e-6
 UNRESOLVED_HIGH_SEVERITIES = frozenset({"high", "critical", "error"})
@@ -581,7 +580,10 @@ def check_cycle_freshness(inputs: InvariantInputs) -> dict[str, Any]:
     for bot_id in CYCLE_BOTS:
         if inputs.pause_states is not None and inputs.pause_states.get(bot_id) is True:
             paused.append({"bot_id": bot_id, "reason": "intentionally paused"})
-            continue
+            # Forex remains a read-only monitor, but its durable cycle heartbeat
+            # is still required even while paused.
+            if bot_id != "forex_ai":
+                continue
         row = inputs.cycle_rows.get(bot_id)
         success_at = _parse_datetime(row.get("last_success_at")) if row else None
         threshold = CYCLE_FRESHNESS_MULTIPLIER * intervals[bot_id]
@@ -631,22 +633,13 @@ def check_cycle_freshness(inputs: InvariantInputs) -> dict[str, Any]:
             message=f"{len(stale)} bot cycle record(s) exceed 3 × their configured interval.",
             source_key="cycle_freshness",
         )
-    if len(paused) == len(CYCLE_BOTS):
-        return _passed(
-            name,
-            actual=actual,
-            expected=expected,
-            difference={"stale_bots": 0},
-            message="No bot is expected to be cycling because all active bots are intentionally paused.",
-            source_key="cycle_freshness",
-        )
     return _passed(
         name,
         actual=actual,
         expected=expected,
         difference={"stale_bots": 0},
         message=(
-            f"All {len(actual_rows)} active bot cycle record(s) are within the "
+            f"All {len(actual_rows)} required bot cycle record(s) are within the "
             f"established threshold; {len(paused)} bot(s) are intentionally paused."
         ),
         source_key="cycle_freshness",

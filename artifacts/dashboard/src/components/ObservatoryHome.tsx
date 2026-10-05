@@ -2,13 +2,13 @@ import { Fragment, useMemo, useState, type CSSProperties } from "react";
 import { Activity, BarChart3, CalendarClock, CheckCircle2, Crosshair, Download, Gauge, ShieldCheck, Waves } from "lucide-react";
 import { useFleetData, fmtDollar, fmtEq, fmtPct, getBotStatus } from "@/hooks/useFleetData";
 import { usePerformanceHistory, usePerformanceSummary, useCorrelation, useAttribution, useRiskMetrics } from "@/hooks/use-performance";
-import { useFleetHistory } from "@/hooks/use-portfolio";
+import { useBotRegistry, useFleetHistory } from "@/hooks/use-portfolio";
 import { useRecentTrades } from "@/hooks/use-journal";
 import { useExportReport } from "@/hooks/use-report";
 import { useLocation } from "wouter";
 import RunnerStatusIndicator from "@/components/RunnerStatusIndicator";
 import type { RunnerStatusResponse } from "@/hooks/useFleetData";
-import { formatBotLabel, useBotIdentity } from "@/lib/bot-identity";
+import { getBotColors } from "@/lib/bot-colors";
 
 const css = `.observatory{--ink:#effaf5;--muted:#98b5b1;--dim:#789694;--line:rgba(184,239,225,.14);min-height:100dvh;padding:22px clamp(16px,3vw,42px) 34px;color:var(--ink);background:radial-gradient(ellipse at 8% 0%,#a0dcd633,transparent 32%),radial-gradient(ellipse at 94% 22%,#448b9144,transparent 34%),linear-gradient(145deg,#0c2b34,#051720 55%,#0e282e);font-family:system-ui,sans-serif}.observatory *{box-sizing:border-box}.obs-shell{max-width:1740px;margin:auto}.obs-topline,.obs-hero,.obs-section-head,.obs-card-head,.obs-equity-line,.obs-cycle,.obs-footer{display:flex;align-items:center;justify-content:space-between;gap:16px}.obs-topline{margin-bottom:28px;color:var(--muted);font:10px monospace;letter-spacing:.12em;text-transform:uppercase}.obs-brand{display:flex;gap:10px;align-items:center;color:var(--ink);font-weight:bold}.obs-mark{display:grid;place-items:center;width:26px;height:26px;color:#071b24;background:#8cf1d5;border-radius:8px 8px 8px 2px}.obs-session{display:flex;gap:14px;flex-wrap:wrap}.obs-dot{display:inline-block;width:6px;height:6px;margin-right:6px;border-radius:50%;background:#b7ef75}.obs-hero{align-items:end;margin-bottom:24px}.obs-kicker,.obs-label,.obs-meta,.obs-bot-eyebrow{color:#8cf1d5;font:10px monospace;letter-spacing:.15em;text-transform:uppercase}.obs-title{margin:8px 0 12px;font-size:clamp(31px,3.1vw,49px);letter-spacing:-.05em}.obs-title em{color:#8cf1d5;font-style:normal}.obs-subtitle{max-width:560px;margin:0;color:var(--muted);font-size:13px;line-height:1.45}.obs-asof{min-width:210px;padding:12px 16px;border-left:1px solid #8cf1d566;color:var(--muted);font:10px/1.7 monospace}.obs-asof strong{display:block;color:var(--ink);font-size:14px}.obs-summary{display:grid;grid-template-columns:1.7fr 1fr 1fr 1fr 1.5fr;gap:1px;margin-bottom:32px;overflow:hidden;border:1px solid var(--line);border-radius:14px;background:var(--line)}.obs-summary-cell{min-height:88px;padding:17px 19px;background:#071f27dd}.obs-summary-cell:first-child{background:#0c3136dd}.obs-value{margin-top:6px;font:25px monospace;letter-spacing:-.06em}.obs-value.large{font-size:32px}.positive{color:#b7ef75}.negative{color:#ff9a91}.obs-under{display:flex;gap:8px;margin-top:4px;color:var(--muted);font:10px monospace}.obs-regime{display:flex;align-items:center;gap:10px;margin-top:10px;color:#b7ef75;font:17px monospace}.obs-section-head{align-items:end;margin-bottom:14px}.obs-section-title{margin:0;font-size:16px;font-weight:500}.obs-meta{color:var(--dim);font-size:10px}.obs-bot-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.obs-bot-card,.obs-evidence-panel{min-width:0;padding:18px;border:1px solid var(--line);border-radius:15px;background:#071d26b8;box-shadow:inset 0 1px #e7fff814}.obs-bot-card{border-top:2px solid var(--accent)}.obs-bot-name{margin:4px 0;font-size:20px}.obs-bot-code{color:var(--dim);font:9px monospace}.obs-equity-line{align-items:end;margin-top:18px}.obs-equity{font:27px monospace;letter-spacing:-.07em}.obs-return{text-align:right;color:var(--accent);font:12px monospace}.obs-return span{display:block;margin-top:3px;color:var(--dim);font-size:9px}.obs-chart{height:93px;margin-top:12px;padding:8px 0 4px;border-block:1px solid var(--line)}.obs-chart svg{width:100%;height:100%}.obs-chart-grid{stroke:#c6efe21a;stroke-dasharray:2 5}.obs-chart-area{fill:var(--accent-soft)}.obs-chart-line{fill:none;stroke:var(--accent);stroke-width:2;stroke-linecap:round}.obs-metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:16px}.obs-metric{border-right:1px solid var(--line)}.obs-metric:last-child{border:0}.obs-metric label{display:block;color:var(--dim);font:9px monospace;text-transform:uppercase}.obs-metric strong{display:block;margin-top:5px;font:14px monospace}.obs-exposure{display:flex;gap:10px;align-items:center;margin-top:16px;color:var(--muted);font:9px monospace}.obs-bar{height:5px;flex:1;border-radius:9px;background:#d2f6ea14}.obs-bar i{display:block;height:100%;border-radius:inherit;background:var(--accent)}.obs-detail{margin-top:18px;padding-top:12px;border-top:1px solid var(--line);color:var(--dim);font:9px monospace;text-transform:uppercase}.obs-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}.obs-chip{padding:6px 8px;border:1px solid #8cf1d555;border-radius:5px;color:#8cf1d5;background:#8cf1d514;font:10px monospace;text-transform:none}.obs-note{color:var(--muted);font-size:10px;text-transform:none}.obs-evidence{display:grid;grid-template-columns:1.15fr .85fr;gap:14px;margin-top:31px}.obs-correlation{display:grid;grid-template-columns:1.25fr repeat(3,1fr);gap:1px;overflow:auto;border:1px solid var(--line);background:var(--line)}.obs-correlation>div{padding:10px;background:#061c25dd;color:var(--muted);font:10px monospace}.obs-correlation .head{color:var(--dim);font-size:8px;text-transform:uppercase}.obs-correlation .label{color:var(--ink)}.obs-correlation .num{text-align:center}.obs-timeline-row{display:grid;grid-template-columns:75px 10px 1fr 65px;align-items:center;gap:8px;min-height:39px;border-bottom:1px solid #b8efe214;color:var(--muted);font:10px monospace}.obs-timeline-row:last-child{border:0}.obs-timeline-mark{width:7px;height:7px;border-radius:50%;background:#8cf1d5}.obs-timeline-copy{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.obs-timeline-copy strong{color:var(--ink)}.obs-footer{margin-top:21px;color:var(--dim);font:9px monospace}.obs-footer-left,.obs-footer-right{display:flex;gap:14px;align-items:center}.obs-button{padding:7px 10px;border:1px solid var(--line);border-radius:7px;color:var(--ink);background:#ffffff0d;cursor:pointer;font:10px monospace}@media(max-width:1199px){.obs-hero{align-items:start;flex-direction:column}.obs-asof{width:100%}.obs-summary{grid-template-columns:1fr 1fr}.obs-summary-cell:last-child{grid-column:span 2}.obs-bot-row,.obs-evidence{grid-template-columns:1fr}.obs-evidence-panel{overflow:hidden}}@media(max-width:767px){.observatory{display:none}}@media(max-width:560px){.obs-summary{grid-template-columns:1fr}.obs-summary-cell:last-child{grid-column:auto}.obs-footer{align-items:start;flex-direction:column}}`;
 
@@ -60,7 +60,7 @@ export default function ObservatoryHome({
   runnerStatusError?: boolean;
 }) {
   const [, navigate] = useLocation();
-  const { getBotIdentity } = useBotIdentity();
+  const registryQuery = useBotRegistry();
   const { fleet, total, allPos, regime, killTripped, killSwitchArmed, lastCycle, oracle, spy, jerome, mktOpen } = useFleetData();
   const history = useFleetHistory(); const performance = usePerformanceHistory(); const summary = usePerformanceSummary();
   const correlation = useCorrelation(); const attribution = useAttribution(); const risk = useRiskMetrics(); const trades = useRecentTrades(8);
@@ -73,11 +73,17 @@ export default function ObservatoryHome({
     } catch { /* existing report mutation surfaces its own error state */ }
   };
   const points = useMemo(()=> (history.data?.history ?? performance.data?.snapshots ?? []).map(p => Number("total_equity" in p ? p.total_equity : p.equity)).filter(Number.isFinite), [history.data,performance.data]);
-  const bots = [
-    { id: "oracle", name: formatBotLabel(getBotIdentity("oracle")), slice: oracle, accent: "#8cf1d5" },
-    { id: "spy_qqq_trend", name: formatBotLabel(getBotIdentity("spy_qqq_trend")), slice: spy, accent: "#f2be78" },
-    { id: "jerome_macro", name: formatBotLabel(getBotIdentity("jerome_macro")), slice: jerome, accent: "#b6a6ff" },
-  ];
+  const slices = { oracle, spy_qqq_trend: spy, jerome_macro: jerome };
+  const bots = (registryQuery.data?.bots ?? [])
+    .filter((bot) => bot.status !== "retired")
+    .sort((a, b) => a.display_order - b.display_order)
+    .map((bot) => ({
+      id: bot.id,
+      name: bot.subtitle ? `${bot.display_name} · ${bot.subtitle}` : bot.display_name,
+      slice: slices[bot.id as keyof typeof slices],
+      paused: bot.status === "paused",
+      accent: getBotColors(bot.color).hex,
+    }));
   const symbols = Array.from(new Set(allPos.map(p=>p.symbol)));
   const corr = correlation.data;
   const unavailable = "Unavailable from current API";
@@ -189,7 +195,115 @@ export default function ObservatoryHome({
         {riskData?.message && <p className={`obs-risk-disclaimer${riskData.source === "trade_journal" ? "" : " obs-risk-error"}`}>{riskData.message}</p>}
         {risk.isError && <p className="obs-risk-disclaimer obs-risk-error">Risk metrics are unavailable from the API. Values are not being replaced with estimates.</p>}
       </section>
-     <section aria-labelledby="engines"><div className="obs-section-head"><h2 className="obs-section-title" id="engines">▰ Strategy engines</h2><div className="obs-meta">equity curves / risk evidence / UTC</div></div><div className="obs-bot-row">{bots.map(b=>{const ps=allPos.filter(p=>p.bot_id===b.id);const s=b.slice;const status=s ? getBotStatus(s,mktOpen,false) : "NULL";return <article className="obs-bot-card" style={{"--accent":b.accent,"--accent-soft":b.accent+"22"} as CSSProperties} key={b.id}><div className="obs-card-head"><div><div className="obs-bot-eyebrow">{b.id.replace(/_/g," ").toUpperCase()}</div><h3 className="obs-bot-name">{b.name}</h3></div><div className="obs-bot-code">{status}</div></div><div className="obs-equity-line"><div className="obs-equity">{value(s?.equity,fmtEq)}</div><div className="obs-return">{value(s?.pnl,fmtDollar)}<span>{value(s?.pnl_pct,fmtPct)} / server</span></div></div><div className="obs-chart" aria-label={`${b.name} fleet equity history (per-bot history unavailable)`}><svg viewBox="0 0 242 80"><line className="obs-chart-grid" x1="2" x2="240" y1="20" y2="20"/><line className="obs-chart-grid" x1="2" x2="240" y1="48" y2="48"/>{points.length>1&&<path className="obs-chart-line" d={path(points)}/>}</svg><div className="obs-note">Fleet history shown · per-bot curve NULL</div></div><div className="obs-metrics"><div className="obs-metric"><label>Sharpe</label><strong>NULL</strong></div><div className="obs-metric"><label>Max DD</label><strong>NULL</strong></div><div className="obs-metric"><label>Win rate</label><strong>{value(s?.win_rate,n=>(n*100).toFixed(1)+"%")}</strong></div><div className="obs-metric"><label>Trades</label><strong>NULL</strong></div></div><div className="obs-detail">Open positions ({ps.length})</div><div className="obs-chips">{ps.length?ps.map(p=><span className="obs-chip" key={`${b.id}-${p.symbol}`}>{p.symbol} · {p.side}</span>):<span className="obs-note">{s ? "None reported" : "NULL · "+unavailable}</span>}</div><div className="obs-detail">Return attribution</div><div className="obs-note">{attribution.data ? "Fleet-level attribution only; bot scope NULL" : "NULL · "+unavailable}</div><div className="obs-detail">Biggest win / loss</div><div className="obs-note">NULL · per-bot trade distribution unavailable from current API</div><div className="obs-cycle"><span><CalendarClock size={11}/> last cycle</span><strong>{lastCycle ? new Date(lastCycle).toISOString() : "NULL"}</strong></div></article>})}</div></section>
+      <section aria-labelledby="engines" data-testid="section-strategy-engines">
+        <div className="obs-section-head">
+          <h2 className="obs-section-title" id="engines">▰ Strategy engines</h2>
+          <div className="obs-meta">equity curves / risk evidence / UTC</div>
+        </div>
+        {registryQuery.isLoading && !registryQuery.data && (
+          <div className="obs-note" data-testid="status-strategy-engines-loading">
+            Loading bot registry…
+          </div>
+        )}
+        {registryQuery.isError && !registryQuery.data && (
+          <div className="obs-note" data-testid="status-strategy-engines-unavailable">
+            Bot registry unavailable
+          </div>
+        )}
+        {!registryQuery.isLoading && !registryQuery.isError && bots.length === 0 && (
+          <div className="obs-note" data-testid="status-strategy-engines-empty">
+            No registered strategy engines
+          </div>
+        )}
+        <div className="obs-bot-row">
+          {bots.map((bot) => {
+            const positions = allPos.filter((position) => position.bot_id === bot.id);
+            const slice = bot.slice;
+            const status = bot.paused
+              ? "PAUSED"
+              : slice
+                ? getBotStatus(slice, mktOpen, false)
+                : "NULL";
+
+            return (
+              <article
+                className="obs-bot-card"
+                data-testid={`card-strategy-engine-${bot.id}`}
+                aria-label={`${bot.name} strategy engine`}
+                style={{
+                  "--accent": bot.accent,
+                  "--accent-soft": `${bot.accent}22`,
+                } as CSSProperties}
+                key={bot.id}
+              >
+                <div className="obs-card-head">
+                  <div>
+                    <div className="obs-bot-eyebrow">{bot.id.replace(/_/g, " ").toUpperCase()}</div>
+                    <h3 className="obs-bot-name">{bot.name}</h3>
+                  </div>
+                  <div
+                    className="obs-bot-code"
+                    data-testid={`status-strategy-engine-${bot.id}`}
+                  >
+                    {status}
+                  </div>
+                </div>
+                <div className="obs-equity-line">
+                  <div className="obs-equity">{value(slice?.equity, fmtEq)}</div>
+                  <div className="obs-return">
+                    {value(slice?.pnl, fmtDollar)}
+                    <span>{value(slice?.pnl_pct, fmtPct)} / server</span>
+                  </div>
+                </div>
+                <div
+                  className="obs-chart"
+                  aria-label={`${bot.name} fleet equity history (per-bot history unavailable)`}
+                >
+                  <svg viewBox="0 0 242 80">
+                    <line className="obs-chart-grid" x1="2" x2="240" y1="20" y2="20" />
+                    <line className="obs-chart-grid" x1="2" x2="240" y1="48" y2="48" />
+                    {points.length > 1 && <path className="obs-chart-line" d={path(points)} />}
+                  </svg>
+                  <div className="obs-note">Fleet history shown · per-bot curve NULL</div>
+                </div>
+                <div className="obs-metrics">
+                  <div className="obs-metric"><label>Sharpe</label><strong>NULL</strong></div>
+                  <div className="obs-metric"><label>Max DD</label><strong>NULL</strong></div>
+                  <div className="obs-metric">
+                    <label>Win rate</label>
+                    <strong>{value(slice?.win_rate, (number) => `${(number * 100).toFixed(1)}%`)}</strong>
+                  </div>
+                  <div className="obs-metric"><label>Trades</label><strong>NULL</strong></div>
+                </div>
+                <div className="obs-detail">Open positions ({positions.length})</div>
+                <div className="obs-chips">
+                  {positions.length > 0
+                    ? positions.map((position) => (
+                      <span className="obs-chip" key={`${bot.id}-${position.symbol}`}>
+                        {position.symbol} · {position.side}
+                      </span>
+                    ))
+                    : <span className="obs-note">{slice ? "None reported" : `NULL · ${unavailable}`}</span>}
+                </div>
+                <div className="obs-detail">Return attribution</div>
+                <div className="obs-note">
+                  {attribution.data
+                    ? "Fleet-level attribution only; bot scope NULL"
+                    : `NULL · ${unavailable}`}
+                </div>
+                <div className="obs-detail">Biggest win / loss</div>
+                <div className="obs-note">
+                  NULL · per-bot trade distribution unavailable from current API
+                </div>
+                <div className="obs-cycle">
+                  <span><CalendarClock size={11} /> last cycle</span>
+                  <strong>{lastCycle ? new Date(lastCycle).toISOString() : "NULL"}</strong>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      </section>
       <section className="obs-evidence" aria-label="Evidence deck"><div className="obs-evidence-panel"><div className="obs-section-head"><h2 className="obs-section-title"><BarChart3 size={16}/> Correlated positions</h2><div className="obs-meta">API matrix</div></div>{corr?.tickers?.length?<div className="obs-correlation"><div className="head">symbol</div>{corr.tickers.map(t=><div className="head" key={t}>{t}</div>)}{corr.tickers.map(row=><Fragment key={row}><div className="label">{row}</div>{corr.tickers.map(column=><div className="num" key={`${row}-${column}`}>{corr.matrix[row]?.[column] == null ? "NULL" : corr.matrix[row][column].toFixed(2)}</div>)}</Fragment>)}</div>:<div className="obs-note">NULL · {correlation.isError?unavailable:"No correlation data returned"}</div>}<div className="obs-note" style={{marginTop:10}}>Bot-level correlation is NULL because the current API exposes ticker correlation, not per-strategy correlation.</div></div><div className="obs-evidence-panel"><div className="obs-section-head"><h2 className="obs-section-title"><Activity size={16}/> Recent trade history</h2><div className="obs-meta">latest API events</div></div>{trades.data?.trades?.length?trades.data.trades.map(t=><div className="obs-timeline-row" key={t.trade_id}><span>{new Date(t.closed_at).toLocaleTimeString()}</span><i className="obs-timeline-mark"/><span className="obs-timeline-copy"><strong>{t.symbol}</strong> {t.status.replace("_"," ")}</span><span className={t.pnl_usd==null?"obs-note":t.pnl_usd<0?"negative":"positive"}>{t.pnl_usd==null?"NULL":fmtDollar(t.pnl_usd)}</span></div>):<div className="obs-note">NULL · {trades.isError?unavailable:"No recent trades returned"}</div>}</div></section>
     <footer className="obs-footer"><div className="obs-footer-left"><CheckCircle2 size={13}/> DATA STATUS · {fleet ? "LIVE FEEDS NOMINAL" : "NULL · loading fleet data"}</div><div className="obs-footer-right"><span><Waves size={11}/> API REFRESH</span><span><Gauge size={11}/> RISK {risk.data?"AVAILABLE":"NULL"}</span></div></footer>
   </div></main>;

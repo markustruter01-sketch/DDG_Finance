@@ -75,12 +75,18 @@ def base_inputs() -> InvariantInputs:
                 "cycle_count": 3,
                 "status": "success",
             }
-            for bot_id in ("oracle", "spy_qqq_trend", "jerome_macro")
+            for bot_id in (
+                "oracle",
+                "spy_qqq_trend",
+                "jerome_macro",
+                "forex_ai",
+            )
         },
         cycle_intervals={
             "oracle": 3600.0,
             "spy_qqq_trend": 3600.0,
             "jerome_macro": 3600.0,
+            "forex_ai": 3600.0,
         },
         reconciliation_rows=[
             {
@@ -624,6 +630,27 @@ def test_cycle_freshness_fires_when_success_is_older_than_three_intervals(base_i
     assert result["difference"]["stale_bots"][0]["bot_id"] == "oracle"
 
 
+def test_paused_forex_cycle_uses_three_interval_threshold_and_fails_when_stale(
+    base_inputs,
+):
+    inputs = _copy(base_inputs)
+    inputs.pause_states = {"forex_ai": True}
+    inputs.cycle_rows["forex_ai"]["last_success_at"] = (
+        inputs.now - timedelta(seconds=10_801)
+    )
+
+    result = check_cycle_freshness(inputs)
+
+    assert result["expected"]["thresholds_seconds"]["forex_ai"] == 10_800
+    assert result["status"] == "FAIL"
+    assert [row["bot_id"] for row in result["difference"]["stale_bots"]] == [
+        "forex_ai"
+    ]
+    assert result["actual"]["paused"] == [
+        {"bot_id": "forex_ai", "reason": "intentionally paused"}
+    ]
+
+
 def test_cycle_freshness_unknown_when_records_are_unreadable(base_inputs):
     result = check_cycle_freshness(replace(base_inputs, cycle_rows=None))
     assert result["status"] == "UNKNOWN"
@@ -713,10 +740,12 @@ def test_cycle_freshness_passes_when_all_active_bots_are_paused(base_inputs):
             "oracle": True,
             "spy_qqq_trend": True,
             "jerome_macro": True,
+            "forex_ai": True,
         },
     )
-    for row in inputs.cycle_rows.values():
-        row["last_success_at"] = None
+    for bot_id, row in inputs.cycle_rows.items():
+        if bot_id != "forex_ai":
+            row["last_success_at"] = None
 
     result = check_cycle_freshness(inputs)
 
@@ -725,12 +754,11 @@ def test_cycle_freshness_passes_when_all_active_bots_are_paused(base_inputs):
         "oracle",
         "spy_qqq_trend",
         "jerome_macro",
+        "forex_ai",
     ]
     assert result["actual"]["missing_or_unreadable"] == []
-    assert (
-        result["message"]
-        == "No bot is expected to be cycling because all active bots are intentionally paused."
-    )
+    assert [row["bot_id"] for row in result["actual"]["bots"]] == ["forex_ai"]
+    assert result["expected"]["thresholds_seconds"]["forex_ai"] == 10_800
 
 
 def test_reconciliation_fires_when_latest_row_is_not_clean(base_inputs):

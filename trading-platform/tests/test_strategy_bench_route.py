@@ -48,6 +48,130 @@ def test_strategy_bench_requires_api_secret(monkeypatch):
     assert response.status_code == 401
 
 
+def test_strategy_bench_catalog_is_public_read_only_and_uses_snapshot_in_published(monkeypatch):
+    monkeypatch.delenv("RUNNER_ENVIRONMENT", raising=False)
+    monkeypatch.setenv("REPLIT_DEPLOYMENT", "1")
+    monkeypatch.setenv("TRADING_API_SECRET", "test-api-secret")
+    snapshot = {
+        "schema_version": 1,
+        "generated_at": "2026-10-05T00:00:00Z",
+        "snapshot_as_of": "2026-10-05T00:00:00Z",
+        "source": "committed_snapshot",
+        "source_label": "Committed Helium research snapshot",
+        "row_counts": {"experiments": 0, "exploration_runs": 0},
+        "experiments": [],
+        "exploration_runs": [],
+    }
+    monkeypatch.setattr(strategy_bench, "_committed_snapshot", lambda: snapshot)
+    monkeypatch.setattr(
+        strategy_bench,
+        "fetch_live_catalog",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("published must not query research DB")),
+    )
+
+    client = TestClient(app)
+    response = client.get("/trading-api/research/strategy-bench/catalog")
+    client.close()
+
+    assert response.status_code == 200
+    assert response.json()["source"] == "committed_snapshot"
+    assert response.json()["snapshot_as_of"] == "2026-10-05T00:00:00Z"
+
+
+def test_strategy_bench_catalog_uses_live_research_in_workspace_without_client_secret(monkeypatch):
+    monkeypatch.setenv("RUNNER_ENVIRONMENT", "dev")
+    monkeypatch.delenv("REPLIT_DEPLOYMENT", raising=False)
+    monkeypatch.setenv("TRADING_API_SECRET", "test-api-secret")
+    live_catalog = {
+        "schema_version": 1,
+        "generated_at": "2026-10-05T00:00:00Z",
+        "snapshot_as_of": "2026-10-05T00:00:00Z",
+        "source": "live_research_database",
+        "source_label": "Helium research database · workspace read-only",
+        "row_counts": {"experiments": 2, "exploration_runs": 3},
+        "experiments": [],
+        "exploration_runs": [],
+    }
+    monkeypatch.setattr(
+        strategy_bench,
+        "fetch_live_catalog",
+        lambda _connection_factory: live_catalog,
+    )
+    monkeypatch.setattr(
+        strategy_bench,
+        "_committed_snapshot",
+        lambda: (_ for _ in ()).throw(AssertionError("snapshot should not be used")),
+    )
+
+    client = TestClient(app)
+    response = client.get("/trading-api/research/strategy-bench/catalog")
+    client.close()
+
+    assert response.status_code == 200
+    assert response.json()["source"] == "live_research_database"
+    assert response.json()["row_counts"] == {
+        "experiments": 2,
+        "exploration_runs": 3,
+    }
+
+
+def test_strategy_bench_catalog_falls_back_to_snapshot_when_research_is_unavailable(monkeypatch):
+    monkeypatch.setenv("RUNNER_ENVIRONMENT", "dev")
+    monkeypatch.delenv("REPLIT_DEPLOYMENT", raising=False)
+    monkeypatch.setenv("TRADING_API_SECRET", "test-api-secret")
+    snapshot = {
+        "schema_version": 1,
+        "generated_at": "2026-10-05T00:00:00Z",
+        "snapshot_as_of": "2026-10-05T00:00:00Z",
+        "source": "committed_snapshot",
+        "source_label": "Committed Helium research snapshot",
+        "row_counts": {"experiments": 0, "exploration_runs": 0},
+        "experiments": [],
+        "exploration_runs": [],
+    }
+    monkeypatch.setattr(strategy_bench, "_committed_snapshot", lambda: dict(snapshot))
+    monkeypatch.setattr(
+        strategy_bench,
+        "fetch_live_catalog",
+        lambda *_args: (_ for _ in ()).throw(ConnectionError("database not reachable")),
+    )
+
+    client = TestClient(app)
+    response = client.get("/trading-api/research/strategy-bench/catalog")
+    client.close()
+
+    assert response.status_code == 200
+    assert response.json()["source"] == "committed_snapshot"
+    assert "showing the committed snapshot" in response.json()["source_detail"]
+
+
+def test_strategy_bench_actions_fail_closed_for_deployment_without_running_engine(monkeypatch):
+    monkeypatch.delenv("RUNNER_ENVIRONMENT", raising=False)
+    monkeypatch.setenv("REPLIT_DEPLOYMENT", "1")
+    monkeypatch.setenv("TRADING_API_SECRET", "test-api-secret")
+    monkeypatch.setattr(
+        strategy_bench,
+        "_execute_request",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("engine must not run")),
+    )
+    monkeypatch.setattr(
+        strategy_bench,
+        "_record_run",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("records must not change")),
+    )
+
+    client = TestClient(app)
+    response = client.post(
+        "/trading-api/research/strategy-bench/run",
+        headers={"X-Trading-API-Secret": "test-api-secret"},
+        json=_request(),
+    )
+    client.close()
+
+    assert response.status_code == 403
+    assert "disabled on the live site" in response.json()["detail"]
+
+
 def test_strategy_bench_returns_verified_engine_result_and_records_once(monkeypatch):
     monkeypatch.setenv("TRADING_API_SECRET", "test-api-secret")
     recorded: list[dict] = []

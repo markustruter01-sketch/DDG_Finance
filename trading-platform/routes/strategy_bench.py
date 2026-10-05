@@ -14,6 +14,7 @@ import os
 import threading
 import asyncio
 from datetime import date
+from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlsplit
 
@@ -23,6 +24,7 @@ from pydantic import BaseModel, Field
 
 from core.equity_universe import eligible_asset_records, set_screen_data
 from db.research_postgres import get_research_conn as get_conn, research_dsn_host
+from research.strategy_bench_catalog import fetch_live_catalog, load_snapshot
 from analysis.bot2_momentum_pead_v3 import ASSET_TABLE, PRICE_SOURCES, PRICE_TABLE
 from analysis.bot2_momentum_pead_v4 import (
     CONTROL_ITERATIONS,
@@ -50,6 +52,9 @@ from analysis.bot2_momentum_rank500_regime import (
 
 
 router = APIRouter()
+SNAPSHOT_PATH = (
+    Path(__file__).resolve().parents[1] / "data" / "strategy_bench_snapshot.json"
+)
 _ENGINE_LOCK = threading.RLock()
 _PANEL_CACHE: dict[date, tuple[list[dict[str, Any]], set[str], dict[str, Any]]] = {}
 _RANKING_CACHE: dict[
@@ -64,6 +69,47 @@ class BenchRunRequest(BaseModel):
     ] = "bot2_momentum_rank500"
     parameters: dict[str, Any] = Field(default_factory=dict)
     data_window: dict[str, Any]
+
+
+def _runner_environment() -> str:
+    return os.environ.get(
+        "RUNNER_ENVIRONMENT",
+        "published" if os.environ.get("REPLIT_DEPLOYMENT") == "1" else "dev",
+    )
+
+
+def _committed_snapshot() -> dict[str, Any]:
+    try:
+        return load_snapshot(str(SNAPSHOT_PATH))
+    except Exception as exc:
+        logger.error(
+            "committed Strategy Bench snapshot unavailable ({})",
+            type(exc).__name__,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="The committed Strategy Bench snapshot is unavailable or invalid.",
+        ) from exc
+
+
+@router.get("/research/strategy-bench/catalog", tags=["Development Research"])
+async def get_strategy_bench_catalog() -> dict[str, Any]:
+    if _runner_environment() not in {"dev", "development"}:
+        return _committed_snapshot()
+
+    try:
+        return await asyncio.to_thread(fetch_live_catalog, get_conn)
+    except Exception as exc:
+        logger.warning(
+            "Strategy Bench research read unavailable; serving committed snapshot ({})",
+            type(exc).__name__,
+        )
+        snapshot = _committed_snapshot()
+        snapshot["source_detail"] = (
+            "The research database is unavailable in this workspace; "
+            "showing the committed snapshot."
+        )
+        return snapshot
 
 
 def _json(value: Any) -> str:
@@ -428,8 +474,11 @@ def _execute_request(
 
 @router.post("/research/strategy-bench/run", tags=["Development Research"])
 async def run_strategy_bench(request: BenchRunRequest) -> dict[str, Any]:
-    if os.environ.get("RUNNER_ENVIRONMENT", "dev") not in {"dev", "development"}:
-        raise HTTPException(status_code=404, detail="Development research endpoint unavailable")
+    if _runner_environment() not in {"dev", "development"}:
+        raise HTTPException(
+            status_code=403,
+            detail="Strategy Bench workshop and sweep actions are disabled on the live site.",
+        )
 
     request_parameters = dict(request.parameters)
     request_window = _failure_window(request)

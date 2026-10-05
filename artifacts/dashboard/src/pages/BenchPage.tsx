@@ -1,930 +1,382 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  Activity,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   BarChart3,
-  Check,
-  ChevronDown,
-  CircleHelp,
+  BookOpen,
+  CalendarClock,
   Database,
   FlaskConical,
-  GitCompareArrows,
   LockKeyhole,
-  Play,
-  RotateCcw,
-  Settings2,
-  ShieldAlert,
-  SlidersHorizontal,
-  Terminal,
-  X,
+  RefreshCw,
+  ShieldCheck,
+  TriangleAlert,
 } from "lucide-react";
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  Line,
-  LineChart,
-  ReferenceLine,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { parseCatalogResponse } from "@/lib/benchApi";
 
-type Engine = "momentum" | "regime";
-type Params = { universe_size: number; engine: Engine };
-type CurvePoint = {
-  date: string;
-  growth_of_100: number;
-  drawdown_pct: number;
-  positions: number;
-  mode?: string;
-  regime?: string;
-};
-type BenchResponse = {
-  status: "verified";
-  run_id: number;
-  spec_hash: string;
-  strategy_family: string;
-  parameters: Record<string, unknown>;
-  data_window: {
-    warmup_start: string;
-    backtest_start: string;
-    backtest_end: string;
-    price_table: string;
-    price_sources: string[];
-  };
+type Experiment = {
+  id: string | number;
+  family: string;
+  hypothesis: string;
+  parameters_summary: string;
+  pass_bar: unknown;
+  data_window: unknown;
   metrics: {
-    return_pct: number;
-    max_drawdown_pct: number;
-    sharpe: number;
-    sortino: number;
-    trades: number;
-    turnover: number;
-    mean_deployment: number;
-    max_deployment: number;
-    days_cash: number;
+    sharpe: number | null;
+    return_pct: number | null;
+    max_drawdown_pct: number | null;
   };
-  curve: CurvePoint[];
-  provenance: {
-    database: { database: string; host: string; port: number | string };
-    price_table: string;
-    price_sources: string[];
-    data_feed: string;
-    screener: string;
-    engine: string;
-    dashboard_json_used: boolean;
-  };
+  outcome: string;
+  created_at: string;
 };
 
-type SavedRun = { id: string; params: Params; result: BenchResponse };
-
-const HOLDOUT_START = "2025-01-01";
-const HOLDOUT_END = "2026-07-31";
-const DEFAULT_PARAMS: Params = { universe_size: 500, engine: "momentum" };
-const BASE_URL = `${import.meta.env.BASE_URL}trading-api/`;
-const API_HEADERS = {
-  "Content-Type": "application/json",
-  "X-Trading-API-Secret": import.meta.env.VITE_TRADING_API_SECRET ?? "",
+type ExplorationRun = {
+  id: string | number;
+  family: string;
+  parameters_summary: string;
+  data_window: unknown;
+  sharpe: number | null;
+  return_pct: number | null;
+  max_drawdown: number | null;
+  source: string;
+  created_at: string;
 };
 
-const nf = new Intl.NumberFormat("en-US");
-const pct = (value: number, digits = 1) =>
-  `${value >= 0 ? "+" : ""}${value.toFixed(digits)}%`;
-const ddPct = (value: number) => pct(-Math.abs(value));
-const shortDate = (value: string) => {
-  const [year, month] = value.split("-");
-  return `${month}/${year.slice(2)}`;
+type Catalog = {
+  schema_version: string | number;
+  generated_at: string;
+  snapshot_as_of: string;
+  source: string;
+  source_label: string;
+  source_detail?: string;
+  row_counts: { experiments: number; exploration_runs: number };
+  experiments: Experiment[];
+  exploration_runs: ExplorationRun[];
 };
 
-function formatParams(params: Params) {
-  return `${params.engine === "regime" ? "REGIME" : "MOMENTUM"} / ${params.universe_size}U / 20N / EQ / 12-1`;
+type View = "experiments" | "runs";
+type SortKey = "sharpe" | "return_pct" | "max_drawdown" | "created_at";
+
+const CATALOG_URL = `${import.meta.env.BASE_URL}trading-api/research/strategy-bench/catalog`;
+
+function formatDate(value: string | undefined) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("en", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    ...(value.includes("T") ? { hour: "2-digit", minute: "2-digit", timeZoneName: "short" } : {}),
+  }).format(date);
 }
 
-function SelectControl({
-  label,
-  value,
-  options,
-  onChange,
-  testId,
-}: {
-  label: string;
-  value: string | number;
-  options: { value: string | number; label: string }[];
-  onChange: (value: string) => void;
-  testId: string;
-}) {
+function formatMetric(value: number | null | undefined, digits = 2) {
+  return typeof value === "number" && Number.isFinite(value) ? value.toFixed(digits) : "—";
+}
+
+function formatSummary(value: unknown) {
+  if (value === null || value === undefined) return "—";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return "—";
+  }
+}
+
+function SummaryValue({ value }: { value: unknown }) {
+  const summary = formatSummary(value);
+  if (summary.length <= 150) return <span>{summary}</span>;
   return (
-    <label className="bench-field">
-      <span>{label}</span>
-      <div className="bench-select-wrap">
-        <select
-          data-testid={`select-${testId}`}
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-        >
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        <ChevronDown size={13} />
-      </div>
-    </label>
+    <details className="bench-summary-details">
+      <summary>
+        <span>{summary.slice(0, 110).trimEnd()}…</span>
+        <small>Expand</small>
+      </summary>
+      <pre>{summary}</pre>
+    </details>
   );
 }
 
-function Metric({
-  label,
-  value,
-  compare,
-  tone = "neutral",
-  testId,
-}: {
-  label: string;
-  value: string;
-  compare?: string;
-  tone?: "positive" | "negative" | "neutral";
-  testId: string;
-}) {
-  return (
-    <div className="bench-metric" data-testid={`metric-${testId}`}>
-      <span className="bench-metric-label">{label}</span>
-      <strong className={`bench-metric-value ${tone}`}>{value}</strong>
-      {compare && <span className="bench-metric-compare">{compare}</span>}
-    </div>
-  );
+function formatPercent(value: number | null | undefined, digits = 1) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+  return `${value > 0 ? "+" : ""}${value.toFixed(digits)}%`;
 }
 
-function EmptyChart({ message }: { message: string }) {
-  return (
-    <div className="bench-empty-chart">
-      <BarChart3 size={18} />
-      <span>{message}</span>
-    </div>
-  );
+function formatDrawdown(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+  return `${value > 0 ? "-" : ""}${Math.abs(value).toFixed(1)}%`;
 }
 
-function BenchLoadingShell() {
+function outcomeTone(outcome: string) {
+  const normalized = outcome.toLowerCase();
+  if (/fail|reject|negative|blocked|not.?pass/.test(normalized)) return "is-negative";
+  if (/pass|verified|accept|success|ready/.test(normalized)) return "";
+  return "is-neutral";
+}
+
+function CatalogSkeleton() {
   return (
-    <main className="bench-shell bench-shell-loading" data-testid="status-bench-loading">
+    <main className="bench-shell bench-catalog" data-testid="status-bench-loading" aria-busy="true">
       <aside className="bench-rail">
         <div className="bench-rail-brand">
-          <div className="bench-brand-mark">
-            <FlaskConical size={18} />
-          </div>
-          <div>
-            <span className="bench-overline">QUANT TERMINAL</span>
-            <strong>Strategy Bench</strong>
-          </div>
+          <div className="bench-brand-mark"><FlaskConical size={18} /></div>
+          <div><span className="bench-overline">RESEARCH LEDGER</span><strong>Strategy Bench</strong></div>
         </div>
         <div className="bench-rail-rule" />
-        <div className="bench-rail-button active">
-          <SlidersHorizontal size={16} />
-          <span>Parameters</span>
-        </div>
-        <div className="bench-rail-button">
-          <GitCompareArrows size={16} />
-          <span>Compare</span>
-          <b>0</b>
-        </div>
         <div className="bench-rail-spacer" />
-        <div className="bench-rail-note">
-          <span className="bench-status-dot" />
-          <div>
-            <strong>DEV RESEARCH</strong>
-            <span>NO ORDER PATHS</span>
-          </div>
-        </div>
-        <div className="bench-rail-meta">
-          <span>ENGINE RUN</span>
-          <code>pending</code>
-          <span>DATABASE</span>
-          <code>heliumdb</code>
-        </div>
+        <div className="bench-rail-note"><span className="bench-status-dot" /><div><strong>READ ONLY</strong><span>NO ORDER PATHS</span></div></div>
       </aside>
       <section className="bench-content">
         <header className="bench-topbar">
-          <div className="bench-title-group">
-            <div className="bench-breadcrumb">
-              <Terminal size={13} /> /research / bench <span>•</span> bot_2_momentum
-            </div>
-            <h1>Momentum strategy bench</h1>
-          </div>
-          <span className="bench-readonly">
-            <Database size={13} /> VERIFIED ENGINE
-          </span>
+          <div className="bench-title-group"><div className="bench-breadcrumb"><BookOpen size={13} /> /research / bench</div><h1>Strategy Bench</h1></div>
+          <span className="bench-readonly"><Database size={13} /> CATALOG</span>
         </header>
-        <div className="bench-notice">
-          <div>
-            <span className="notice-pip" />
-            <strong>VERIFIED / DEVELOPMENT RESEARCH</strong>
-            <span>Helium price panel · no live prices · no execution access</span>
+        <div className="bench-ledger-body">
+          <div className="bench-ledger-panel bench-ledger-loading" data-testid="panel-bench-loading">
+            <div className="bench-skeleton" aria-label="Loading research catalog">
+              <div className="bench-skeleton-line" /><div className="bench-skeleton-line" /><div className="bench-skeleton-line" />
+            </div>
           </div>
         </div>
-        <section className="bench-loading-panel">
-          <div className="bench-loading-icon"><FlaskConical size={24} /></div>
-          <span className="bench-overline">SERVER RUN IN PROGRESS</span>
-          <h2>Running verified Helium engine…</h2>
-          <p>
-            The controls are ready. The canonical simulation is loading the
-            development price panel; no live orders or production data are used.
-          </p>
-          <div className="bench-loading-bar" />
-        </section>
-        <footer className="bench-footer">
-          <span>QUANT TERMINAL / DEVELOPMENT ONLY</span>
-          <span>Waiting for server provenance.</span>
-          <span>Publishing remains manual.</span>
-        </footer>
       </section>
     </main>
   );
 }
 
 export default function BenchPage() {
-  const [params, setParams] = useState<Params>(DEFAULT_PARAMS);
-  const [holdoutUnlocked, setHoldoutUnlocked] = useState(false);
-  const [result, setResult] = useState<BenchResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [loading, setLoading] = useState(true);
-  const [compareRuns, setCompareRuns] = useState<SavedRun[]>([]);
-  const [runLog, setRunLog] = useState<
-    { id: string; stamp: string; params: string; result: string }[]
-  >([]);
-  const [attemptSignatures, setAttemptSignatures] = useState<string[]>([]);
-  const [activeRail, setActiveRail] = useState<"controls" | "compare">(
-    "controls",
-  );
-
-  const backtestEnd = holdoutUnlocked ? HOLDOUT_END : "2024-12-31";
-  const requestKey = JSON.stringify({ params, backtestEnd });
+  const [error, setError] = useState<string | null>(null);
+  const [view, setView] = useState<View>("experiments");
+  const [familyFilter, setFamilyFilter] = useState("all");
+  const [sortKey, setSortKey] = useState<SortKey>("created_at");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
     setError(null);
-    fetch(`${BASE_URL}research/strategy-bench/run`, {
-      method: "POST",
-      headers: API_HEADERS,
-      body: JSON.stringify({
-        strategy_family:
-          params.engine === "regime"
-            ? "bot2_momentum_rank500_regime"
-            : "bot2_momentum_rank500",
-        parameters: { universe_size: params.universe_size },
-        data_window: {
-          warmup_start: "2018-01-01",
-          backtest_start: "2019-02-01",
-          backtest_end: backtestEnd,
-        },
-      }),
+    // This catalog is an audit surface only; its sole request is explicitly GET.
+    fetch(CATALOG_URL, {
+      method: "GET",
+      headers: { Accept: "application/json" },
       signal: controller.signal,
-    })
-      .then(async (response) => {
-        const payload = await response.json();
-        if (!response.ok) {
-          const detail = payload?.detail;
-          throw new Error(
-            typeof detail === "string"
-              ? detail
-              : detail?.message ?? "Strategy Bench run was not verified",
-          );
-        }
-        return payload as BenchResponse;
-      })
-      .then((payload) => {
-        setResult(payload);
-        setAttemptSignatures((previous) =>
-          previous.includes(requestKey)
-            ? previous
-            : [...previous, requestKey],
-        );
-        setRunLog((previous) => [
-          {
-            id: `${payload.run_id}`,
-            stamp: new Date().toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-              second: "2-digit",
-            }),
-            params: formatParams(params),
-            result: `${pct(payload.metrics.return_pct)} RETURN · #${payload.run_id}`,
-          },
-          ...previous,
-        ].slice(0, 8));
-      })
-      .catch((caught: unknown) => {
-        if (!controller.signal.aborted) {
-          setResult(null);
-          setError(caught instanceof Error ? caught.message : "Unknown Bench error");
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
+    }).then(async (response) => {
+      const payload = await parseCatalogResponse<Catalog>(response);
+      if (!payload || !Array.isArray(payload.experiments) || !Array.isArray(payload.exploration_runs)) {
+        throw new Error(`HTTP ${response.status}: The response body does not match the research catalog contract.`);
+      }
+      setCatalog(payload);
+    }).catch((caught: unknown) => {
+      if (!controller.signal.aborted) {
+        setCatalog(null);
+        setError(caught instanceof Error ? caught.message : "The research catalog could not be loaded.");
+      }
+    }).finally(() => {
+      if (!controller.signal.aborted) setLoading(false);
+    });
     return () => controller.abort();
-  }, [backtestEnd, params, requestKey]);
+  }, [attempt]);
 
-  const years = result
-    ? Math.max(1, result.curve.length / 252)
-    : 1;
-  const expectedNoiseSharpe = result
-    ? Math.sqrt(2 * Math.log(Math.max(2, attemptSignatures.length))) /
-      Math.sqrt(years)
-    : 0;
-  const noiseFloor = result
-    ? Math.max(
-        8,
-        Math.min(92, 50 + (result.metrics.sharpe - expectedNoiseSharpe) * 22),
-      )
-    : 0;
-  const chartTicks = useMemo(
-    () =>
-      result?.curve
-        .filter((_, index) => index % 21 === 0)
-        .map((point) => point.date) ?? [],
-    [result],
+  const experiments = catalog?.experiments ?? [];
+  const runs = catalog?.exploration_runs ?? [];
+  const families = useMemo(
+    () => [...new Set(runs.map((run) => run.family))].sort((a, b) => a.localeCompare(b)),
+    [runs],
   );
-  const lastDate = result?.curve.at(-1)?.date ?? "—";
+  const visibleRuns = useMemo(() => {
+    const filtered = familyFilter === "all" ? runs : runs.filter((run) => run.family === familyFilter);
+    return [...filtered].sort((a, b) => {
+      const left = a[sortKey];
+      const right = b[sortKey];
+      if (sortKey !== "created_at" && (left == null || right == null)) {
+        if (left == null && right != null) return 1;
+        if (left != null && right == null) return -1;
+        return 0;
+      }
+      const comparison = sortKey === "created_at"
+        ? new Date(String(left)).getTime() - new Date(String(right)).getTime()
+        : Number(left) - Number(right);
+      return comparison * (sortDirection === "asc" ? 1 : -1);
+    });
+  }, [familyFilter, runs, sortDirection, sortKey]);
 
-  const updateParam = <K extends keyof Params>(key: K, value: Params[K]) => {
-    setParams((current) => ({ ...current, [key]: value }));
-  };
-  const resetParams = () => {
-    setParams(DEFAULT_PARAMS);
-    setHoldoutUnlocked(false);
-  };
-  const saveComparison = () => {
-    if (!result) return;
-    const saved: SavedRun = {
-      id: `${result.run_id}`,
-      params: { ...params },
-      result,
-    };
-    setCompareRuns((current) =>
-      current.length >= 3
-        ? [...current.slice(1), saved]
-        : [...current, saved],
-    );
-    setActiveRail("compare");
-  };
-
-  if (loading && !result) {
-    return <BenchLoadingShell />;
+  function changeSort(key: SortKey) {
+    if (sortKey === key) setSortDirection((direction) => direction === "asc" ? "desc" : "asc");
+    else {
+      setSortKey(key);
+      setSortDirection(key === "created_at" ? "desc" : "desc");
+    }
   }
 
-  if (error || !result) {
-    return (
-      <main className="bench-shell bench-fallback bench-unverified" data-testid="status-bench-error">
-        <section className="bench-fallback-card" role="alert">
-          <ShieldAlert size={28} />
-          <strong>UNVERIFIED — NO PROVENANCE</strong>
-          <h1>Strategy Bench result unavailable</h1>
-          <p>{error ?? "The development engine returned no result."}</p>
-          <button
-            data-testid="button-retry-bench"
-            onClick={() => setParams((current) => ({ ...current }))}
-          >
-            <RotateCcw size={15} /> Retry run
-          </button>
-        </section>
-      </main>
-    );
-  }
+  if (loading && !catalog) return <CatalogSkeleton />;
 
   return (
-    <main className="bench-shell" data-testid="page-bench">
+    <main className="bench-shell bench-catalog" data-testid="page-bench">
       <aside className="bench-rail">
         <div className="bench-rail-brand">
-          <div className="bench-brand-mark">
-            <FlaskConical size={18} />
-          </div>
-          <div>
-            <span className="bench-overline">QUANT TERMINAL</span>
-            <strong>Strategy Bench</strong>
-          </div>
+          <div className="bench-brand-mark"><FlaskConical size={18} /></div>
+          <div><span className="bench-overline">RESEARCH LEDGER</span><strong>Strategy Bench</strong></div>
         </div>
         <div className="bench-rail-rule" />
-        <button
-          className={`bench-rail-button ${activeRail === "controls" ? "active" : ""}`}
-          data-testid="button-rail-controls"
-          onClick={() => setActiveRail("controls")}
-        >
-          <SlidersHorizontal size={16} />
-          <span>Parameters</span>
-          <kbd>⌘1</kbd>
-        </button>
-        <button
-          className={`bench-rail-button ${activeRail === "compare" ? "active" : ""}`}
-          data-testid="button-rail-compare"
-          onClick={() => setActiveRail("compare")}
-        >
-          <GitCompareArrows size={16} />
-          <span>Compare</span>
-          <b>{compareRuns.length}</b>
-        </button>
         <div className="bench-rail-spacer" />
-        <div className="bench-rail-note">
-          <span className="bench-status-dot" />
-          <div>
-            <strong>DEV RESEARCH</strong>
-            <span>NO ORDER PATHS</span>
-          </div>
-        </div>
-        <div className="bench-rail-meta">
-          <span>ENGINE RUN</span>
-          <code>#{result.run_id}</code>
-          <span>DATABASE</span>
-          <code>{result.provenance.database.database}</code>
-        </div>
+        <div className="bench-rail-note"><span className="bench-status-dot" /><div><strong>READ ONLY</strong><span>NO ORDER PATHS</span></div></div>
+        <div className="bench-rail-meta"><span>RECORD SET</span><code>{catalog ? `v${catalog.schema_version}` : "unavailable"}</code><span>LIVE EXECUTION</span><code>SEPARATE SYSTEM</code></div>
       </aside>
 
       <section className="bench-content">
         <header className="bench-topbar">
           <div className="bench-title-group">
-            <div className="bench-breadcrumb">
-              <Terminal size={13} /> /research / bench <span>•</span>{" "}
-              bot_2_momentum
-            </div>
-            <h1>Momentum strategy bench</h1>
+            <div className="bench-breadcrumb"><BookOpen size={13} /> /research / bench <span>·</span> catalog</div>
+            <h1>Strategy Bench</h1>
           </div>
-          <div className="bench-top-actions">
-            <span className="bench-readonly">
-              <Database size={13} /> VERIFIED ENGINE
-            </span>
-            <button
-              className="bench-reset-button"
-              data-testid="button-reset-parameters"
-              onClick={resetParams}
-            >
-              <RotateCcw size={13} /> Reset
-            </button>
-            <button
-              className="bench-compare-button"
-              data-testid="button-save-comparison"
-              onClick={saveComparison}
-            >
-              <GitCompareArrows size={14} /> Save run
-            </button>
-          </div>
+          <span className="bench-readonly"><Database size={13} /> RESEARCH RECORDS</span>
         </header>
 
-        <div className="bench-notice">
-          <div>
-            <span className="notice-pip" />
-            <strong>VERIFIED / DEVELOPMENT RESEARCH</strong>
-            <span>
-              Helium price panel · no live prices · no execution access
-            </span>
-          </div>
-          <span
-            className="notice-source"
-            title={`${result.provenance.database.host}:${result.provenance.database.port} · ${result.provenance.price_table} · ${result.provenance.screener}`}
-          >
-            <CircleHelp size={13} /> provenance
-          </span>
-        </div>
-
-        {activeRail === "compare" ? (
-          <section className="bench-compare-view" data-testid="panel-compare">
-            <div className="bench-section-heading">
-              <div>
-                <span className="bench-overline">EXPLORATION RUNS</span>
-                <h2>Compare parameter sets</h2>
-              </div>
-              <button
-                className="bench-subtle-button"
-                data-testid="button-back-controls"
-                onClick={() => setActiveRail("controls")}
-              >
-                <SlidersHorizontal size={14} /> Back to controls
-              </button>
+        <div className="bench-ledger-body">
+          <section className="bench-ledger-context" aria-label="Research execution boundary">
+            <div className="bench-ledger-context-main">
+              <div className="bench-safety-mark"><LockKeyhole size={15} /></div>
+              <div><strong>RESEARCH ONLY · READ-ONLY CATALOG</strong><p>Recorded experiments and exploration runs. No controls here can trigger backtests, workshops, sweeps, or live execution.</p></div>
             </div>
-            {compareRuns.length === 0 ? (
-              <div className="bench-compare-empty">
-                <GitCompareArrows size={24} />
-                <strong>No runs pinned yet</strong>
-                <span>
-                  Configure a set, then use “Save run” to pin it here. Every
-                  saved card points to a server exploration run.
-                </span>
-              </div>
-            ) : (
-              <div className="bench-compare-grid">
-                {compareRuns.map((run, index) => (
-                  <article
-                    className="bench-compare-card"
-                    key={run.id}
-                    data-testid={`card-comparison-${index}`}
-                  >
-                    <div className="compare-card-top">
-                      <span>RUN #{run.result.run_id}</span>
-                      <button
-                        data-testid={`button-remove-comparison-${index}`}
-                        onClick={() =>
-                          setCompareRuns((current) =>
-                            current.filter((item) => item.id !== run.id),
-                          )
-                        }
-                      >
-                        <X size={14} />
-                      </button>
-                    </div>
-                    <code>{formatParams(run.params)}</code>
-                    <strong
-                      className={
-                        run.result.metrics.return_pct >= 0
-                          ? "positive"
-                          : "negative"
-                      }
-                    >
-                      {pct(run.result.metrics.return_pct)}{" "}
-                      <small>RETURN</small>
-                    </strong>
-                    <div className="compare-mini-metrics">
-                      <span>
-                        SHARPE <b>{run.result.metrics.sharpe.toFixed(2)}</b>
-                      </span>
-                      <span>
-                        MAX DD{" "}
-                        <b>{ddPct(run.result.metrics.max_drawdown_pct)}</b>
-                      </span>
-                      <span>
-                        TRADES <b>{run.result.metrics.trades}</b>
-                      </span>
-                    </div>
-                    <button
-                      className="compare-load"
-                      data-testid={`button-load-comparison-${index}`}
-                      onClick={() => {
-                        setParams(run.params);
-                        setActiveRail("controls");
-                      }}
-                    >
-                      Load into bench <Play size={13} />
-                    </button>
-                  </article>
-                ))}
-              </div>
-            )}
-            <div className="bench-compare-rule">
-              <span>SERVER RUN REGISTRY</span>
-              <i />
-              <span>{compareRuns.length}/3 slots occupied</span>
-            </div>
+            <span><ShieldCheck size={12} /> EXECUTION ISOLATED</span>
           </section>
-        ) : (
-          <>
-            <section
-              className="bench-controls-panel"
-              data-testid="panel-research-controls"
-            >
-              <div className="bench-panel-heading">
-                <div>
-                  <span className="bench-overline">CONTROL RAIL</span>
-                  <h2>Research parameters</h2>
+
+          {error ? (
+            <section className="bench-ledger-panel bench-ledger-error" role="alert" data-testid="status-bench-error">
+              <TriangleAlert size={24} />
+              <strong>Research catalog unavailable</strong>
+              <p>The catalog could not be read. No research action was submitted.</p>
+              <p className="bench-error-detail" data-testid="text-bench-error-detail">{error}</p>
+              <button className="bench-retry" data-testid="button-retry-bench" onClick={() => setAttempt((value) => value + 1)}>
+                <RefreshCw size={13} /> Retry catalog read
+              </button>
+            </section>
+          ) : catalog ? (
+            <>
+              <section className="bench-catalog-summary" aria-label="Catalog provenance and record counts">
+                <div className="bench-summary-cell">
+                  <span>DATA SOURCE</span><strong data-testid="text-bench-source">{catalog.source_label || catalog.source}</strong>
+                  {catalog.source_detail && <small>{catalog.source_detail}</small>}
                 </div>
-                <span className="bench-recompute">
-                  <span /> Runs verified engine on change
-                </span>
-              </div>
-              <div className="bench-control-grid">
-                <SelectControl
-                  label="Universe size"
-                  value={params.universe_size}
-                  options={[100, 200, 300, 500].map((value) => ({
-                    value,
-                    label: `${value} eligible symbols`,
-                  }))}
-                  onChange={(value) =>
-                    updateParam("universe_size", Number(value))
-                  }
-                  testId="universe"
-                />
-                <SelectControl
-                  label="Verified engine"
-                  value={params.engine}
-                  options={[
-                    { value: "momentum", label: "12-1 momentum" },
-                    { value: "regime", label: "Momentum + SPY regime" },
-                  ]}
-                  onChange={(value) =>
-                    updateParam("engine", value as Engine)
-                  }
-                  testId="engine"
-                />
-                <label className="bench-field">
-                  <span>Warmup start</span>
-                  <div className="bench-readonly-field">2018-01-01</div>
-                </label>
-                <label className="bench-field">
-                  <span>Backtest start</span>
-                  <div className="bench-readonly-field">2019-02-01</div>
-                </label>
-                <label className="bench-field">
-                  <span>Slippage / stop</span>
-                  <div className="bench-readonly-field">10 bps / 20%</div>
-                </label>
-                <label className="bench-field">
-                  <span>Allocation</span>
-                  <div className="bench-readonly-field">Equal weight / top 20</div>
-                </label>
-              </div>
-              <div className="bench-control-footer">
-                <div className="bench-config-string">
-                  <Settings2 size={13} />
-                  <code>{formatParams(params)}</code>
+                <div className="bench-summary-cell">
+                  <span>SNAPSHOT AS OF</span><strong data-testid="text-bench-as-of">{formatDate(catalog.snapshot_as_of)}</strong>
+                  <small>Generated {formatDate(catalog.generated_at)}</small>
                 </div>
-                <div className="bench-holdout">
+                <div className="bench-summary-cell">
+                  <span>REGISTERED EXPERIMENTS</span><strong className="bench-summary-count" data-testid="value-experiment-count">{catalog.row_counts.experiments}</strong>
+                  <small>Read-only records</small>
+                </div>
+                <div className="bench-summary-cell">
+                  <span>EXPLORATION RUNS</span><strong className="bench-summary-count" data-testid="value-run-count">{catalog.row_counts.exploration_runs}</strong>
+                  <small>Historical outcomes</small>
+                </div>
+              </section>
+
+              <section className="bench-ledger-panel" aria-labelledby="bench-ledger-title">
+                <div className="bench-ledger-heading">
                   <div>
-                    <LockKeyhole size={14} />
-                    <span>
-                      <strong>HOLDOUT 2025-01 → 2026-07</strong>
-                      <small>Locked until explicitly unlocked</small>
-                    </span>
+                    <span className="bench-overline">CATALOG / VERSION {catalog.schema_version}</span>
+                    <h2 id="bench-ledger-title">{view === "experiments" ? "Registered experiments" : "Exploration runs"}</h2>
+                    <p>{view === "experiments" ? "Hypotheses, declared pass bars, and recorded outcomes." : "Observed metrics from recorded parameter explorations."}</p>
                   </div>
-                  <button
-                    className={holdoutUnlocked ? "unlocked" : ""}
-                    data-testid="button-unlock-holdout"
-                    onClick={() => setHoldoutUnlocked((current) => !current)}
-                  >
-                    {holdoutUnlocked ? (
-                      <>
-                        <Check size={13} /> Unlocked for this session
-                      </>
+                  <div className="bench-view-switch" role="tablist" aria-label="Research record type">
+                    <button type="button" role="tab" aria-selected={view === "experiments"} className={view === "experiments" ? "active" : ""} data-testid="tab-experiments" onClick={() => setView("experiments")}>
+                      <BookOpen size={13} /> Experiments <b>{catalog.row_counts.experiments}</b>
+                    </button>
+                    <button type="button" role="tab" aria-selected={view === "runs"} className={view === "runs" ? "active" : ""} data-testid="tab-runs" onClick={() => setView("runs")}>
+                      <BarChart3 size={13} /> Exploration <b>{catalog.row_counts.exploration_runs}</b>
+                    </button>
+                  </div>
+                </div>
+
+                {view === "experiments" ? (
+                  <>
+                    <div className="bench-table-toolbar"><span>{experiments.length} REGISTERED RECORD{experiments.length === 1 ? "" : "S"}</span><span>OUTCOME STATUS IS RECORDED, NOT ACTIONABLE</span></div>
+                    {experiments.length === 0 ? (
+                      <div className="bench-ledger-empty" data-testid="status-experiments-empty"><BookOpen size={22} /><strong>No registered experiments</strong><p>The current catalog contains no experiment records.</p></div>
                     ) : (
-                      <>
-                        <LockKeyhole size={13} /> Unlock holdout
-                      </>
+                      <div className="bench-table-wrap">
+                        <table className="bench-table bench-experiments-table">
+                          <thead><tr><th>RECORD</th><th>FAMILY</th><th>HYPOTHESIS</th><th>PARAMETERS</th><th>PASS BAR</th><th>SHARPE</th><th>RETURN</th><th>MAX DD</th><th>DATA WINDOW</th><th>OUTCOME</th></tr></thead>
+                          <tbody>
+                            {experiments.map((experiment) => (
+                              <tr key={experiment.id} data-testid={`row-experiment-${experiment.id}`}>
+                                <td className="cell-id">{experiment.id}<span className="bench-family-sub">{formatDate(experiment.created_at)}</span></td>
+                                <td><span className="bench-family">{experiment.family}</span></td>
+                                <td className="bench-wrap-cell"><SummaryValue value={experiment.hypothesis} /></td>
+                                <td className="bench-wrap-cell"><SummaryValue value={experiment.parameters_summary} /></td>
+                                <td className="bench-wrap-cell"><SummaryValue value={experiment.pass_bar} /></td>
+                                <td className="bench-mono-cell">{formatMetric(experiment.metrics?.sharpe)}</td>
+                                <td className="bench-mono-cell">{formatPercent(experiment.metrics?.return_pct)}</td>
+                                <td className="bench-mono-cell">{formatDrawdown(experiment.metrics?.max_drawdown_pct)}</td>
+                                <td className="bench-wrap-cell"><SummaryValue value={experiment.data_window} /></td>
+                                <td><span className={`bench-outcome ${outcomeTone(experiment.outcome)}`} data-testid={`status-outcome-${experiment.id}`}>{experiment.outcome}</span></td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     )}
-                  </button>
-                </div>
-              </div>
-              {holdoutUnlocked && (
-                <div className="bench-unlock-ack" data-testid="status-holdout-unlocked">
-                  <Check size={14} /> Holdout included in this local
-                  exploration only. This does not grant production or trading
-                  access.
-                </div>
-              )}
-            </section>
-
-            <section className="bench-result-head">
-              <div>
-                <span className="bench-overline">
-                  RESULT SURFACE / {result.curve.length} SESSIONS
-                </span>
-                <h2>Verified strategy consequences</h2>
-              </div>
-              <div className="bench-run-meta">
-                <span>
-                  LAST PERIOD <b>{lastDate}</b>
-                </span>
-                <span>
-                  RUN <b>#{result.run_id}</b>
-                </span>
-                <span className="run-ready">
-                  <span /> {loading ? "RUNNING" : "RUN VERIFIED"}
-                </span>
-              </div>
-            </section>
-
-            <section className="bench-chart-grid">
-              <article className="bench-panel bench-equity-panel">
-                <div className="bench-chart-heading">
-                  <div>
-                    <span className="bench-overline">EQUITY CURVE</span>
-                    <h3>Growth of 100</h3>
-                  </div>
-                  <div className="chart-legend">
-                    <span className="legend-strategy" /> VERIFIED ENGINE
-                  </div>
-                </div>
-                <div className="bench-chart">
-                  {result.curve.length === 0 ? (
-                    <EmptyChart message="No curve returned" />
-                  ) : (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart
-                        data={result.curve}
-                        margin={{ top: 12, right: 12, left: -18, bottom: 0 }}
-                      >
-                        <CartesianGrid
-                          stroke="rgba(145,160,173,.12)"
-                          vertical={false}
-                        />
-                        <XAxis
-                          dataKey="date"
-                          ticks={chartTicks}
-                          tickFormatter={shortDate}
-                          tick={{ fill: "#71808b", fontSize: 10, fontFamily: "IBM Plex Mono" }}
-                          axisLine={false}
-                          tickLine={false}
-                        />
-                        <YAxis
-                          tick={{ fill: "#71808b", fontSize: 10, fontFamily: "IBM Plex Mono" }}
-                          axisLine={false}
-                          tickLine={false}
-                          tickFormatter={(value: number) => `${value}`}
-                        />
-                        <Tooltip
-                          contentStyle={{ background: "#111a20", border: "1px solid #33414a", borderRadius: 4, fontFamily: "IBM Plex Mono", fontSize: 11 }}
-                        />
-                        <Line
-                          type="monotone"
-                          dataKey="growth_of_100"
-                          name="VERIFIED ENGINE"
-                          stroke="#e9ae57"
-                          strokeWidth={2}
-                          dot={false}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  )}
-                </div>
-                <div className="chart-footer">
-                  <span>{result.data_window.backtest_start}</span>
-                  <span>
-                    {holdoutUnlocked ? "HOLDOUT INCLUDED" : "HOLDOUT LOCKED"}
-                  </span>
-                  <span>{lastDate}</span>
-                </div>
-              </article>
-              <article className="bench-panel bench-drawdown-panel">
-                <div className="bench-chart-heading">
-                  <div>
-                    <span className="bench-overline">RISK PATH</span>
-                    <h3>Drawdown</h3>
-                  </div>
-                  <span className="chart-stat negative" data-testid="value-max-drawdown">
-                    {ddPct(result.metrics.max_drawdown_pct)} max
-                  </span>
-                </div>
-                <div className="bench-chart">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart
-                      data={result.curve}
-                      margin={{ top: 12, right: 10, left: -18, bottom: 0 }}
-                    >
-                      <CartesianGrid
-                        stroke="rgba(145,160,173,.12)"
-                        vertical={false}
-                      />
-                      <XAxis
-                        dataKey="date"
-                        ticks={chartTicks}
-                        tickFormatter={shortDate}
-                        tick={{ fill: "#71808b", fontSize: 10, fontFamily: "IBM Plex Mono" }}
-                        axisLine={false}
-                        tickLine={false}
-                      />
-                      <YAxis
-                        tick={{ fill: "#71808b", fontSize: 10, fontFamily: "IBM Plex Mono" }}
-                        axisLine={false}
-                        tickLine={false}
-                        tickFormatter={(value: number) => `${value}%`}
-                      />
-                      <ReferenceLine y={0} stroke="rgba(233,174,87,.24)" />
-                      <Tooltip
-                        contentStyle={{ background: "#111a20", border: "1px solid #33414a", borderRadius: 4, fontFamily: "IBM Plex Mono", fontSize: 11 }}
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="drawdown_pct"
-                        name="Drawdown"
-                        stroke="#bc685d"
-                        fill="rgba(188,104,93,.18)"
-                        strokeWidth={1.5}
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="chart-footer">
-                  <span>PEAK-TO-TROUGH</span>
-                  <span>{result.metrics.days_cash} CASH SESSIONS</span>
-                </div>
-              </article>
-            </section>
-
-            <section className="bench-metric-strip" data-testid="panel-metrics">
-              <Metric
-                label="SHARPE"
-                value={result.metrics.sharpe.toFixed(2)}
-                tone={result.metrics.sharpe >= 0 ? "positive" : "negative"}
-                testId="sharpe"
-              />
-              <Metric
-                label="SORTINO"
-                value={result.metrics.sortino.toFixed(2)}
-                tone={result.metrics.sortino >= 0 ? "positive" : "negative"}
-                testId="sortino"
-              />
-              <Metric
-                label="TOTAL RETURN"
-                value={pct(result.metrics.return_pct)}
-                tone={result.metrics.return_pct >= 0 ? "positive" : "negative"}
-                testId="total-return"
-              />
-              <Metric
-                label="MAX DRAWDOWN"
-                value={ddPct(result.metrics.max_drawdown_pct)}
-                tone="negative"
-                testId="drawdown"
-              />
-              <Metric
-                label="TRADES"
-                value={nf.format(result.metrics.trades)}
-                compare={`TURNOVER ${pct(result.metrics.turnover * 100)}`}
-                tone="neutral"
-                testId="trades"
-              />
-              <Metric
-                label="MEAN DEPLOYMENT"
-                value={pct(result.metrics.mean_deployment * 100)}
-                compare={`MAX ${pct(result.metrics.max_deployment * 100)}`}
-                tone="neutral"
-                testId="deployment"
-              />
-            </section>
-
-            <section className="bench-lower-grid">
-              <article className="bench-panel noise-panel" data-testid="panel-noise-floor">
-                <div className="bench-chart-heading">
-                  <div>
-                    <span className="bench-overline">ROBUSTNESS PROXY</span>
-                    <h3>Noise-floor gauge</h3>
-                  </div>
-                  <Activity size={16} />
-                </div>
-                <div className="noise-gauge">
-                  <div className="noise-track">
-                    <div className="noise-fill" style={{ width: `${noiseFloor}%` }} />
-                    <span className="noise-marker" style={{ left: `${noiseFloor}%` }} />
-                  </div>
-                  <div className="noise-scale">
-                    <span>weak</span>
-                    <strong>{noiseFloor.toFixed(0)} / 100</strong>
-                    <span>persistent</span>
-                  </div>
-                </div>
-                <p>
-                  Descriptive only: observed Sharpe compared with the expected
-                  best Sharpe from the server run count. Higher is not proof of
-                  out-of-sample edge.
-                </p>
-                <div className="noise-meta">
-                  <span>
-                    <Activity size={13} /> {nf.format(attemptSignatures.length)}{" "}
-                    server runs
-                  </span>
-                  <span>
-                    SH {result.metrics.sharpe.toFixed(2)} / NOISE{" "}
-                    {expectedNoiseSharpe.toFixed(2)}
-                  </span>
-                </div>
-              </article>
-              <article className="bench-panel runlog-panel" data-testid="panel-run-log">
-                <div className="bench-chart-heading">
-                  <div>
-                    <span className="bench-overline">EXPLORATION RUN LOG</span>
-                    <h3>Run log</h3>
-                  </div>
-                  <span className="runlog-count">{runLog.length} runs</span>
-                </div>
-                <div className="bench-table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>TIME</th>
-                        <th>CONFIG</th>
-                        <th>OUTCOME</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {runLog.map((entry, index) => (
-                        <tr key={entry.id} data-testid={`row-run-log-${index}`}>
-                          <td>{entry.stamp}</td>
-                          <td>
-                            <code>{entry.params}</code>
-                          </td>
-                          <td className="positive">{entry.result}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </article>
-            </section>
-          </>
-        )}
-        <footer className="bench-footer">
-          <span>QUANT TERMINAL / DEVELOPMENT ONLY</span>
-          <span>
-            Source: {result.provenance.price_table} · run #{result.run_id}
-          </span>
-          <span>Server verified · publishing remains manual.</span>
-        </footer>
+                  </>
+                ) : (
+                  <>
+                    <div className="bench-table-toolbar">
+                      <span>{visibleRuns.length} OF {runs.length} EXPLORATION RUN{runs.length === 1 ? "" : "S"}</span>
+                      <label className="bench-filter"><span>FAMILY</span>
+                        <select data-testid="select-family-filter" value={familyFilter} onChange={(event) => setFamilyFilter(event.target.value)}>
+                          <option value="all">All families</option>
+                          {families.map((family) => <option key={family} value={family}>{family}</option>)}
+                        </select>
+                      </label>
+                    </div>
+                    {runs.length === 0 || visibleRuns.length === 0 ? (
+                      <div className="bench-ledger-empty" data-testid="status-runs-empty"><BarChart3 size={22} /><strong>{runs.length === 0 ? "No exploration runs" : "No runs for this family"}</strong><p>{runs.length === 0 ? "The current catalog contains no exploration records." : "Choose another family filter to view recorded runs."}</p></div>
+                    ) : (
+                      <div className="bench-table-wrap">
+                        <table className="bench-table bench-runs-table">
+                          <thead><tr>
+                            <th>RECORD</th><th>FAMILY</th><th>PARAMETERS</th><th>DATA WINDOW</th>
+                            {(["sharpe", "return_pct", "max_drawdown", "created_at"] as SortKey[]).map((key) => {
+                              const label = key === "sharpe" ? "SHARPE" : key === "return_pct" ? "RETURN" : key === "max_drawdown" ? "MAX DD" : "CREATED";
+                              const Icon = sortKey === key ? sortDirection === "asc" ? ArrowUp : ArrowDown : ArrowUpDown;
+                              return <th key={key}><button className="bench-sort" type="button" data-testid={`sort-runs-${key}`} aria-label={`Sort by ${label.toLowerCase()}`} onClick={() => changeSort(key)}>{label}<Icon size={11} /></button></th>;
+                            })}
+                            <th>SOURCE</th>
+                          </tr></thead>
+                          <tbody>
+                            {visibleRuns.map((run) => (
+                              <tr key={run.id} data-testid={`row-run-${run.id}`}>
+                                <td className="cell-id">{run.id}</td>
+                                <td><span className="bench-family">{run.family}</span></td>
+                                <td className="bench-wrap-cell"><SummaryValue value={run.parameters_summary} /></td>
+                                <td className="bench-wrap-cell"><SummaryValue value={run.data_window} /></td>
+                                <td className="bench-mono-cell">{formatMetric(run.sharpe)}</td>
+                                <td className="bench-mono-cell">{formatPercent(run.return_pct)}</td>
+                                <td className="bench-mono-cell">{formatDrawdown(run.max_drawdown)}</td>
+                                <td className="bench-mono-cell"><span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><CalendarClock size={11} />{formatDate(run.created_at)}</span></td>
+                                <td className="bench-mono-cell">{run.source}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </>
+                )}
+                <footer className="bench-ledger-foot">
+                  <span><strong>READ ONLY</strong> · No research jobs can be started from this page</span>
+                  <span>AS OF {formatDate(catalog.snapshot_as_of)}</span>
+                </footer>
+              </section>
+            </>
+          ) : null}
+        </div>
       </section>
     </main>
   );

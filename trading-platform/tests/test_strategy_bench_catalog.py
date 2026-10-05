@@ -1,0 +1,193 @@
+from __future__ import annotations
+
+import json
+from contextlib import contextmanager
+from datetime import datetime, timezone
+
+from research.strategy_bench_catalog import (
+    EXPLORATION_QUERY,
+    LEDGER_QUERY,
+    build_catalog,
+    fetch_live_catalog,
+    load_snapshot,
+)
+
+
+def _experiment(**overrides):
+    row = {
+        "experiment_id": 7,
+        "strategy_family": "unit_family",
+        "hypothesis": "A testable hypothesis",
+        "parameters": {
+            "lookback": 20,
+            "api_key": "must-not-ship",
+            "universe": ["A", "B", "C"],
+        },
+        "pass_bar": {"sharpe_min": 0.5},
+        "data_window": {
+            "start": "2020-01-01",
+            "end": "2024-12-31",
+            "daily_returns": [0.1, 0.2],
+            "price_source": "adjusted_close",
+        },
+        "results": {
+            "pooled_primary": {
+                "sharpe": 0.82,
+                "return": 0.34,
+                "max_drawdown": -0.12,
+                "daily_equity": [100, 101, 102],
+            }
+        },
+        "outcome": "PASS",
+        "created_at": datetime(2026, 10, 4, tzinfo=timezone.utc),
+    }
+    row.update(overrides)
+    return row
+
+
+def _run():
+    return {
+        "run_id": 91,
+        "strategy_family": "unit_family",
+        "parameters": {"allocation": 0.4, "private_token": "must-not-ship"},
+        "data_window": {"backtest_start": "2020-01-01"},
+        "source": "backtest_harness",
+        "sharpe": 0.9,
+        "return_pct": 18.5,
+        "max_drawdown": 0.15,
+        "created_at": datetime(2026, 10, 4, tzinfo=timezone.utc),
+    }
+
+
+def test_build_catalog_compacts_metrics_and_excludes_secrets_and_series():
+    catalog = build_catalog(
+        [_experiment()],
+        [_run()],
+        generated_at=datetime(2026, 10, 5, tzinfo=timezone.utc),
+    )
+
+    assert catalog["generated_at"] == "2026-10-05T00:00:00Z"
+    assert catalog["row_counts"] == {"experiments": 1, "exploration_runs": 1}
+    experiment = catalog["experiments"][0]
+    assert experiment["outcome"] == "PASS"
+    assert experiment["metrics"] == {
+        "sharpe": 0.82,
+        "return_pct": 34.0,
+        "max_drawdown_pct": 12.0,
+    }
+    assert experiment["data_window"]["start"] == "2020-01-01"
+    assert "daily_returns" not in experiment["data_window"]
+    assert "api_key" not in experiment["parameters_summary"]
+    assert "must-not-ship" not in json.dumps(catalog)
+    assert "daily_equity" not in json.dumps(catalog)
+    assert catalog["exploration_runs"][0]["return_pct"] == 18.5
+    assert catalog["exploration_runs"][0]["max_drawdown"] == 15.0
+
+
+def test_fetch_live_catalog_uses_read_only_transaction_and_only_selects():
+    queries: list[str] = []
+
+    class Cursor:
+        description = []
+
+        def __init__(self):
+            self.rows = []
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def execute(self, sql):
+            queries.append(sql)
+            if "research_ledger" in sql:
+                data = _experiment()
+                columns = [
+                    "experiment_id",
+                    "strategy_family",
+                    "hypothesis",
+                    "parameters",
+                    "pass_bar",
+                    "data_window",
+                    "results",
+                    "outcome",
+                    "created_at",
+                ]
+            else:
+                data = _run()
+                columns = [
+                    "run_id",
+                    "strategy_family",
+                    "parameters",
+                    "data_window",
+                    "source",
+                    "sharpe",
+                    "return_pct",
+                    "max_drawdown",
+                    "created_at",
+                ]
+            self.description = [(column,) for column in columns]
+            self.rows = [tuple(data[column] for column in columns)]
+
+        def fetchall(self):
+            return self.rows
+
+    class Connection:
+        def __init__(self):
+            self.cursor_instance = Cursor()
+            self.readonly = False
+            self.rolled_back = False
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def rollback(self):
+            self.rolled_back = True
+
+        def set_session(self, *, readonly):
+            self.readonly = readonly
+
+        def cursor(self):
+            return self.cursor_instance
+
+    connection = Connection()
+
+    @contextmanager
+    def connection_factory():
+        yield connection
+
+    catalog = fetch_live_catalog(connection_factory)
+
+    assert connection.rolled_back
+    assert connection.readonly
+    assert len(queries) == 2
+    assert queries == [LEDGER_QUERY, EXPLORATION_QUERY]
+    assert all(query.lstrip().upper().startswith("SELECT") for query in queries)
+    assert catalog["source"] == "live_research_database"
+    assert catalog["row_counts"] == {"experiments": 1, "exploration_runs": 1}
+
+
+def test_load_snapshot_recomputes_counts_and_labels_as_committed(tmp_path):
+    snapshot_path = tmp_path / "snapshot.json"
+    snapshot_path.write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-10-05T00:00:00Z",
+                "row_counts": {"experiments": 999, "exploration_runs": 999},
+                "experiments": [_experiment()],
+                "exploration_runs": [_run()],
+            },
+            default=str,
+        ),
+        encoding="utf-8",
+    )
+
+    snapshot = load_snapshot(str(snapshot_path))
+
+    assert snapshot["source"] == "committed_snapshot"
+    assert snapshot["snapshot_as_of"] == "2026-10-05T00:00:00Z"
+    assert snapshot["row_counts"] == {"experiments": 1, "exploration_runs": 1}

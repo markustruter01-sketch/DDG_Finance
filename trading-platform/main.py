@@ -682,7 +682,14 @@ class TradingAPIAuthMiddleware(BaseHTTPMiddleware):
     """Require the shared API secret for every route except liveness health."""
 
     async def dispatch(self, request: StarletteRequest, call_next) -> StarletteResponse:
-        if request.url.path in {_health_path(), _liveness_path()}:
+        public_bench_catalog = (
+            request.method == "GET"
+            and request.url.path == "/trading-api/research/strategy-bench/catalog"
+        )
+        if (
+            request.url.path in {_health_path(), _liveness_path()}
+            or public_bench_catalog
+        ):
             return await call_next(request)
 
         expected_secret = os.getenv("TRADING_API_SECRET", "").strip()

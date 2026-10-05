@@ -1,0 +1,4257 @@
+{
+  "experiments": [
+    {
+      "created_at": "2026-08-25T06:24:16.424505Z",
+      "data_window": {
+        "source": "conversation_history"
+      },
+      "family": "bot3_hard_assets",
+      "hypothesis": "EMA50/200 trend gate improves Bot 3 risk-adjusted returns.",
+      "id": 1,
+      "metrics": {
+        "max_drawdown_pct": null,
+        "return_pct": 78.85,
+        "sharpe": 0.7
+      },
+      "outcome": "FAIL",
+      "parameters_summary": "gate=EMA50/200",
+      "pass_bar": {
+        "sharpe_min": 0.8
+      }
+    },
+    {
+      "created_at": "2026-08-25T06:24:16.453750Z",
+      "data_window": {
+        "source": "conversation_history"
+      },
+      "family": "bot3_hard_assets",
+      "hypothesis": "EMA100/300 trend gate improves Bot 3 risk-adjusted returns.",
+      "id": 2,
+      "metrics": {
+        "max_drawdown_pct": null,
+        "return_pct": 49.75,
+        "sharpe": 0.498
+      },
+      "outcome": "FAIL",
+      "parameters_summary": "gate=EMA100/300",
+      "pass_bar": {
+        "sharpe_min": 0.8
+      }
+    },
+    {
+      "created_at": "2026-08-25T06:24:16.460644Z",
+      "data_window": {
+        "source": "conversation_history"
+      },
+      "family": "bot3_hard_assets",
+      "hypothesis": "Quarterly rebalanced equal-weight hard-assets portfolio passes the fixed Sharpe bar.",
+      "id": 3,
+      "metrics": {
+        "max_drawdown_pct": 43.169999999999995,
+        "return_pct": 349.96999999999997,
+        "sharpe": 0.798
+      },
+      "outcome": "FAIL",
+      "parameters_summary": "rebalance=quarterly; weighting=equal",
+      "pass_bar": {
+        "sharpe_min": 0.8
+      }
+    },
+    {
+      "created_at": "2026-08-25T06:24:16.590671Z",
+      "data_window": {
+        "source": "conversation_history"
+      },
+      "family": "bot3_hard_assets",
+      "hypothesis": "Quarterly rebalanced volatility-weighted hard-assets portfolio passes the fixed risk-adjusted return and drawdown bars.",
+      "id": 4,
+      "metrics": {
+        "max_drawdown_pct": 37.769999999999996,
+        "return_pct": 331.69,
+        "sharpe": 0.902
+      },
+      "outcome": "PASS",
+      "parameters_summary": "rebalance=quarterly; weighting=inverse_volatility",
+      "pass_bar": {
+        "max_drawdown_max": 0.4,
+        "sharpe_min": 0.8
+      }
+    },
+    {
+      "created_at": "2026-08-25T06:24:16.598795Z",
+      "data_window": {
+        "source": "conversation_history"
+      },
+      "family": "jerome_v2",
+      "hypothesis": "LLM macro stack produces an acceptable pooled risk-adjusted return.",
+      "id": 5,
+      "metrics": {
+        "max_drawdown_pct": null,
+        "return_pct": null,
+        "sharpe": -0.143
+      },
+      "outcome": "FAIL",
+      "parameters_summary": "model_stack=LLM macro",
+      "pass_bar": {
+        "sharpe_min": 0.8
+      }
+    },
+    {
+      "created_at": "2026-08-25T06:24:16.607134Z",
+      "data_window": {
+        "source": "conversation_history"
+      },
+      "family": "bot4_kraken_crypto",
+      "hypothesis": "Bot 4 can be evaluated in a usable paper-trading sandbox.",
+      "id": 6,
+      "metrics": {
+        "max_drawdown_pct": null,
+        "return_pct": null,
+        "sharpe": null
+      },
+      "outcome": "DISSOLVED",
+      "parameters_summary": "venue=Kraken",
+      "pass_bar": {
+        "paper_sandbox": "usable"
+      }
+    },
+    {
+      "created_at": "2026-08-25T06:24:16.613923Z",
+      "data_window": {
+        "source": "conversation_history"
+      },
+      "family": "bot1_global_etf",
+      "hypothesis": "Global ETF trend strategy produces an acceptable pooled risk-adjusted return.",
+      "id": 7,
+      "metrics": {
+        "max_drawdown_pct": null,
+        "return_pct": null,
+        "sharpe": 1.02
+      },
+      "outcome": "PASS",
+      "parameters_summary": "family=global ETF trend",
+      "pass_bar": {
+        "sharpe_min": 0.8
+      }
+    },
+    {
+      "created_at": "2026-08-27T03:35:27.586913Z",
+      "data_window": {
+        "earnings_source": "existing bot2_earnings_dates",
+        "end": "2026-08-27",
+        "price_source": "Yahoo Finance daily OHLCV",
+        "start": "2021-01-01",
+        "windows": [
+          "2021",
+          "2022",
+          "2023",
+          "2024-present"
+        ]
+      },
+      "family": "bot2_commodity_earnings_research",
+      "hypothesis": "A monthly positive-momentum commodity ETF basket, sized by inverse volatility and combined with positive-surprise earnings rotation, will produce a risk-adjusted improvement over the commodity-alone control without exceeding the locked drawdown and stop assumptions.",
+      "id": 8,
+      "metrics": {
+        "max_drawdown_pct": 20.472253251821463,
+        "return_pct": 5.032151338778168,
+        "sharpe": 0.1481378017099915
+      },
+      "outcome": "FAIL",
+      "parameters_summary": "allocation=inverse volatility among positive-momentum commodities; allocation_cap=0.4; allocation_floor=0.05; commodity_max_deployment=0.8; commodity_universe=9 items; earnings_allocation_cap=0.2; earnings_exit_variants=2 items; earnings_report_time=pre-market enters report session; post-market enters next session; unknown excluded; earnings_signal=positive reported surprise > 0; momentum_lookback_months_primary=12; momentum_lookback_sensitivity_months=3 items; momentum_signal=close / close approximately N*21 sessions ago - 1 > 0; random_entry_iterations=1000; random_seed=20260827; rebalance=first available trading session of each month; slippage_each_leg_bps=10; starting_equity=100000.0; st",
+      "pass_bar": {
+        "2022_primary_return_min": 0.0,
+        "pooled_primary_max_drawdown_max": 0.2,
+        "pooled_primary_sharpe_min": 0.5,
+        "positive_annual_windows_min": 3,
+        "primary_must_beat_commodity_alone": true
+      }
+    },
+    {
+      "created_at": "2026-08-27T03:37:28.324532Z",
+      "data_window": {
+        "earnings_source": "existing bot2_earnings_dates",
+        "end": "2026-08-27",
+        "price_source": "Yahoo Finance daily OHLCV",
+        "start": "2021-01-01",
+        "windows": [
+          "2021",
+          "2022",
+          "2023",
+          "2024-present"
+        ]
+      },
+      "family": "bot2_commodity_earnings_research",
+      "hypothesis": "A monthly positive-momentum commodity ETF basket, sized by inverse volatility and combined with positive-surprise earnings rotation, will produce a risk-adjusted improvement over the commodity-alone control without exceeding the locked drawdown and stop assumptions.",
+      "id": 9,
+      "metrics": {
+        "max_drawdown_pct": 20.472253251821463,
+        "return_pct": 5.032151338778301,
+        "sharpe": 0.14813780170999327
+      },
+      "outcome": "FAIL",
+      "parameters_summary": "allocation=inverse volatility among positive-momentum commodities; allocation_cap=0.4; allocation_floor=0.05; commodity_max_deployment=0.8; commodity_universe=9 items; earnings_allocation_cap=0.2; earnings_exit_variants=2 items; earnings_report_time=pre-market enters report session; post-market enters next session; unknown excluded; earnings_signal=positive reported surprise > 0; momentum_lookback_months_primary=12; momentum_lookback_sensitivity_months=3 items; momentum_signal=close / close approximately N*21 sessions ago - 1 > 0; random_entry_iterations=1000; random_seed=20260827; rebalance=first available trading session of each month; slippage_each_leg_bps=10; starting_equity=100000.0; st",
+      "pass_bar": {
+        "2022_primary_return_min": 0.0,
+        "pooled_primary_max_drawdown_max": 0.2,
+        "pooled_primary_sharpe_min": 0.5,
+        "positive_annual_windows_min": 3,
+        "primary_must_beat_commodity_alone": true
+      }
+    },
+    {
+      "created_at": "2026-08-27T05:40:13.283834Z",
+      "data_window": {
+        "earnings_and_prices": [
+          "2018-01-01",
+          "2026-08-27"
+        ],
+        "selection": [
+          "2018-01-01",
+          "2022-12-31"
+        ],
+        "validation": [
+          "2023-01-01",
+          "2026-08-27"
+        ]
+      },
+      "family": "bot2_earnings_universe_v2",
+      "hypothesis": "Stocks selected for business predictability rather than past earnings performance show a positive and persistent post-earnings edge. PEAD (entering after a known positive surprise) outperforms entering before the report.",
+      "id": 10,
+      "metrics": {
+        "max_drawdown_pct": 16.65830188042937,
+        "return_pct": 73.91533835544864,
+        "sharpe": 1.591903077512121
+      },
+      "outcome": "PASS",
+      "parameters_summary": "legacy_universe=10 items; lookback_filter=52-week high: entry close/open must be >= 90% of prior 252-session high; random_control_iterations=1000; random_seed=2712026; selection_rule=rank all ten validation stocks by raw opening-gap expectancy; select top six; selection_window=2 items; slippage_each_leg_bps=10.0; strategies=5 items; universe=10 items; validation_window=2 items",
+      "pass_bar": {
+        "beats_random": true,
+        "expectancy_minimum": 0.003,
+        "holds_out_of_sample": true,
+        "sharpe_minimum": 0.6
+      }
+    },
+    {
+      "created_at": "2026-08-27T08:29:47.606790Z",
+      "data_window": {
+        "earnings_and_prices": [
+          "2018-01-01",
+          "2026-08-27"
+        ],
+        "selection": [
+          "2018-01-01",
+          "2022-12-31"
+        ],
+        "validation": [
+          "2023-01-01",
+          "2026-08-27"
+        ]
+      },
+      "family": "bot2_earnings_universe_v2_constrained",
+      "hypothesis": "Restatement of experiment 10 under a cash-constrained portfolio model. The original result compounded per-event returns with no cash, notional, overlap or deployment model, producing implicit leverage up to 600%. This experiment records the equivalent unlevered result: equal weight across concurrent positions, capped at 100% deployed, cash retained when flat, entry/exit slippage preserved.",
+      "id": 11,
+      "metrics": {
+        "max_drawdown_pct": 13.0,
+        "return_pct": 29.66,
+        "sharpe": 0.784
+      },
+      "outcome": "FAIL",
+      "parameters_summary": "cash_policy=cash held when no positions open; legacy_universe=10 items; lookback_filter=52-week high: entry close/open must be >= 90% of prior 252-session high; max_deployment=1.0; position_sizing=equal weight across concurrent positions; random_control_iterations=1000; random_seed=2712026; selection_rule=rank all ten validation stocks by raw opening-gap expectancy; select top six; selection_window=2 items; slippage_each_leg_bps=10.0; strategies=5 items; universe=10 items; validation_window=2 items",
+      "pass_bar": {
+        "beats_random": true,
+        "expectancy_minimum": 0.003,
+        "holds_out_of_sample": true,
+        "sharpe_minimum": 0.6
+      }
+    },
+    {
+      "created_at": "2026-08-27T19:52:13.333190Z",
+      "data_window": {
+        "earnings_table": "bot2_earnings_dates",
+        "end": "2026-08-26",
+        "mechanical_gate": "six-date lookahead proof plus dropout proof",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "start": "2018-01-01",
+        "windows": [
+          {
+            "end": "2022-12-30",
+            "name": "selection_2018_2022",
+            "start": "2018-01-01"
+          },
+          {
+            "end": "2026-08-26",
+            "name": "validation_2023_present",
+            "start": "2023-01-03"
+          },
+          {
+            "end": "2026-08-26",
+            "name": "pooled_2018_present",
+            "start": "2018-01-01"
+          }
+        ]
+      },
+      "family": "bot2_momentum_pead_v3",
+      "hypothesis": "A mechanically screened, liquid price-and-volume universe combined with 12-1 momentum and positive-surprise PEAD can improve risk-adjusted returns without implicit leverage or future constituent information.",
+      "id": 12,
+      "metrics": {
+        "max_drawdown_pct": 51.35995272689748,
+        "return_pct": -7.950499461526938,
+        "sharpe": 0.08182286853547724
+      },
+      "outcome": "FAIL",
+      "parameters_summary": "catastrophe_stop=0.2; deployment_cap=1.0; momentum=3 fields; pead=3 fields; random_controls=3 fields; sgov_parking=cash-equivalent when no qualifying position; no synthetic return added; slippage_each_leg_bps=10.0; starting_equity=100000.0; universe_rule=8 fields",
+      "pass_bar": {
+        "pooled_primary_max_drawdown_max": 0.2,
+        "pooled_primary_sharpe_min": 0.5,
+        "positive_annual_windows_min": 3,
+        "primary_expectancy_minimum_derived_from_momentum_alone": 0.02913570514070348,
+        "primary_must_beat_momentum_alone": true
+      }
+    },
+    {
+      "created_at": "2026-08-27T20:25:13.129774Z",
+      "data_window": {
+        "earnings_table": "bot2_earnings_dates",
+        "end": "2026-08-26",
+        "mechanical_gate": "six-date current-bar lookahead proof plus true dropout proof",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "start": "2018-01-01",
+        "windows": [
+          {
+            "end": "2020-12-31",
+            "name": "2019_2020",
+            "start": "2019-01-01"
+          },
+          {
+            "end": "2022-12-31",
+            "name": "2021_2022",
+            "start": "2021-01-01"
+          },
+          {
+            "end": "2026-08-26",
+            "name": "2023_present",
+            "start": "2023-01-03"
+          },
+          {
+            "end": "2026-08-26",
+            "name": "pooled_2018_present",
+            "start": "2018-01-01"
+          }
+        ]
+      },
+      "family": "bot2_momentum_only",
+      "hypothesis": "12-1 cross-sectional momentum across a mechanically screened US equity universe, top 20 equal weight, monthly rebalance, produces positive risk-adjusted returns without an earnings overlay.",
+      "id": 13,
+      "metrics": {
+        "max_drawdown_pct": 5.374072786003779,
+        "return_pct": 1.28538352632932,
+        "sharpe": 0.09087266909137735
+      },
+      "outcome": "PASS",
+      "parameters_summary": "cash_model=one shared cash balance; unused capital remains cash; catastrophe_stop=0.2; deployment_cap=1.0; momentum=4 fields; pead=3 fields; random_controls=4 fields; rotation=6 fields; slippage_each_leg_bps=10.0; starting_equity=100000.0; universe_rule=9 fields",
+      "pass_bar": {
+        "beats_random_entry": true,
+        "beats_spy_buy_and_hold_risk_adjusted": true,
+        "expectancy_source": "momentum-alone result object; no copied v3 threshold",
+        "pooled_max_drawdown_max": 0.4,
+        "pooled_sharpe_min": 0.6
+      }
+    },
+    {
+      "created_at": "2026-08-27T20:25:13.362507Z",
+      "data_window": {
+        "earnings_table": "bot2_earnings_dates",
+        "end": "2026-08-26",
+        "mechanical_gate": "six-date current-bar lookahead proof plus true dropout proof",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "start": "2018-01-01",
+        "windows": [
+          {
+            "end": "2020-12-31",
+            "name": "2019_2020",
+            "start": "2019-01-01"
+          },
+          {
+            "end": "2022-12-31",
+            "name": "2021_2022",
+            "start": "2021-01-01"
+          },
+          {
+            "end": "2026-08-26",
+            "name": "2023_present",
+            "start": "2023-01-03"
+          },
+          {
+            "end": "2026-08-26",
+            "name": "pooled_2018_present",
+            "start": "2018-01-01"
+          }
+        ]
+      },
+      "family": "bot2_momentum_pead_v4_rotation",
+      "hypothesis": "A one-book monthly momentum strategy that liquidates into positive-surprise PEAD clusters can improve risk-adjusted returns without implicit leverage or a second cash balance.",
+      "id": 14,
+      "metrics": {
+        "max_drawdown_pct": 5.374072786003779,
+        "return_pct": 1.28538352632932,
+        "sharpe": 0.09087266909137735
+      },
+      "outcome": "FAIL",
+      "parameters_summary": "cash_model=one shared cash balance; unused capital remains cash; catastrophe_stop=0.2; deployment_cap=1.0; momentum=4 fields; pead=3 fields; random_controls=4 fields; rotation=6 fields; slippage_each_leg_bps=10.0; starting_equity=100000.0; universe_rule=9 fields",
+      "pass_bar": {
+        "expectancy_source": "momentum-alone result object in this same run",
+        "pooled_max_drawdown_max": 0.4,
+        "pooled_sharpe_min": 0.5,
+        "rotation_must_beat_momentum_alone_risk_adjusted": true
+      }
+    },
+    {
+      "created_at": "2026-08-28T21:22:15.859258Z",
+      "data_window": {
+        "earnings_table": "bot2_earnings_dates",
+        "end": "2026-08-27",
+        "historical_coverage_rule": "backtest starts at earliest monthly screen within 20% of 500",
+        "mechanical_gate": "full-market liquidity calibration plus requested historical counts and earliest monthly date within 20% of 500",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "start": "2025-10-01",
+        "windows": [
+          {
+            "end": "2025-12-31",
+            "name": "fullmarket_2025_Q4",
+            "start": "2025-10-01"
+          },
+          {
+            "end": "2026-06-30",
+            "name": "fullmarket_2026_H1",
+            "start": "2026-01-02"
+          },
+          {
+            "end": "2026-08-27",
+            "name": "fullmarket_2026_H2",
+            "start": "2026-07-01"
+          },
+          {
+            "end": "2026-08-27",
+            "name": "pooled_2025-10-01_present",
+            "start": "2025-10-01"
+          }
+        ]
+      },
+      "family": "bot2_momentum_fullmarket",
+      "hypothesis": "12-1 cross-sectional momentum, top 20 equal weight, monthly rebalance, on a full-market mechanically screened US equity universe produces positive risk-adjusted returns.",
+      "id": 15,
+      "metrics": {
+        "max_drawdown_pct": null,
+        "return_pct": null,
+        "sharpe": null
+      },
+      "outcome": "PENDING",
+      "parameters_summary": "artifact_guard=2 fields; cash_model=one shared cash balance; unused capital remains cash; catastrophe_stop=0.2; deployment_cap=1.0; momentum=4 fields; pead=3 fields; random_controls=4 fields; rotation=6 fields; slippage_each_leg_bps=10.0; starting_equity=100000.0; universe_rule=11 fields",
+      "pass_bar": {
+        "beats_random_entry": true,
+        "beats_spy_buy_and_hold_risk_adjusted": true,
+        "pooled_max_drawdown_max": 0.4,
+        "pooled_sharpe_min": 0.6
+      }
+    },
+    {
+      "created_at": "2026-08-28T21:29:06.431010Z",
+      "data_window": {
+        "earnings_table": "bot2_earnings_dates",
+        "end": "2026-08-27",
+        "mechanical_gate": "full-market liquidity calibration and historical coverage",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "start": "2025-09-02",
+        "windows": [
+          {
+            "end": "2025-12-31",
+            "name": "fullmarket_2025_Q4",
+            "start": "2025-10-01"
+          },
+          {
+            "end": "2026-06-30",
+            "name": "fullmarket_2026_H1",
+            "start": "2026-01-02"
+          },
+          {
+            "end": "2026-08-27",
+            "name": "fullmarket_2026_H2",
+            "start": "2026-07-01"
+          },
+          {
+            "end": "2026-08-27",
+            "name": "pooled_2025-10-01_present",
+            "start": "2025-09-02"
+          }
+        ]
+      },
+      "family": "bot2_momentum_fullmarket",
+      "hypothesis": "12-1 cross-sectional momentum, top 20 equal weight, monthly rebalance, on a full-market mechanically screened US equity universe produces positive risk-adjusted returns.",
+      "id": 16,
+      "metrics": {
+        "max_drawdown_pct": null,
+        "return_pct": null,
+        "sharpe": null
+      },
+      "outcome": "PENDING",
+      "parameters_summary": "artifact_guard=1 fields; cash_model=one shared cash balance; unused capital remains cash; catastrophe_stop=0.2; deployment_cap=1.0; momentum=4 fields; pead=3 fields; random_controls=4 fields; rotation=6 fields; slippage_each_leg_bps=10.0; starting_equity=100000.0; universe_rule=11 fields",
+      "pass_bar": {
+        "beats_random_entry": true,
+        "beats_spy_buy_and_hold_risk_adjusted": true,
+        "pooled_max_drawdown_max": 0.4,
+        "pooled_sharpe_min": 0.6
+      }
+    },
+    {
+      "created_at": "2026-08-28T21:29:33.632407Z",
+      "data_window": {
+        "earnings_table": "bot2_earnings_dates",
+        "end": "2026-08-27",
+        "mechanical_gate": "full-market liquidity calibration and historical coverage",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "start": "2025-09-02",
+        "windows": [
+          {
+            "end": "2025-12-31",
+            "name": "fullmarket_2025_Q4",
+            "start": "2025-10-01"
+          },
+          {
+            "end": "2026-06-30",
+            "name": "fullmarket_2026_H1",
+            "start": "2026-01-02"
+          },
+          {
+            "end": "2026-08-27",
+            "name": "fullmarket_2026_H2",
+            "start": "2026-07-01"
+          },
+          {
+            "end": "2026-08-27",
+            "name": "pooled_2025-10-01_present",
+            "start": "2025-09-02"
+          }
+        ]
+      },
+      "family": "bot2_momentum_fullmarket",
+      "hypothesis": "12-1 cross-sectional momentum, top 20 equal weight, monthly rebalance, on a full-market mechanically screened US equity universe produces positive risk-adjusted returns.",
+      "id": 17,
+      "metrics": {
+        "max_drawdown_pct": 18.300280369682064,
+        "return_pct": 96.2298198916598,
+        "sharpe": 1.7986646870723566
+      },
+      "outcome": "PASS",
+      "parameters_summary": "artifact_guard=1 fields; cash_model=one shared cash balance; unused capital remains cash; catastrophe_stop=0.2; deployment_cap=1.0; momentum=4 fields; pead=3 fields; random_controls=4 fields; rotation=6 fields; slippage_each_leg_bps=10.0; starting_equity=100000.0; universe_rule=11 fields",
+      "pass_bar": {
+        "beats_random_entry": true,
+        "beats_spy_buy_and_hold_risk_adjusted": true,
+        "pooled_max_drawdown_max": 0.4,
+        "pooled_sharpe_min": 0.6
+      }
+    },
+    {
+      "created_at": "2026-08-29T01:59:27.614437Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01",
+        "windows": [
+          {
+            "end": "2020-12-31",
+            "name": "2019_2020",
+            "start": "2019-02-01"
+          },
+          {
+            "end": "2022-12-31",
+            "name": "2021_2022",
+            "start": "2021-01-01"
+          },
+          {
+            "end": "2024-12-31",
+            "name": "2023_2024",
+            "start": "2023-01-01"
+          },
+          {
+            "end": "2026-07-31",
+            "name": "2025_latest_complete",
+            "start": "2025-01-01"
+          },
+          {
+            "end": "2026-07-31",
+            "name": "pooled_2019-02_latest_complete",
+            "start": "2019-02-01"
+          }
+        ]
+      },
+      "family": "bot2_momentum_rank500",
+      "hypothesis": "12-1 cross-sectional momentum, top 20 equal weight, monthly rebalance, on a rank-based top-500 US equity universe screened point-in-time, produces positive risk-adjusted returns.",
+      "id": 18,
+      "metrics": {
+        "max_drawdown_pct": 72.01566486898376,
+        "return_pct": 321.8342604572803,
+        "sharpe": 0.7016876886753177
+      },
+      "outcome": "FAIL",
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; idle_capital=cash; max_deployment=1.0; momentum=12-1; random_control_iterations=1000; random_control_seed=2712026; rebalance=monthly first-trading-day; screening=4 fields; slippage_each_leg_bps=10.0; top_n=20; universe_rule=top 500 by trailing 60-session median dollar volume; universe_size=500",
+      "pass_bar": {
+        "beats_random_entry": true,
+        "beats_spy_buy_and_hold_risk_adjusted": true,
+        "max_drawdown_max": 0.4,
+        "sharpe_min": 0.6
+      }
+    },
+    {
+      "created_at": "2026-08-29T03:45:41.438825Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "baseline_experiment_id": 18,
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "regime_rule": {
+          "evaluation_timing": "each monthly rebalance using bars strictly before date",
+          "lookback_sessions": 200,
+          "position_policy": "binary; no momentum positions while RISK_OFF",
+          "risk_off_asset": "SGOV",
+          "rule": "RISK_ON iff prior SPY close > prior 200-session SMA; otherwise RISK_OFF",
+          "signal_symbol": "SPY",
+          "symbol": "SGOV"
+        },
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01",
+        "windows": [
+          {
+            "end": "2020-12-31",
+            "name": "2019_2020",
+            "start": "2019-02-01"
+          },
+          {
+            "end": "2022-12-31",
+            "name": "2021_2022",
+            "start": "2021-01-01"
+          },
+          {
+            "end": "2024-12-31",
+            "name": "2023_2024",
+            "start": "2023-01-01"
+          },
+          {
+            "end": "2026-07-31",
+            "name": "2025_latest_complete",
+            "start": "2025-01-01"
+          },
+          {
+            "end": "2026-07-31",
+            "name": "pooled_2019-02_latest_complete",
+            "start": "2019-02-01"
+          }
+        ]
+      },
+      "family": "bot2_momentum_rank500_regime",
+      "hypothesis": "Adding a market regime filter to rank-500 12-1 momentum reduces the momentum-crash drawdown that caused experiment 18 to fail, without destroying the return. Specifically it should cut the 2021-2022 drawdown.",
+      "id": 19,
+      "metrics": {
+        "max_drawdown_pct": 33.79381911340273,
+        "return_pct": 209.20115894039733,
+        "sharpe": 0.8871543216496199
+      },
+      "outcome": "FAIL",
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; direct_baseline_experiment_id=18; idle_capital=cash; market_regime=7 fields; max_deployment=1.0; momentum=12-1; random_control_iterations=1000; random_control_seed=2712026; rebalance=monthly first-trading-day; screening=4 fields; slippage_each_leg_bps=10.0; top_n=20; universe_rule=top 500 by trailing 60-session median dollar volume; universe_size=500",
+      "pass_bar": {
+        "2021_2022_drawdown_reduction_min_absolute": 0.1,
+        "beats_random_entry": true,
+        "beats_spy_buy_and_hold_risk_adjusted": true,
+        "max_drawdown_max": 0.4,
+        "sharpe_min": 0.6
+      }
+    },
+    {
+      "created_at": "2026-08-29T06:16:25.040778Z",
+      "data_window": {
+        "source": "conversation_history"
+      },
+      "family": "bot3_hard_assets_crypto_capped",
+      "hypothesis": "Quarterly-rebalanced inverse-volatility hard assets, with crypto constrained to 5% of fleet equity and metals absorbing the difference, meets the risk-adjusted bar. Experiment 4 measured the unconstrained version and does not describe this strategy.",
+      "id": 20,
+      "metrics": {
+        "max_drawdown_pct": null,
+        "return_pct": null,
+        "sharpe": null
+      },
+      "outcome": "PENDING",
+      "parameters_summary": "baseline_experiment_id=4; constrained_weighting_rule=Compute bounded inverse-volatility weights across the four-asset universe, constrain combined crypto; crypto_fleet_cap_pct=0.05; drift_band=0.05; inverse_volatility=5 fields; rebalance=3 fields; universe=4 items",
+      "pass_bar": {
+        "max_drawdown_max": 0.4,
+        "sharpe_min": 0.8
+      }
+    },
+    {
+      "created_at": "2026-10-02T03:41:56.378837Z",
+      "data_window": {
+        "actual_first_spy_session": "2023-01-03",
+        "actual_last_spy_session": "2026-09-21",
+        "calendar": "point_in_time",
+        "calendar_symbol": "SPY",
+        "end_date_inclusive": true,
+        "flat_at_start": true,
+        "latest_complete_date_criterion": "Latest date with unflagged positive adjusted closes and unflagged OHLC for all 16 Bot 1 ETFs plus BIL (17/17 symbols).",
+        "latest_complete_date_symbols": "[17 items omitted]",
+        "latest_complete_date_valid_adjusted_close_count": 17,
+        "latest_complete_date_valid_ohlc_count": 17,
+        "price_source": "public.research_daily_prices via the existing Helium research connection",
+        "requested_end": "2026-09-21",
+        "requested_start": "2023-01-01",
+        "spy_sessions": 932,
+        "starting_equity": 100000.0,
+        "warmup_actual_data_starts_by_symbol": "Use each ETF's available valid history; the earliest valid close among the 17 evaluated symbols is 2005-01-03.",
+        "warmup_load_start": "2000-01-01"
+      },
+      "family": "bot1_baseline_v2",
+      "hypothesis": "Bot 1's live rules (bot1_baseline_v2, spec hash ea5efdba, point-in-time calendar) earn an acceptable risk-adjusted return out of sample",
+      "id": 21,
+      "metrics": {
+        "max_drawdown_pct": 7.720877892374436,
+        "return_pct": 27.729811339766954,
+        "sharpe": 0.8560437298634935
+      },
+      "outcome": "FAIL",
+      "parameters_summary": "benchmark_cost_bps=5; calendar=point_in_time; out_of_sample_rule=All evaluation data begins on/after 2023-01-01; price history before the window is warm-up only; por; primary_cost_bps=5; sensitivity_cost_bps=10; sizing_model=as live; spec=11 fields; spec_hash=ea5efdba9502d6d8fadcb0edbef84aa7992cb8fb4613c297e0624248ec03a759; variations_tested_source_runs=4 items",
+      "pass_bar": {
+        "all_conditions_required": true,
+        "beats_spy_buy_and_hold_sharpe": true,
+        "cagr_above_bil_buy_and_hold": true,
+        "max_drawdown_max": 0.4,
+        "sharpe_min": 0.6
+      }
+    }
+  ],
+  "exploration_runs": [
+    {
+      "created_at": "2026-10-03T22:47:56.121742Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "cagr_method": "calendar years between first and last close observations",
+        "evaluation": "descriptive exploration; no pass declared",
+        "experiment_id": 18,
+        "idle_capital": {
+          "asset": "SGOV",
+          "first_date": "2020-06-01",
+          "last_date": "2026-07-31",
+          "return_definition": "close-to-close; zero when current or prior bar is unavailable",
+          "source": "yahoo_chart_adjusted"
+        },
+        "panel_window": "run106_exact_parameterisation",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "reference_run_id": 139,
+        "scaling": {
+          "multiplier_cap": "parameterized per run",
+          "realized_returns": "portfolio daily returns strictly before rebalance date",
+          "realized_volatility_window": 126,
+          "target_volatility": 0.12
+        },
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "simulation_days": 1884,
+        "spy_price_source": "yahoo_chart_adjusted",
+        "subperiod": {
+          "end": "2022-12-31",
+          "spy_end_date": "2022-12-30",
+          "spy_return_pct": 5.331841751697719,
+          "spy_source": "yahoo_chart_adjusted",
+          "spy_start_date": "2020-12-31",
+          "start": "2021-01-01",
+          "strategy_return_definition": "equity at last session <= end divided by prior-session equity before start, less one"
+        },
+        "transaction_cost_bps_per_side": 10.0,
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_spy_sleeve_v1",
+      "id": 143,
+      "max_drawdown": 25.428145432476136,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; cooldown_days=63; hypothesis=Evaluate whether a stop-loss cooldown with SGOV idle slots and optional volatility-target leverage c; idle_capital=sgov; lookback_bars=252; maintenance_margin_ratio=0.3; margin_interest_rate=0.0625; max_deployment=1.0; momentum=12-1; multiplier_cap=1.0; realized_volatility_window=126; rebalance_frequency=monthly; reference_run_id=139; return_units=total_return_pct is result.return * 100, matching exploration_runs convention; run106_reference=false; skip_bars=22; slippage_each_leg_bps=10.0",
+      "return_pct": 192.33967074975263,
+      "sharpe": 0.8871318245618741,
+      "source": "analysis/bot2_momentum_pead_v4.py"
+    },
+    {
+      "created_at": "2026-10-03T22:47:56.121742Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "cagr_method": "calendar years between first and last close observations",
+        "evaluation": "descriptive exploration; no pass declared",
+        "experiment_id": 18,
+        "idle_capital": {
+          "asset": "SGOV",
+          "first_date": "2020-06-01",
+          "last_date": "2026-07-31",
+          "return_definition": "close-to-close; zero when current or prior bar is unavailable",
+          "source": "yahoo_chart_adjusted"
+        },
+        "panel_window": "run106_exact_parameterisation",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "reference_run_id": 139,
+        "scaling": {
+          "multiplier_cap": "parameterized per run",
+          "realized_returns": "portfolio daily returns strictly before rebalance date",
+          "realized_volatility_window": 126,
+          "target_volatility": 0.12
+        },
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "simulation_days": 1884,
+        "spy_price_source": "yahoo_chart_adjusted",
+        "subperiod": {
+          "end": "2022-12-31",
+          "spy_end_date": "2022-12-30",
+          "spy_return_pct": 5.331841751697719,
+          "spy_source": "yahoo_chart_adjusted",
+          "spy_start_date": "2020-12-31",
+          "start": "2021-01-01",
+          "strategy_return_definition": "equity at last session <= end divided by prior-session equity before start, less one"
+        },
+        "transaction_cost_bps_per_side": 10.0,
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_spy_sleeve_v1",
+      "id": 142,
+      "max_drawdown": 24.859328051706225,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; cooldown_days=63; hypothesis=Evaluate whether a stop-loss cooldown with SGOV idle slots and optional volatility-target leverage c; idle_capital=sgov; lookback_bars=252; maintenance_margin_ratio=0.3; margin_interest_rate=0.0625; max_deployment=1.0; momentum=12-1; multiplier_cap=1.0; realized_volatility_window=126; rebalance_frequency=monthly; reference_run_id=139; return_units=total_return_pct is result.return * 100, matching exploration_runs convention; run106_reference=false; skip_bars=22; slippage_each_leg_bps=10.0",
+      "return_pct": 167.9660709340614,
+      "sharpe": 0.8819993659384917,
+      "source": "analysis/bot2_momentum_pead_v4.py"
+    },
+    {
+      "created_at": "2026-10-02T09:40:25.459749Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive exploration; no pass declared",
+        "experiment_id": 18,
+        "idle_capital": {
+          "asset": "SGOV",
+          "first_date": "2020-06-01",
+          "last_date": "2026-07-31",
+          "return_definition": "close-to-close; zero when current or prior bar is unavailable",
+          "source": "yahoo_chart_adjusted"
+        },
+        "panel_window": "run106_exact_parameterisation",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "reference_run_id": 106,
+        "scaling": {
+          "multiplier_cap": "parameterized per run",
+          "realized_returns": "portfolio daily returns strictly before rebalance date",
+          "realized_volatility_window": 126,
+          "target_volatility": 0.12
+        },
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "subperiod": {
+          "end": "2022-12-31",
+          "spy_end_date": "2022-12-30",
+          "spy_return_pct": 5.331841751697719,
+          "spy_source": "yahoo_chart_adjusted",
+          "spy_start_date": "2020-12-31",
+          "start": "2021-01-01",
+          "strategy_return_definition": "equity at last session <= end divided by prior-session equity before start, less one"
+        },
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_cooldown_leverage_v1",
+      "id": 141,
+      "max_drawdown": 33.625524036628995,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; cooldown_days=63; hypothesis=Evaluate whether a stop-loss cooldown with SGOV idle slots and optional volatility-target leverage c; idle_capital=sgov; lookback_bars=252; maintenance_margin_ratio=0.3; margin_interest_rate=0.0625; max_deployment=2.0; momentum=12-1; multiplier_cap=2.0; realized_volatility_window=126; rebalance_frequency=monthly; return_units=total_return_pct is result.return * 100, matching exploration_runs convention; run106_reference=false; skip_bars=22; slippage_each_leg_bps=10.0; strategy_family=bot2_momentum_cooldown_leverage_v1",
+      "return_pct": 148.88080359782433,
+      "sharpe": 0.7915359268197004,
+      "source": "analysis/bot2_momentum_pead_v4.py"
+    },
+    {
+      "created_at": "2026-10-02T09:40:25.459749Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive exploration; no pass declared",
+        "experiment_id": 18,
+        "idle_capital": {
+          "asset": "SGOV",
+          "first_date": "2020-06-01",
+          "last_date": "2026-07-31",
+          "return_definition": "close-to-close; zero when current or prior bar is unavailable",
+          "source": "yahoo_chart_adjusted"
+        },
+        "panel_window": "run106_exact_parameterisation",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "reference_run_id": 106,
+        "scaling": {
+          "multiplier_cap": "parameterized per run",
+          "realized_returns": "portfolio daily returns strictly before rebalance date",
+          "realized_volatility_window": 126,
+          "target_volatility": 0.12
+        },
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "subperiod": {
+          "end": "2022-12-31",
+          "spy_end_date": "2022-12-30",
+          "spy_return_pct": 5.331841751697719,
+          "spy_source": "yahoo_chart_adjusted",
+          "spy_start_date": "2020-12-31",
+          "start": "2021-01-01",
+          "strategy_return_definition": "equity at last session <= end divided by prior-session equity before start, less one"
+        },
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_cooldown_leverage_v1",
+      "id": 140,
+      "max_drawdown": 33.57613493022853,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; cooldown_days=63; hypothesis=Evaluate whether a stop-loss cooldown with SGOV idle slots and optional volatility-target leverage c; idle_capital=sgov; lookback_bars=252; maintenance_margin_ratio=0.3; margin_interest_rate=0.0625; max_deployment=1.5; momentum=12-1; multiplier_cap=1.5; realized_volatility_window=126; rebalance_frequency=monthly; return_units=total_return_pct is result.return * 100, matching exploration_runs convention; run106_reference=false; skip_bars=22; slippage_each_leg_bps=10.0; strategy_family=bot2_momentum_cooldown_leverage_v1",
+      "return_pct": 149.06581928859814,
+      "sharpe": 0.7921572529913268,
+      "source": "analysis/bot2_momentum_pead_v4.py"
+    },
+    {
+      "created_at": "2026-10-02T09:40:25.459749Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive exploration; no pass declared",
+        "experiment_id": 18,
+        "idle_capital": {
+          "asset": "SGOV",
+          "first_date": "2020-06-01",
+          "last_date": "2026-07-31",
+          "return_definition": "close-to-close; zero when current or prior bar is unavailable",
+          "source": "yahoo_chart_adjusted"
+        },
+        "panel_window": "run106_exact_parameterisation",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "reference_run_id": 106,
+        "scaling": {
+          "multiplier_cap": "parameterized per run",
+          "realized_returns": "portfolio daily returns strictly before rebalance date",
+          "realized_volatility_window": 126,
+          "target_volatility": 0.12
+        },
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "subperiod": {
+          "end": "2022-12-31",
+          "spy_end_date": "2022-12-30",
+          "spy_return_pct": 5.331841751697719,
+          "spy_source": "yahoo_chart_adjusted",
+          "spy_start_date": "2020-12-31",
+          "start": "2021-01-01",
+          "strategy_return_definition": "equity at last session <= end divided by prior-session equity before start, less one"
+        },
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_cooldown_leverage_v1",
+      "id": 139,
+      "max_drawdown": 31.820960724909103,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; cooldown_days=63; hypothesis=Evaluate whether a stop-loss cooldown with SGOV idle slots and optional volatility-target leverage c; idle_capital=sgov; lookback_bars=252; maintenance_margin_ratio=0.3; margin_interest_rate=0.0625; max_deployment=1.0; momentum=12-1; multiplier_cap=1.0; realized_volatility_window=126; rebalance_frequency=monthly; return_units=total_return_pct is result.return * 100, matching exploration_runs convention; run106_reference=false; skip_bars=22; slippage_each_leg_bps=10.0; strategy_family=bot2_momentum_cooldown_leverage_v1",
+      "return_pct": 155.63709354473286,
+      "sharpe": 0.8143267644422962,
+      "source": "analysis/bot2_momentum_pead_v4.py"
+    },
+    {
+      "created_at": "2026-10-02T02:47:27.727086Z",
+      "data_window": {
+        "calendar": "point_in_time",
+        "calendar_symbol": "SPY",
+        "first_session": "2008-01-02",
+        "flagged_rows_dropped": 0,
+        "holdout_cutoff": "2022-12-31",
+        "last_session": "2022-12-30",
+        "price_source": "public.research_daily_prices",
+        "requested_end": "2022-12-31",
+        "requested_start": "2008-01-01",
+        "session_calendar": "SPY_unflagged_adjusted_close_dates",
+        "symbol_warmup_closes": 200,
+        "symbols": "[16 items omitted]"
+      },
+      "family": "benchmark_v1",
+      "id": 138,
+      "max_drawdown": 56.32071610000787,
+      "parameters_summary": "candidate=equal_weight_bot1_universe; cost_bps=10; family=benchmark_v1; harness_parameters=18 fields; spec=7 fields; spec_hash=ffb88e51e46beff48c605ddeff8322e83836c4de08d9124e1034a4b4ccb98f4f",
+      "return_pct": 52.62189120517922,
+      "sharpe": 0.23776594665673403,
+      "source": "backtest_harness"
+    },
+    {
+      "created_at": "2026-10-02T02:47:27.711898Z",
+      "data_window": {
+        "calendar": "point_in_time",
+        "calendar_symbol": "SPY",
+        "first_session": "2008-01-02",
+        "flagged_rows_dropped": 0,
+        "holdout_cutoff": "2022-12-31",
+        "last_session": "2022-12-30",
+        "price_source": "public.research_daily_prices",
+        "requested_end": "2022-12-31",
+        "requested_start": "2008-01-01",
+        "session_calendar": "SPY_unflagged_adjusted_close_dates",
+        "symbol_warmup_closes": 200,
+        "symbols": "[16 items omitted]"
+      },
+      "family": "benchmark_v1",
+      "id": 137,
+      "max_drawdown": 56.301782591356165,
+      "parameters_summary": "candidate=equal_weight_bot1_universe; cost_bps=5; family=benchmark_v1; harness_parameters=18 fields; spec=7 fields; spec_hash=ffb88e51e46beff48c605ddeff8322e83836c4de08d9124e1034a4b4ccb98f4f",
+      "return_pct": 52.92281184291101,
+      "sharpe": 0.23832188766393742,
+      "source": "backtest_harness"
+    },
+    {
+      "created_at": "2026-10-02T02:47:27.696978Z",
+      "data_window": {
+        "calendar": "point_in_time",
+        "calendar_symbol": "SPY",
+        "first_session": "2008-01-02",
+        "flagged_rows_dropped": 0,
+        "holdout_cutoff": "2022-12-31",
+        "last_session": "2022-12-30",
+        "price_source": "public.research_daily_prices",
+        "requested_end": "2022-12-31",
+        "requested_start": "2008-01-01",
+        "session_calendar": "SPY_unflagged_adjusted_close_dates",
+        "symbol_warmup_closes": 200,
+        "symbols": [
+          "EEM",
+          "SPY"
+        ]
+      },
+      "family": "benchmark_v1",
+      "id": 136,
+      "max_drawdown": 64.26991293069335,
+      "parameters_summary": "candidate=eem_buy_and_hold; cost_bps=10; family=benchmark_v1; harness_parameters=18 fields; spec=7 fields; spec_hash=ffb88e51e46beff48c605ddeff8322e83836c4de08d9124e1034a4b4ccb98f4f",
+      "return_pct": 3.768454700927726,
+      "sharpe": 0.15490842858254608,
+      "source": "backtest_harness"
+    },
+    {
+      "created_at": "2026-10-02T02:47:27.682533Z",
+      "data_window": {
+        "calendar": "point_in_time",
+        "calendar_symbol": "SPY",
+        "first_session": "2008-01-02",
+        "flagged_rows_dropped": 0,
+        "holdout_cutoff": "2022-12-31",
+        "last_session": "2022-12-30",
+        "price_source": "public.research_daily_prices",
+        "requested_end": "2022-12-31",
+        "requested_start": "2008-01-01",
+        "session_calendar": "SPY_unflagged_adjusted_close_dates",
+        "symbol_warmup_closes": 200,
+        "symbols": [
+          "EEM",
+          "SPY"
+        ]
+      },
+      "family": "benchmark_v1",
+      "id": 135,
+      "max_drawdown": 64.28064387408757,
+      "parameters_summary": "candidate=eem_buy_and_hold; cost_bps=5; family=benchmark_v1; harness_parameters=18 fields; spec=7 fields; spec_hash=ffb88e51e46beff48c605ddeff8322e83836c4de08d9124e1034a4b4ccb98f4f",
+      "return_pct": 3.8211401274871992,
+      "sharpe": 0.1550578235983451,
+      "source": "backtest_harness"
+    },
+    {
+      "created_at": "2026-10-02T02:47:27.665106Z",
+      "data_window": {
+        "calendar": "point_in_time",
+        "calendar_symbol": "SPY",
+        "first_session": "2008-01-02",
+        "flagged_rows_dropped": 0,
+        "holdout_cutoff": "2022-12-31",
+        "last_session": "2022-12-30",
+        "price_source": "public.research_daily_prices",
+        "requested_end": "2022-12-31",
+        "requested_start": "2008-01-01",
+        "session_calendar": "SPY_unflagged_adjusted_close_dates",
+        "symbol_warmup_closes": 200,
+        "symbols": [
+          "SPY"
+        ]
+      },
+      "family": "benchmark_v1",
+      "id": 134,
+      "max_drawdown": 51.86579242199707,
+      "parameters_summary": "candidate=spy_buy_and_hold; cost_bps=10; family=benchmark_v1; harness_parameters=18 fields; spec=7 fields; spec_hash=ffb88e51e46beff48c605ddeff8322e83836c4de08d9124e1034a4b4ccb98f4f",
+      "return_pct": 253.88798069506836,
+      "sharpe": 0.510620523510419,
+      "source": "backtest_harness"
+    },
+    {
+      "created_at": "2026-10-02T02:47:27.580316Z",
+      "data_window": {
+        "calendar": "point_in_time",
+        "calendar_symbol": "SPY",
+        "first_session": "2008-01-02",
+        "flagged_rows_dropped": 0,
+        "holdout_cutoff": "2022-12-31",
+        "last_session": "2022-12-30",
+        "price_source": "public.research_daily_prices",
+        "requested_end": "2022-12-31",
+        "requested_start": "2008-01-01",
+        "session_calendar": "SPY_unflagged_adjusted_close_dates",
+        "symbol_warmup_closes": 200,
+        "symbols": [
+          "SPY"
+        ]
+      },
+      "family": "benchmark_v1",
+      "id": 133,
+      "max_drawdown": 51.86908652438355,
+      "parameters_summary": "candidate=spy_buy_and_hold; cost_bps=5; family=benchmark_v1; harness_parameters=18 fields; spec=7 fields; spec_hash=ffb88e51e46beff48c605ddeff8322e83836c4de08d9124e1034a4b4ccb98f4f",
+      "return_pct": 254.19989666806026,
+      "sharpe": 0.5107518601258426,
+      "source": "backtest_harness"
+    },
+    {
+      "created_at": "2026-10-02T02:47:27.561609Z",
+      "data_window": {
+        "calendar": "point_in_time",
+        "calendar_symbol": "SPY",
+        "first_session": "2008-01-02",
+        "flagged_rows_dropped": 0,
+        "holdout_cutoff": "2022-12-31",
+        "last_session": "2022-12-30",
+        "price_source": "public.research_daily_prices",
+        "requested_end": "2022-12-31",
+        "requested_start": "2008-01-01",
+        "session_calendar": "SPY_unflagged_adjusted_close_dates",
+        "symbol_warmup_closes": 200,
+        "symbols": "[16 items omitted]"
+      },
+      "family": "bot1_baseline_v2",
+      "id": 132,
+      "max_drawdown": 33.64242543601636,
+      "parameters_summary": "candidate=live_rule_baseline; cost_bps=10; family=bot1_baseline_v2; harness_parameters=18 fields; spec=11 fields; spec_hash=ea5efdba9502d6d8fadcb0edbef84aa7992cb8fb4613c297e0624248ec03a759",
+      "return_pct": -8.152749603873321,
+      "sharpe": -0.05365399024808934,
+      "source": "backtest_harness"
+    },
+    {
+      "created_at": "2026-10-02T02:47:26.354710Z",
+      "data_window": {
+        "calendar": "point_in_time",
+        "calendar_symbol": "SPY",
+        "first_session": "2008-01-02",
+        "flagged_rows_dropped": 0,
+        "holdout_cutoff": "2022-12-31",
+        "last_session": "2022-12-30",
+        "price_source": "public.research_daily_prices",
+        "requested_end": "2022-12-31",
+        "requested_start": "2008-01-01",
+        "session_calendar": "SPY_unflagged_adjusted_close_dates",
+        "symbol_warmup_closes": 200,
+        "symbols": "[16 items omitted]"
+      },
+      "family": "bot1_baseline_v2",
+      "id": 131,
+      "max_drawdown": 31.078072814007474,
+      "parameters_summary": "candidate=live_rule_baseline; cost_bps=5; family=bot1_baseline_v2; harness_parameters=18 fields; spec=11 fields; spec_hash=ea5efdba9502d6d8fadcb0edbef84aa7992cb8fb4613c297e0624248ec03a759",
+      "return_pct": -0.13600706464930168,
+      "sharpe": 0.031475738561163404,
+      "source": "backtest_harness"
+    },
+    {
+      "created_at": "2026-10-02T01:19:36.391029Z",
+      "data_window": {
+        "component_sources": {
+          "bot1": 124,
+          "bot2_bil_buy_and_hold": "in_memory_bil_buy_and_hold_10bps",
+          "bot3": 126
+        },
+        "first_session": "2018-04-03",
+        "fleet_expected_end": "2022-12-30",
+        "fleet_expected_start": "2018-04-03",
+        "holdout_cutoff": "2022-12-31",
+        "last_session": "2022-12-30",
+        "price_source": "Helium public.research_daily_prices via baseline harness runs",
+        "requested_end": "2022-12-31",
+        "requested_start": "2018-04-03",
+        "session_calendar": "intersection_of_source_daily_return_dates",
+        "source_requested_start": "2008-01-01"
+      },
+      "family": "fleet_test_v1",
+      "id": 130,
+      "max_drawdown": 16.84284326248713,
+      "parameters_summary": "bil_cagr_full_period=0.005032551631227733; candidate_a_cagr_full_period=0.008423550012918835; candidate_a_spec_hash=5ec520ad6d1e093c0b939a5475cbfd2f4122e982f74430cdf16d24d4234d52d0; component_sources=3 fields; cost_bps=10; family=fleet_test_v1; fleet_sharpe_delta=-0.0023148464776415745; mode=without_candidate_A; risk_free_rate=0.0; spec=9 fields; spec_hash=860ad867cd8648705eedb496ee80486cc8c3b6dbbe74df6b98d1026a6c08d8ee; starting_equity_per_sleeve=100000.0; status=FAIL",
+      "return_pct": 28.016143014601823,
+      "sharpe": 0.5578085595150604,
+      "source": "backtest_harness_fleet_test"
+    },
+    {
+      "created_at": "2026-10-02T01:19:36.391029Z",
+      "data_window": {
+        "component_sources": {
+          "bot1": 124,
+          "bot2_candidate_a": 119,
+          "bot3": 126
+        },
+        "first_session": "2018-04-03",
+        "fleet_expected_end": "2022-12-30",
+        "fleet_expected_start": "2018-04-03",
+        "holdout_cutoff": "2022-12-31",
+        "last_session": "2022-12-30",
+        "price_source": "Helium public.research_daily_prices via baseline harness runs",
+        "requested_end": "2022-12-31",
+        "requested_start": "2018-04-03",
+        "session_calendar": "intersection_of_source_daily_return_dates",
+        "source_requested_start": "2008-01-01"
+      },
+      "family": "fleet_test_v1",
+      "id": 129,
+      "max_drawdown": 16.284760881135824,
+      "parameters_summary": "bil_cagr_full_period=0.005032551631227733; candidate_a_cagr_full_period=0.008423550012918835; candidate_a_spec_hash=5ec520ad6d1e093c0b939a5475cbfd2f4122e982f74430cdf16d24d4234d52d0; component_sources=3 fields; cost_bps=10; family=fleet_test_v1; fleet_sharpe_delta=-0.0023148464776415745; mode=with_candidate_A; risk_free_rate=0.0; spec=9 fields; spec_hash=860ad867cd8648705eedb496ee80486cc8c3b6dbbe74df6b98d1026a6c08d8ee; starting_equity_per_sleeve=100000.0; status=FAIL",
+      "return_pct": 28.734091997969948,
+      "sharpe": 0.5554937130374188,
+      "source": "backtest_harness_fleet_test"
+    },
+    {
+      "created_at": "2026-10-02T01:19:36.391029Z",
+      "data_window": {
+        "component_sources": {
+          "bot1": 123,
+          "bot2_bil_buy_and_hold": "in_memory_bil_buy_and_hold_5bps",
+          "bot3": 125
+        },
+        "first_session": "2018-04-03",
+        "fleet_expected_end": "2022-12-30",
+        "fleet_expected_start": "2018-04-03",
+        "holdout_cutoff": "2022-12-31",
+        "last_session": "2022-12-30",
+        "price_source": "Helium public.research_daily_prices via baseline harness runs",
+        "requested_end": "2022-12-31",
+        "requested_start": "2018-04-03",
+        "session_calendar": "intersection_of_source_daily_return_dates",
+        "source_requested_start": "2008-01-01"
+      },
+      "family": "fleet_test_v1",
+      "id": 128,
+      "max_drawdown": 16.706904398165772,
+      "parameters_summary": "bil_cagr_full_period=0.005067217897853915; candidate_a_cagr_full_period=0.011164088233589275; candidate_a_spec_hash=5ec520ad6d1e093c0b939a5475cbfd2f4122e982f74430cdf16d24d4234d52d0; component_sources=3 fields; cost_bps=5; family=fleet_test_v1; fleet_sharpe_delta=0.0048045545587340754; mode=without_candidate_A; risk_free_rate=0.0; spec=9 fields; spec_hash=860ad867cd8648705eedb496ee80486cc8c3b6dbbe74df6b98d1026a6c08d8ee; starting_equity_per_sleeve=100000.0; status=FAIL",
+      "return_pct": 29.03012067446391,
+      "sharpe": 0.5747257926019717,
+      "source": "backtest_harness_fleet_test"
+    },
+    {
+      "created_at": "2026-10-02T01:19:36.391029Z",
+      "data_window": {
+        "component_sources": {
+          "bot1": 123,
+          "bot2_candidate_a": 115,
+          "bot3": 125
+        },
+        "first_session": "2018-04-03",
+        "fleet_expected_end": "2022-12-30",
+        "fleet_expected_start": "2018-04-03",
+        "holdout_cutoff": "2022-12-31",
+        "last_session": "2022-12-30",
+        "price_source": "Helium public.research_daily_prices via baseline harness runs",
+        "requested_end": "2022-12-31",
+        "requested_start": "2018-04-03",
+        "session_calendar": "intersection_of_source_daily_return_dates",
+        "source_requested_start": "2008-01-01"
+      },
+      "family": "fleet_test_v1",
+      "id": 127,
+      "max_drawdown": 16.054674596456735,
+      "parameters_summary": "bil_cagr_full_period=0.005067217897853915; candidate_a_cagr_full_period=0.011164088233589275; candidate_a_spec_hash=5ec520ad6d1e093c0b939a5475cbfd2f4122e982f74430cdf16d24d4234d52d0; component_sources=3 fields; cost_bps=5; family=fleet_test_v1; fleet_sharpe_delta=0.0048045545587340754; mode=with_candidate_A; risk_free_rate=0.0; spec=9 fields; spec_hash=860ad867cd8648705eedb496ee80486cc8c3b6dbbe74df6b98d1026a6c08d8ee; starting_equity_per_sleeve=100000.0; status=FAIL",
+      "return_pct": 30.1930312379477,
+      "sharpe": 0.5795303471607057,
+      "source": "backtest_harness_fleet_test"
+    },
+    {
+      "created_at": "2026-10-02T00:53:44.287169Z",
+      "data_window": {
+        "first_session": "2017-11-09",
+        "flagged_rows_dropped": 0,
+        "holdout_cutoff": "2022-12-31",
+        "last_session": "2022-12-30",
+        "price_source": "public.research_daily_prices",
+        "requested_end": "2022-12-31",
+        "requested_start": "2008-01-01",
+        "session_calendar": "intersection_of_unflagged_adjusted_close_dates",
+        "symbols": [
+          "BTC-USD",
+          "ETH-USD",
+          "GLD",
+          "SLV",
+          "SPY"
+        ]
+      },
+      "family": "bot3_baseline_v1",
+      "id": 126,
+      "max_drawdown": 28.165372619500744,
+      "parameters_summary": "borrow_fee_rate=0.0; cost_bps=10; family=bot3_baseline_v1; fleet_equity_proxy=3 x current Bot3 equity; margin_rate=0.0; max_gross=1.0; registered_experiment_id=null; risk_free_rate=0.0; spec=11 fields; spec_hash=c079e8e4a21cb1ec8e6de5f0f97e701385166762441626d3b66f2b49df6f8cd0; starting_equity=100000.0; trail_pct=null; trailing_stop_cash_asset=null; trailing_stop_mode=disabled; whole_shares=false",
+      "return_pct": 87.35398413124042,
+      "sharpe": 0.6741114677271243,
+      "source": "backtest_harness"
+    },
+    {
+      "created_at": "2026-10-02T00:53:44.261044Z",
+      "data_window": {
+        "first_session": "2017-11-09",
+        "flagged_rows_dropped": 0,
+        "holdout_cutoff": "2022-12-31",
+        "last_session": "2022-12-30",
+        "price_source": "public.research_daily_prices",
+        "requested_end": "2022-12-31",
+        "requested_start": "2008-01-01",
+        "session_calendar": "intersection_of_unflagged_adjusted_close_dates",
+        "symbols": [
+          "BTC-USD",
+          "ETH-USD",
+          "GLD",
+          "SLV",
+          "SPY"
+        ]
+      },
+      "family": "bot3_baseline_v1",
+      "id": 125,
+      "max_drawdown": 28.15710785316467,
+      "parameters_summary": "borrow_fee_rate=0.0; cost_bps=5; family=bot3_baseline_v1; fleet_equity_proxy=3 x current Bot3 equity; margin_rate=0.0; max_gross=1.0; registered_experiment_id=null; risk_free_rate=0.0; spec=11 fields; spec_hash=c079e8e4a21cb1ec8e6de5f0f97e701385166762441626d3b66f2b49df6f8cd0; starting_equity=100000.0; trail_pct=null; trailing_stop_cash_asset=null; trailing_stop_mode=disabled; whole_shares=false",
+      "return_pct": 87.95115254724844,
+      "sharpe": 0.6770052006584842,
+      "source": "backtest_harness"
+    },
+    {
+      "created_at": "2026-10-02T00:53:36.786091Z",
+      "data_window": {
+        "first_session": "2012-02-03",
+        "flagged_rows_dropped": 0,
+        "holdout_cutoff": "2022-12-31",
+        "last_session": "2022-12-30",
+        "price_source": "public.research_daily_prices",
+        "requested_end": "2022-12-31",
+        "requested_start": "2008-01-01",
+        "session_calendar": "intersection_of_unflagged_adjusted_close_dates",
+        "symbols": "[16 items omitted]"
+      },
+      "family": "bot1_baseline_v1",
+      "id": 124,
+      "max_drawdown": 28.32578913079512,
+      "parameters_summary": "candidate=live_rule_baseline; cost_bps=10; family=bot1_baseline_v1; harness_parameters=15 fields; spec=10 fields; spec_hash=7708be0e4007ccd95e5aede6429d06e60ed0463cd7fca3b341466be67b196745",
+      "return_pct": -18.32510924357034,
+      "sharpe": -0.24062454437465022,
+      "source": "backtest_harness"
+    },
+    {
+      "created_at": "2026-10-02T00:53:35.508890Z",
+      "data_window": {
+        "first_session": "2012-02-03",
+        "flagged_rows_dropped": 0,
+        "holdout_cutoff": "2022-12-31",
+        "last_session": "2022-12-30",
+        "price_source": "public.research_daily_prices",
+        "requested_end": "2022-12-31",
+        "requested_start": "2008-01-01",
+        "session_calendar": "intersection_of_unflagged_adjusted_close_dates",
+        "symbols": "[16 items omitted]"
+      },
+      "family": "bot1_baseline_v1",
+      "id": 123,
+      "max_drawdown": 26.22344314721875,
+      "parameters_summary": "candidate=live_rule_baseline; cost_bps=5; family=bot1_baseline_v1; harness_parameters=15 fields; spec=10 fields; spec_hash=7708be0e4007ccd95e5aede6429d06e60ed0463cd7fca3b341466be67b196745",
+      "return_pct": -12.602621675703919,
+      "sharpe": -0.1487753549121097,
+      "source": "backtest_harness"
+    },
+    {
+      "created_at": "2026-10-01T22:11:12.181848Z",
+      "data_window": {
+        "first_session": "2008-01-02",
+        "flagged_rows_dropped": 3,
+        "holdout_cutoff": "2022-12-31",
+        "last_session": "2022-12-30",
+        "price_source": "public.research_daily_prices",
+        "requested_end": "2022-12-31",
+        "requested_start": "2008-01-01",
+        "session_calendar": "intersection_of_unflagged_adjusted_close_dates",
+        "symbols": "[13 items omitted]"
+      },
+      "family": "bot2_trend_v1.1",
+      "id": 122,
+      "max_drawdown": 42.24535735204501,
+      "parameters_summary": "candidate=D; cost_bps=10; harness_parameters=11 fields; spec=16 fields; spec_hash=5ec520ad6d1e093c0b939a5475cbfd2f4122e982f74430cdf16d24d4234d52d0",
+      "return_pct": -23.78218662818434,
+      "sharpe": -0.21329785926840755,
+      "source": "backtest_harness f7ff08e8"
+    },
+    {
+      "created_at": "2026-10-01T22:11:12.181848Z",
+      "data_window": {
+        "first_session": "2008-01-02",
+        "flagged_rows_dropped": 3,
+        "holdout_cutoff": "2022-12-31",
+        "last_session": "2022-12-30",
+        "price_source": "public.research_daily_prices",
+        "requested_end": "2022-12-31",
+        "requested_start": "2008-01-01",
+        "session_calendar": "intersection_of_unflagged_adjusted_close_dates",
+        "symbols": "[13 items omitted]"
+      },
+      "family": "bot2_trend_v1.1",
+      "id": 121,
+      "max_drawdown": 42.58947797528876,
+      "parameters_summary": "candidate=C; cost_bps=10; harness_parameters=11 fields; spec=16 fields; spec_hash=5ec520ad6d1e093c0b939a5475cbfd2f4122e982f74430cdf16d24d4234d52d0",
+      "return_pct": -26.44813487159667,
+      "sharpe": -0.2660896896497637,
+      "source": "backtest_harness f7ff08e8"
+    },
+    {
+      "created_at": "2026-10-01T22:11:12.181848Z",
+      "data_window": {
+        "first_session": "2008-01-02",
+        "flagged_rows_dropped": 3,
+        "holdout_cutoff": "2022-12-31",
+        "last_session": "2022-12-30",
+        "price_source": "public.research_daily_prices",
+        "requested_end": "2022-12-31",
+        "requested_start": "2008-01-01",
+        "session_calendar": "intersection_of_unflagged_adjusted_close_dates",
+        "symbols": "[13 items omitted]"
+      },
+      "family": "bot2_trend_v1.1",
+      "id": 120,
+      "max_drawdown": 17.999365664693084,
+      "parameters_summary": "candidate=B; cost_bps=10; harness_parameters=11 fields; spec=16 fields; spec_hash=5ec520ad6d1e093c0b939a5475cbfd2f4122e982f74430cdf16d24d4234d52d0",
+      "return_pct": 4.01152284265307,
+      "sharpe": 0.081551937800238,
+      "source": "backtest_harness f7ff08e8"
+    },
+    {
+      "created_at": "2026-10-01T22:11:12.181848Z",
+      "data_window": {
+        "first_session": "2008-01-02",
+        "flagged_rows_dropped": 3,
+        "holdout_cutoff": "2022-12-31",
+        "last_session": "2022-12-30",
+        "price_source": "public.research_daily_prices",
+        "requested_end": "2022-12-31",
+        "requested_start": "2008-01-01",
+        "session_calendar": "intersection_of_unflagged_adjusted_close_dates",
+        "symbols": "[13 items omitted]"
+      },
+      "family": "bot2_trend_v1.1",
+      "id": 119,
+      "max_drawdown": 12.32861164504534,
+      "parameters_summary": "candidate=A; cost_bps=10; harness_parameters=11 fields; spec=16 fields; spec_hash=5ec520ad6d1e093c0b939a5475cbfd2f4122e982f74430cdf16d24d4234d52d0",
+      "return_pct": 13.410867047266063,
+      "sharpe": 0.26541750751200677,
+      "source": "backtest_harness f7ff08e8"
+    },
+    {
+      "created_at": "2026-10-01T22:11:12.181848Z",
+      "data_window": {
+        "first_session": "2008-01-02",
+        "flagged_rows_dropped": 3,
+        "holdout_cutoff": "2022-12-31",
+        "last_session": "2022-12-30",
+        "price_source": "public.research_daily_prices",
+        "requested_end": "2022-12-31",
+        "requested_start": "2008-01-01",
+        "session_calendar": "intersection_of_unflagged_adjusted_close_dates",
+        "symbols": "[13 items omitted]"
+      },
+      "family": "bot2_trend_v1.1",
+      "id": 118,
+      "max_drawdown": 40.325970692366354,
+      "parameters_summary": "candidate=D; cost_bps=5; harness_parameters=11 fields; spec=16 fields; spec_hash=5ec520ad6d1e093c0b939a5475cbfd2f4122e982f74430cdf16d24d4234d52d0",
+      "return_pct": -19.68136312890315,
+      "sharpe": -0.16519688495647672,
+      "source": "backtest_harness f7ff08e8"
+    },
+    {
+      "created_at": "2026-10-01T22:11:12.181848Z",
+      "data_window": {
+        "first_session": "2008-01-02",
+        "flagged_rows_dropped": 3,
+        "holdout_cutoff": "2022-12-31",
+        "last_session": "2022-12-30",
+        "price_source": "public.research_daily_prices",
+        "requested_end": "2022-12-31",
+        "requested_start": "2008-01-01",
+        "session_calendar": "intersection_of_unflagged_adjusted_close_dates",
+        "symbols": "[13 items omitted]"
+      },
+      "family": "bot2_trend_v1.1",
+      "id": 117,
+      "max_drawdown": 41.821448697220774,
+      "parameters_summary": "candidate=C; cost_bps=5; harness_parameters=11 fields; spec=16 fields; spec_hash=5ec520ad6d1e093c0b939a5475cbfd2f4122e982f74430cdf16d24d4234d52d0",
+      "return_pct": -24.99064006164279,
+      "sharpe": -0.24686506262585997,
+      "source": "backtest_harness f7ff08e8"
+    },
+    {
+      "created_at": "2026-10-01T22:11:12.181848Z",
+      "data_window": {
+        "first_session": "2008-01-02",
+        "flagged_rows_dropped": 3,
+        "holdout_cutoff": "2022-12-31",
+        "last_session": "2022-12-30",
+        "price_source": "public.research_daily_prices",
+        "requested_end": "2022-12-31",
+        "requested_start": "2008-01-01",
+        "session_calendar": "intersection_of_unflagged_adjusted_close_dates",
+        "symbols": "[13 items omitted]"
+      },
+      "family": "bot2_trend_v1.1",
+      "id": 116,
+      "max_drawdown": 14.972154614642797,
+      "parameters_summary": "candidate=B; cost_bps=5; harness_parameters=11 fields; spec=16 fields; spec_hash=5ec520ad6d1e093c0b939a5475cbfd2f4122e982f74430cdf16d24d4234d52d0",
+      "return_pct": 12.05777201182423,
+      "sharpe": 0.19438712049504894,
+      "source": "backtest_harness f7ff08e8"
+    },
+    {
+      "created_at": "2026-10-01T22:11:12.181848Z",
+      "data_window": {
+        "first_session": "2008-01-02",
+        "flagged_rows_dropped": 3,
+        "holdout_cutoff": "2022-12-31",
+        "last_session": "2022-12-30",
+        "price_source": "public.research_daily_prices",
+        "requested_end": "2022-12-31",
+        "requested_start": "2008-01-01",
+        "session_calendar": "intersection_of_unflagged_adjusted_close_dates",
+        "symbols": "[13 items omitted]"
+      },
+      "family": "bot2_trend_v1.1",
+      "id": 115,
+      "max_drawdown": 10.792587209476922,
+      "parameters_summary": "candidate=A; cost_bps=5; harness_parameters=11 fields; spec=16 fields; spec_hash=5ec520ad6d1e093c0b939a5475cbfd2f4122e982f74430cdf16d24d4234d52d0",
+      "return_pct": 18.12389716614056,
+      "sharpe": 0.3459762076649001,
+      "source": "backtest_harness f7ff08e8"
+    },
+    {
+      "created_at": "2026-10-01T21:39:28.261362Z",
+      "data_window": {
+        "first_session": "2008-01-02",
+        "flagged_rows_dropped": 3,
+        "holdout_cutoff": "2022-12-31",
+        "last_session": "2022-12-30",
+        "price_source": "public.research_daily_prices",
+        "requested_end": "2022-12-31",
+        "requested_start": "2008-01-01",
+        "session_calendar": "intersection_of_unflagged_adjusted_close_dates",
+        "symbols": "[13 items omitted]"
+      },
+      "family": "bot2_trend_v1",
+      "id": 114,
+      "max_drawdown": 22.63926009613505,
+      "parameters_summary": "candidate=D; cost_bps=10; harness_parameters=11 fields; spec=16 fields; spec_hash=dd977b3c3a5add6f177adb2d841373890b4fbc531a3110221c2bd59460202b8c",
+      "return_pct": 8.806257473618162,
+      "sharpe": 0.12086762958409868,
+      "source": "backtest_harness f7ff08e8"
+    },
+    {
+      "created_at": "2026-10-01T21:39:28.261362Z",
+      "data_window": {
+        "first_session": "2008-01-02",
+        "flagged_rows_dropped": 3,
+        "holdout_cutoff": "2022-12-31",
+        "last_session": "2022-12-30",
+        "price_source": "public.research_daily_prices",
+        "requested_end": "2022-12-31",
+        "requested_start": "2008-01-01",
+        "session_calendar": "intersection_of_unflagged_adjusted_close_dates",
+        "symbols": "[13 items omitted]"
+      },
+      "family": "bot2_trend_v1",
+      "id": 113,
+      "max_drawdown": 20.578664147440392,
+      "parameters_summary": "candidate=C; cost_bps=10; harness_parameters=11 fields; spec=16 fields; spec_hash=dd977b3c3a5add6f177adb2d841373890b4fbc531a3110221c2bd59460202b8c",
+      "return_pct": 10.887229597676384,
+      "sharpe": 0.14149793945020175,
+      "source": "backtest_harness f7ff08e8"
+    },
+    {
+      "created_at": "2026-10-01T21:39:28.261362Z",
+      "data_window": {
+        "first_session": "2008-01-02",
+        "flagged_rows_dropped": 3,
+        "holdout_cutoff": "2022-12-31",
+        "last_session": "2022-12-30",
+        "price_source": "public.research_daily_prices",
+        "requested_end": "2022-12-31",
+        "requested_start": "2008-01-01",
+        "session_calendar": "intersection_of_unflagged_adjusted_close_dates",
+        "symbols": "[13 items omitted]"
+      },
+      "family": "bot2_trend_v1",
+      "id": 112,
+      "max_drawdown": 18.0958863514928,
+      "parameters_summary": "candidate=B; cost_bps=10; harness_parameters=11 fields; spec=16 fields; spec_hash=dd977b3c3a5add6f177adb2d841373890b4fbc531a3110221c2bd59460202b8c",
+      "return_pct": 3.8373813202134954,
+      "sharpe": 0.07938215519607038,
+      "source": "backtest_harness f7ff08e8"
+    },
+    {
+      "created_at": "2026-10-01T21:39:28.261362Z",
+      "data_window": {
+        "first_session": "2008-01-02",
+        "flagged_rows_dropped": 3,
+        "holdout_cutoff": "2022-12-31",
+        "last_session": "2022-12-30",
+        "price_source": "public.research_daily_prices",
+        "requested_end": "2022-12-31",
+        "requested_start": "2008-01-01",
+        "session_calendar": "intersection_of_unflagged_adjusted_close_dates",
+        "symbols": "[13 items omitted]"
+      },
+      "family": "bot2_trend_v1",
+      "id": 111,
+      "max_drawdown": 12.32861164504534,
+      "parameters_summary": "candidate=A; cost_bps=10; harness_parameters=11 fields; spec=16 fields; spec_hash=dd977b3c3a5add6f177adb2d841373890b4fbc531a3110221c2bd59460202b8c",
+      "return_pct": 13.410867047266063,
+      "sharpe": 0.26541750751200677,
+      "source": "backtest_harness f7ff08e8"
+    },
+    {
+      "created_at": "2026-10-01T21:39:28.261362Z",
+      "data_window": {
+        "first_session": "2008-01-02",
+        "flagged_rows_dropped": 3,
+        "holdout_cutoff": "2022-12-31",
+        "last_session": "2022-12-30",
+        "price_source": "public.research_daily_prices",
+        "requested_end": "2022-12-31",
+        "requested_start": "2008-01-01",
+        "session_calendar": "intersection_of_unflagged_adjusted_close_dates",
+        "symbols": "[13 items omitted]"
+      },
+      "family": "bot2_trend_v1",
+      "id": 110,
+      "max_drawdown": 21.186776865895443,
+      "parameters_summary": "candidate=D; cost_bps=5; harness_parameters=11 fields; spec=16 fields; spec_hash=dd977b3c3a5add6f177adb2d841373890b4fbc531a3110221c2bd59460202b8c",
+      "return_pct": 14.964572017000254,
+      "sharpe": 0.17915156383555467,
+      "source": "backtest_harness f7ff08e8"
+    },
+    {
+      "created_at": "2026-10-01T21:39:28.261362Z",
+      "data_window": {
+        "first_session": "2008-01-02",
+        "flagged_rows_dropped": 3,
+        "holdout_cutoff": "2022-12-31",
+        "last_session": "2022-12-30",
+        "price_source": "public.research_daily_prices",
+        "requested_end": "2022-12-31",
+        "requested_start": "2008-01-01",
+        "session_calendar": "intersection_of_unflagged_adjusted_close_dates",
+        "symbols": "[13 items omitted]"
+      },
+      "family": "bot2_trend_v1",
+      "id": 109,
+      "max_drawdown": 20.7510195530091,
+      "parameters_summary": "candidate=C; cost_bps=5; harness_parameters=11 fields; spec=16 fields; spec_hash=dd977b3c3a5add6f177adb2d841373890b4fbc531a3110221c2bd59460202b8c",
+      "return_pct": 10.63294810914357,
+      "sharpe": 0.13867892724936975,
+      "source": "backtest_harness f7ff08e8"
+    },
+    {
+      "created_at": "2026-10-01T21:39:28.261362Z",
+      "data_window": {
+        "first_session": "2008-01-02",
+        "flagged_rows_dropped": 3,
+        "holdout_cutoff": "2022-12-31",
+        "last_session": "2022-12-30",
+        "price_source": "public.research_daily_prices",
+        "requested_end": "2022-12-31",
+        "requested_start": "2008-01-01",
+        "session_calendar": "intersection_of_unflagged_adjusted_close_dates",
+        "symbols": "[13 items omitted]"
+      },
+      "family": "bot2_trend_v1",
+      "id": 108,
+      "max_drawdown": 14.87271671894748,
+      "parameters_summary": "candidate=B; cost_bps=5; harness_parameters=11 fields; spec=16 fields; spec_hash=dd977b3c3a5add6f177adb2d841373890b4fbc531a3110221c2bd59460202b8c",
+      "return_pct": 11.929738285747016,
+      "sharpe": 0.19419078383006397,
+      "source": "backtest_harness f7ff08e8"
+    },
+    {
+      "created_at": "2026-10-01T21:39:28.261362Z",
+      "data_window": {
+        "first_session": "2008-01-02",
+        "flagged_rows_dropped": 3,
+        "holdout_cutoff": "2022-12-31",
+        "last_session": "2022-12-30",
+        "price_source": "public.research_daily_prices",
+        "requested_end": "2022-12-31",
+        "requested_start": "2008-01-01",
+        "session_calendar": "intersection_of_unflagged_adjusted_close_dates",
+        "symbols": "[13 items omitted]"
+      },
+      "family": "bot2_trend_v1",
+      "id": 107,
+      "max_drawdown": 10.792587209476922,
+      "parameters_summary": "candidate=A; cost_bps=5; harness_parameters=11 fields; spec=16 fields; spec_hash=dd977b3c3a5add6f177adb2d841373890b4fbc531a3110221c2bd59460202b8c",
+      "return_pct": 18.12389716614056,
+      "sharpe": 0.3459762076649001,
+      "source": "backtest_harness f7ff08e8"
+    },
+    {
+      "created_at": "2026-09-05T21:04:33.103860Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "verified descriptive configuration; no pass declared",
+        "experiment_id": 18,
+        "idle_capital": {
+          "asset": "SGOV",
+          "return_definition": "close-to-close; zero when current or prior bar is unavailable"
+        },
+        "panel_window": "pooled_2019-02_latest_complete",
+        "pre_sgov_spy_reference_sessions": 334,
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "reference_price_sources": [
+          "yahoo_chart_adjusted"
+        ],
+        "run_date": "2026-09-06",
+        "scaling": {
+          "fallback": "1.0 when history is insufficient or realized volatility is zero",
+          "multiplier_cap": 1.0,
+          "realized_returns": "portfolio daily returns strictly before rebalance date",
+          "realized_volatility_window": 126,
+          "target_volatility": 0.12
+        },
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "sgov_coverage": {
+          "distinct_date_count": 1550,
+          "first_date": "2020-06-01",
+          "last_date": "2026-07-31",
+          "row_count": 1550,
+          "source": "yahoo_chart_adjusted"
+        },
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_parameterisation_verification",
+      "id": 106,
+      "max_drawdown": 42.325974068976535,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; experiment_id=18; idle_capital=sgov; lookback_bars=252; max_deployment=1.0; momentum=12-1; realized_volatility_window=126; rebalance_frequency=monthly; run_date=2026-09-06; skip_bars=22; slippage_each_leg_bps=10.0; target_volatility=0.12; top_n=50; universe_size=500; verification=SGOV idle-capital verification",
+      "return_pct": 194.11844148263512,
+      "sharpe": 0.8178417183599941,
+      "source": "parameterisation verification"
+    },
+    {
+      "created_at": "2026-09-05T21:04:33.103860Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "verified descriptive configuration; no pass declared",
+        "experiment_id": 18,
+        "idle_capital": {
+          "asset": "SGOV",
+          "return_definition": "close-to-close; zero when current or prior bar is unavailable"
+        },
+        "panel_window": "pooled_2019-02_latest_complete",
+        "pre_sgov_spy_reference_sessions": 334,
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "reference_price_sources": [
+          "yahoo_chart_adjusted"
+        ],
+        "run_date": "2026-09-06",
+        "scaling": {
+          "fallback": "1.0 when history is insufficient or realized volatility is zero",
+          "multiplier_cap": 1.0,
+          "realized_returns": "portfolio daily returns strictly before rebalance date",
+          "realized_volatility_window": 126,
+          "target_volatility": 0.12
+        },
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "sgov_coverage": {
+          "distinct_date_count": 1550,
+          "first_date": "2020-06-01",
+          "last_date": "2026-07-31",
+          "row_count": 1550,
+          "source": "yahoo_chart_adjusted"
+        },
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_parameterisation_verification",
+      "id": 105,
+      "max_drawdown": 48.05969536236835,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; experiment_id=18; idle_capital=sgov; lookback_bars=252; max_deployment=1.0; momentum=12-1; realized_volatility_window=126; rebalance_frequency=monthly; run_date=2026-09-06; skip_bars=22; slippage_each_leg_bps=10.0; target_volatility=0.12; top_n=20; universe_size=500; verification=SGOV idle-capital verification",
+      "return_pct": 199.7876269389301,
+      "sharpe": 0.7693408580391018,
+      "source": "parameterisation verification"
+    },
+    {
+      "created_at": "2026-09-05T20:31:41.941391Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "verified descriptive configuration; no pass declared",
+        "experiment_id": 18,
+        "panel_window": "pooled_2019-02_latest_complete",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "run_date": "2026-09-04",
+        "scaling": {
+          "fallback": "1.0 when history is insufficient or realized volatility is zero",
+          "multiplier_cap": 1.0,
+          "realized_returns": "portfolio daily returns strictly before rebalance date",
+          "realized_volatility_window": 126,
+          "target_volatility": 0.12
+        },
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_parameterisation_verification",
+      "id": 104,
+      "max_drawdown": 43.301411919093134,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; experiment_id=18; idle_capital=cash; lookback_bars=252; max_deployment=1.0; momentum=12-1; realized_volatility_window=126; rebalance_frequency=monthly; run_date=2026-09-04; skip_bars=22; slippage_each_leg_bps=10.0; target_volatility=0.12; top_n=50; universe_size=500; verification=parameterisation verification",
+      "return_pct": 173.46016166147203,
+      "sharpe": 0.7693211395994386,
+      "source": "parameterisation verification"
+    },
+    {
+      "created_at": "2026-09-05T20:31:41.941391Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "verified descriptive configuration; no pass declared",
+        "experiment_id": 18,
+        "panel_window": "pooled_2019-02_latest_complete",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "run_date": "2026-09-04",
+        "scaling": {
+          "fallback": "1.0 when history is insufficient or realized volatility is zero",
+          "multiplier_cap": 1.0,
+          "realized_returns": "portfolio daily returns strictly before rebalance date",
+          "realized_volatility_window": 126,
+          "target_volatility": 0.12
+        },
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_parameterisation_verification",
+      "id": 103,
+      "max_drawdown": 49.19672416825907,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; experiment_id=18; idle_capital=cash; lookback_bars=252; max_deployment=1.0; momentum=12-1; realized_volatility_window=126; rebalance_frequency=monthly; run_date=2026-09-04; skip_bars=22; slippage_each_leg_bps=10.0; target_volatility=0.12; top_n=20; universe_size=500; verification=parameterisation verification",
+      "return_pct": 174.7813978971535,
+      "sharpe": 0.7170482585293219,
+      "source": "parameterisation verification"
+    },
+    {
+      "created_at": "2026-09-04T21:38:44.630592Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "verified descriptive configuration; no pass declared",
+        "experiment_id": 18,
+        "panel_window": "pooled_2019-02_latest_complete",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "run_date": "2026-09-04",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_parameterisation_verification",
+      "id": 102,
+      "max_drawdown": 67.52622024633803,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; experiment_id=18; idle_capital=cash; lookback_bars=252; max_deployment=1.0; momentum=12-1; rebalance_frequency=quarterly; run_date=2026-09-04; skip_bars=22; slippage_each_leg_bps=10.0; top_n=20; universe_size=500; verification=parameterisation verification",
+      "return_pct": 122.83837482925088,
+      "sharpe": 0.4952077233764564,
+      "source": "parameterisation verification"
+    },
+    {
+      "created_at": "2026-09-04T21:38:44.630592Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "verified descriptive configuration; no pass declared",
+        "experiment_id": 18,
+        "panel_window": "pooled_2019-02_latest_complete",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "run_date": "2026-09-04",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_parameterisation_verification",
+      "id": 101,
+      "max_drawdown": 62.633217323335046,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; experiment_id=18; idle_capital=cash; lookback_bars=252; max_deployment=1.0; momentum=12-1; rebalance_frequency=monthly; run_date=2026-09-04; skip_bars=22; slippage_each_leg_bps=10.0; top_n=50; universe_size=500; verification=parameterisation verification",
+      "return_pct": 329.8069553443062,
+      "sharpe": 0.7757273219568191,
+      "source": "parameterisation verification"
+    },
+    {
+      "created_at": "2026-09-04T21:38:44.630592Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "verified descriptive configuration; no pass declared",
+        "experiment_id": 18,
+        "panel_window": "pooled_2019-02_latest_complete",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "run_date": "2026-09-04",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_parameterisation_verification",
+      "id": 100,
+      "max_drawdown": 71.40820575963009,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; experiment_id=18; idle_capital=cash; lookback_bars=126; max_deployment=1.0; momentum=12-1; rebalance_frequency=monthly; run_date=2026-09-04; skip_bars=22; slippage_each_leg_bps=10.0; top_n=20; universe_size=500; verification=parameterisation verification",
+      "return_pct": 188.1130383929817,
+      "sharpe": 0.5702589057923614,
+      "source": "parameterisation verification"
+    },
+    {
+      "created_at": "2026-09-04T21:38:44.630592Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "verified descriptive configuration; no pass declared",
+        "experiment_id": 18,
+        "panel_window": "pooled_2019-02_latest_complete",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "run_date": "2026-09-04",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_parameterisation_verification",
+      "id": 99,
+      "max_drawdown": 72.01566486898376,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; experiment_id=18; idle_capital=cash; lookback_bars=252; max_deployment=1.0; momentum=12-1; rebalance_frequency=monthly; run_date=2026-09-04; skip_bars=22; slippage_each_leg_bps=10.0; top_n=20; universe_size=500; verification=parameterisation verification",
+      "return_pct": 321.8342604572803,
+      "sharpe": 0.7016876886753177,
+      "source": "parameterisation verification"
+    },
+    {
+      "created_at": "2026-09-03T02:23:26.495469Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "baseline_experiment_id": 18,
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "regime_rule": {
+          "evaluation_timing": "each monthly rebalance using bars strictly before date",
+          "lookback_sessions": 200,
+          "position_policy": "binary; no momentum positions while RISK_OFF",
+          "risk_off_asset": "SGOV",
+          "rule": "RISK_ON iff prior SPY close > prior 200-session SMA; otherwise RISK_OFF",
+          "signal_symbol": "SPY",
+          "symbol": "SGOV"
+        },
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01",
+        "windows": [
+          {
+            "end": "2020-12-31",
+            "name": "2019_2020",
+            "start": "2019-02-01"
+          },
+          {
+            "end": "2022-12-31",
+            "name": "2021_2022",
+            "start": "2021-01-01"
+          },
+          {
+            "end": "2024-12-31",
+            "name": "2023_2024",
+            "start": "2023-01-01"
+          },
+          {
+            "end": "2026-07-31",
+            "name": "2025_latest_complete",
+            "start": "2025-01-01"
+          },
+          {
+            "end": "2026-07-31",
+            "name": "pooled_2019-02_latest_complete",
+            "start": "2019-02-01"
+          }
+        ]
+      },
+      "family": "bot2_momentum_rank500_regime",
+      "id": 94,
+      "max_drawdown": 75.10445609691249,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; direct_baseline_experiment_id=18; idle_capital=cash; market_regime=7 fields; max_deployment=1.0; momentum=12-1; random_control_iterations=1000; random_control_seed=2712026; rebalance=monthly first-trading-day; screening=4 fields; slippage_each_leg_bps=10.0; top_n=20; universe_rule=top 500 by trailing 60-session median dollar volume; universe_size=500",
+      "return_pct": 0.7067014573376627,
+      "sharpe": 0.38094908257762955,
+      "source": "bench_gate"
+    },
+    {
+      "created_at": "2026-09-03T02:19:25.694508Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 93,
+      "max_drawdown": 51.72229978600842,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=12; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=quarterly; skip_month=1; slippage_each_leg_bps=10; top_n=50; universe_size=500",
+      "return_pct": 322.2639414270565,
+      "sharpe": 0.8264662463239105,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:25.051574Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 92,
+      "max_drawdown": 62.896107019516315,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=12; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=monthly; skip_month=1; slippage_each_leg_bps=10; top_n=50; universe_size=500",
+      "return_pct": 258.92831915759626,
+      "sharpe": 0.6991989733011551,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:24.214612Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 91,
+      "max_drawdown": 56.82371944445374,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=12; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=quarterly; skip_month=1; slippage_each_leg_bps=10; top_n=30; universe_size=500",
+      "return_pct": 362.58601685555965,
+      "sharpe": 0.8078303590315292,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:23.836515Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 90,
+      "max_drawdown": 66.86683653888706,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=12; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=monthly; skip_month=1; slippage_each_leg_bps=10; top_n=30; universe_size=500",
+      "return_pct": 289.78870815229,
+      "sharpe": 0.6990441620660542,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:23.338255Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 89,
+      "max_drawdown": 59.00086800838148,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=12; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=quarterly; skip_month=1; slippage_each_leg_bps=10; top_n=20; universe_size=500",
+      "return_pct": 407.95348686264106,
+      "sharpe": 0.7994914135980073,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:23.095407Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 88,
+      "max_drawdown": 71.05346123791377,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=12; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=monthly; skip_month=1; slippage_each_leg_bps=10; top_n=20; universe_size=500",
+      "return_pct": 202.7568913611074,
+      "sharpe": 0.5835096878224951,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:22.755520Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 87,
+      "max_drawdown": 55.26541906570329,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=12; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=quarterly; skip_month=1; slippage_each_leg_bps=10; top_n=10; universe_size=500",
+      "return_pct": 244.6333689082042,
+      "sharpe": 0.6088469091774665,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:22.615427Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 86,
+      "max_drawdown": 74.44582334553905,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=12; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=monthly; skip_month=1; slippage_each_leg_bps=10; top_n=10; universe_size=500",
+      "return_pct": 98.1006142477925,
+      "sharpe": 0.42708970317840045,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:22.424603Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 85,
+      "max_drawdown": 48.836991172567224,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=12; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=quarterly; skip_month=0; slippage_each_leg_bps=10; top_n=50; universe_size=500",
+      "return_pct": 598.0406394041761,
+      "sharpe": 1.047142495203901,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:21.738884Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 84,
+      "max_drawdown": 60.839702188813185,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=12; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=monthly; skip_month=0; slippage_each_leg_bps=10; top_n=50; universe_size=500",
+      "return_pct": 357.7988198988774,
+      "sharpe": 0.8047182071782848,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:20.852326Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 83,
+      "max_drawdown": 53.178597188224906,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=12; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=quarterly; skip_month=0; slippage_each_leg_bps=10; top_n=30; universe_size=500",
+      "return_pct": 575.6261295164335,
+      "sharpe": 0.9564519266015598,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:20.426032Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 82,
+      "max_drawdown": 70.92396049085391,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=12; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=monthly; skip_month=0; slippage_each_leg_bps=10; top_n=30; universe_size=500",
+      "return_pct": 375.3072666730443,
+      "sharpe": 0.7747700798377797,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:19.916655Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 81,
+      "max_drawdown": 53.195429976842036,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=12; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=quarterly; skip_month=0; slippage_each_leg_bps=10; top_n=20; universe_size=500",
+      "return_pct": 561.8001657378793,
+      "sharpe": 0.8924927583202186,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:19.660010Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 80,
+      "max_drawdown": 71.00448910468451,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=12; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=monthly; skip_month=0; slippage_each_leg_bps=10; top_n=20; universe_size=500",
+      "return_pct": 455.13484061329325,
+      "sharpe": 0.7961740385150462,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:19.257461Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 79,
+      "max_drawdown": 59.766645181262945,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=12; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=quarterly; skip_month=0; slippage_each_leg_bps=10; top_n=10; universe_size=500",
+      "return_pct": 776.4512659008644,
+      "sharpe": 0.8859418990729607,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:19.122469Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 78,
+      "max_drawdown": 77.27482073166424,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=12; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=monthly; skip_month=0; slippage_each_leg_bps=10; top_n=10; universe_size=500",
+      "return_pct": 231.42633458789473,
+      "sharpe": 0.582362545106421,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:18.939998Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 77,
+      "max_drawdown": 51.072820348122114,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=9; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=quarterly; skip_month=1; slippage_each_leg_bps=10; top_n=50; universe_size=500",
+      "return_pct": 377.3555594765518,
+      "sharpe": 0.883222374385643,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:18.272559Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 76,
+      "max_drawdown": 62.125272084515025,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=9; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=monthly; skip_month=1; slippage_each_leg_bps=10; top_n=50; universe_size=500",
+      "return_pct": 218.7148384389841,
+      "sharpe": 0.6505825838550999,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:17.319894Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 75,
+      "max_drawdown": 56.37270957460577,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=9; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=quarterly; skip_month=1; slippage_each_leg_bps=10; top_n=30; universe_size=500",
+      "return_pct": 537.814474583204,
+      "sharpe": 0.9230685306009697,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:16.867260Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 74,
+      "max_drawdown": 65.36129117136417,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=9; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=monthly; skip_month=1; slippage_each_leg_bps=10; top_n=30; universe_size=500",
+      "return_pct": 390.0905724435132,
+      "sharpe": 0.7794683676019986,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:16.364890Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 73,
+      "max_drawdown": 57.06943491754549,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=9; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=quarterly; skip_month=1; slippage_each_leg_bps=10; top_n=20; universe_size=500",
+      "return_pct": 781.6138554729182,
+      "sharpe": 1.0025654095753316,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:16.049445Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 72,
+      "max_drawdown": 68.01359799827712,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=9; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=monthly; skip_month=1; slippage_each_leg_bps=10; top_n=20; universe_size=500",
+      "return_pct": 494.3509589665933,
+      "sharpe": 0.8134898421986247,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:15.637307Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 71,
+      "max_drawdown": 59.0954315341006,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=9; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=quarterly; skip_month=1; slippage_each_leg_bps=10; top_n=10; universe_size=500",
+      "return_pct": 1130.2883653560407,
+      "sharpe": 0.9930348363940378,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:15.485693Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 70,
+      "max_drawdown": 76.98569264639978,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=9; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=monthly; skip_month=1; slippage_each_leg_bps=10; top_n=10; universe_size=500",
+      "return_pct": 425.49341019566305,
+      "sharpe": 0.724184095641228,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:15.293515Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 69,
+      "max_drawdown": 46.67036841473296,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=9; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=quarterly; skip_month=0; slippage_each_leg_bps=10; top_n=50; universe_size=500",
+      "return_pct": 513.198432668166,
+      "sharpe": 0.9922614727879576,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:14.605487Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 68,
+      "max_drawdown": 61.16793484584796,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=9; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=monthly; skip_month=0; slippage_each_leg_bps=10; top_n=50; universe_size=500",
+      "return_pct": 314.4524071196729,
+      "sharpe": 0.7647814834899239,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:13.754861Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 67,
+      "max_drawdown": 50.87182061002701,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=9; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=quarterly; skip_month=0; slippage_each_leg_bps=10; top_n=30; universe_size=500",
+      "return_pct": 859.9076978690694,
+      "sharpe": 1.0917086538760565,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:13.313420Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 66,
+      "max_drawdown": 64.80690542999517,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=9; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=monthly; skip_month=0; slippage_each_leg_bps=10; top_n=30; universe_size=500",
+      "return_pct": 466.1198105543548,
+      "sharpe": 0.8391147265387902,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:12.816187Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 65,
+      "max_drawdown": 51.767000337140075,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=9; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=quarterly; skip_month=0; slippage_each_leg_bps=10; top_n=20; universe_size=500",
+      "return_pct": 977.514931680084,
+      "sharpe": 1.0640551816389496,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:12.549966Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 64,
+      "max_drawdown": 65.97193217102415,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=9; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=monthly; skip_month=0; slippage_each_leg_bps=10; top_n=20; universe_size=500",
+      "return_pct": 549.2033072382236,
+      "sharpe": 0.848747585798536,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:12.218797Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 63,
+      "max_drawdown": 62.222195645785646,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=9; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=quarterly; skip_month=0; slippage_each_leg_bps=10; top_n=10; universe_size=500",
+      "return_pct": 787.5585865292699,
+      "sharpe": 0.8938462885716697,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:12.080163Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 62,
+      "max_drawdown": 77.40943012886216,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=9; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=monthly; skip_month=0; slippage_each_leg_bps=10; top_n=10; universe_size=500",
+      "return_pct": 247.71546545532152,
+      "sharpe": 0.5989854219963159,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:11.906807Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 61,
+      "max_drawdown": 50.105604999165664,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=6; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=quarterly; skip_month=1; slippage_each_leg_bps=10; top_n=50; universe_size=500",
+      "return_pct": 304.4058537777191,
+      "sharpe": 0.8301896914737829,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:11.126675Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 60,
+      "max_drawdown": 60.92809108806338,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=6; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=monthly; skip_month=1; slippage_each_leg_bps=10; top_n=50; universe_size=500",
+      "return_pct": 200.38203819943487,
+      "sharpe": 0.6331744642687627,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:10.278046Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 59,
+      "max_drawdown": 54.13162539811945,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=6; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=quarterly; skip_month=1; slippage_each_leg_bps=10; top_n=30; universe_size=500",
+      "return_pct": 515.3595141085211,
+      "sharpe": 0.9458917402522741,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:09.809152Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 58,
+      "max_drawdown": 67.13593907743174,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=6; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=monthly; skip_month=1; slippage_each_leg_bps=10; top_n=30; universe_size=500",
+      "return_pct": 250.2657414408167,
+      "sharpe": 0.6595362722393954,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:09.297218Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 57,
+      "max_drawdown": 56.51041154594213,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=6; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=quarterly; skip_month=1; slippage_each_leg_bps=10; top_n=20; universe_size=500",
+      "return_pct": 663.7760756975132,
+      "sharpe": 0.9649029686622229,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:09.001996Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 56,
+      "max_drawdown": 68.76959553867948,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=6; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=monthly; skip_month=1; slippage_each_leg_bps=10; top_n=20; universe_size=500",
+      "return_pct": 347.4678518022272,
+      "sharpe": 0.7213797111930942,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:08.656988Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 55,
+      "max_drawdown": 59.20405531412034,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=6; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=quarterly; skip_month=1; slippage_each_leg_bps=10; top_n=10; universe_size=500",
+      "return_pct": 1112.262230657437,
+      "sharpe": 1.0249031585742878,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:08.521824Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 54,
+      "max_drawdown": 78.08053672615499,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=6; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=monthly; skip_month=1; slippage_each_leg_bps=10; top_n=10; universe_size=500",
+      "return_pct": 404.0345752443214,
+      "sharpe": 0.7182312232257115,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:08.347000Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 53,
+      "max_drawdown": 46.64657292715955,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=6; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=quarterly; skip_month=0; slippage_each_leg_bps=10; top_n=50; universe_size=500",
+      "return_pct": 542.0316511501837,
+      "sharpe": 1.0391458647031315,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:07.670091Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 52,
+      "max_drawdown": 60.02201293047526,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=6; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=monthly; skip_month=0; slippage_each_leg_bps=10; top_n=50; universe_size=500",
+      "return_pct": 261.71543267096393,
+      "sharpe": 0.719615483996566,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:06.788795Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 51,
+      "max_drawdown": 45.19429370871933,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=6; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=quarterly; skip_month=0; slippage_each_leg_bps=10; top_n=30; universe_size=500",
+      "return_pct": 829.055026355064,
+      "sharpe": 1.1092509782082276,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:06.378591Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 50,
+      "max_drawdown": 62.38054792261938,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=6; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=monthly; skip_month=0; slippage_each_leg_bps=10; top_n=30; universe_size=500",
+      "return_pct": 378.01473202369635,
+      "sharpe": 0.7891940197885707,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:05.870738Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 49,
+      "max_drawdown": 50.43395480607399,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=6; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=quarterly; skip_month=0; slippage_each_leg_bps=10; top_n=20; universe_size=500",
+      "return_pct": 803.5097462529823,
+      "sharpe": 1.0123295325369817,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:05.598432Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 48,
+      "max_drawdown": 65.96784594301643,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=6; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=monthly; skip_month=0; slippage_each_leg_bps=10; top_n=20; universe_size=500",
+      "return_pct": 431.6087107761826,
+      "sharpe": 0.7854919309000808,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:05.252929Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 47,
+      "max_drawdown": 56.975568142040764,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=6; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=quarterly; skip_month=0; slippage_each_leg_bps=10; top_n=10; universe_size=500",
+      "return_pct": 932.6847360251254,
+      "sharpe": 0.952679430106148,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:05.105418Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 46,
+      "max_drawdown": 73.03444939158943,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=6; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=monthly; skip_month=0; slippage_each_leg_bps=10; top_n=10; universe_size=500",
+      "return_pct": 372.3725727595046,
+      "sharpe": 0.6939478025353859,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:04.928783Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 45,
+      "max_drawdown": 58.81202192787841,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=3; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=quarterly; skip_month=1; slippage_each_leg_bps=10; top_n=50; universe_size=500",
+      "return_pct": 241.49365687285234,
+      "sharpe": 0.7610407913306242,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:04.220284Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 44,
+      "max_drawdown": 60.84662026924816,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=3; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=monthly; skip_month=1; slippage_each_leg_bps=10; top_n=50; universe_size=500",
+      "return_pct": 152.12347295204495,
+      "sharpe": 0.5712906702570558,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:03.354660Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 43,
+      "max_drawdown": 65.88055820651458,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=3; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=quarterly; skip_month=1; slippage_each_leg_bps=10; top_n=30; universe_size=500",
+      "return_pct": 281.460760915675,
+      "sharpe": 0.7523556987620387,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:02.938838Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 42,
+      "max_drawdown": 66.60385705272456,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=3; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=monthly; skip_month=1; slippage_each_leg_bps=10; top_n=30; universe_size=500",
+      "return_pct": 112.28914363027852,
+      "sharpe": 0.4719577408137435,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:02.423671Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 41,
+      "max_drawdown": 67.00074277862085,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=3; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=quarterly; skip_month=1; slippage_each_leg_bps=10; top_n=20; universe_size=500",
+      "return_pct": 418.0873069088826,
+      "sharpe": 0.8208611557821759,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:02.139702Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 40,
+      "max_drawdown": 65.94729000770269,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=3; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=monthly; skip_month=1; slippage_each_leg_bps=10; top_n=20; universe_size=500",
+      "return_pct": 272.767622029397,
+      "sharpe": 0.6662426268595335,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:01.785957Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 39,
+      "max_drawdown": 73.04386779196868,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=3; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=quarterly; skip_month=1; slippage_each_leg_bps=10; top_n=10; universe_size=500",
+      "return_pct": 614.6239953658594,
+      "sharpe": 0.8355515989922078,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:01.636395Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 38,
+      "max_drawdown": 68.0975876595678,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=3; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=monthly; skip_month=1; slippage_each_leg_bps=10; top_n=10; universe_size=500",
+      "return_pct": 332.5907987924663,
+      "sharpe": 0.6735574533361492,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:01.426225Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 37,
+      "max_drawdown": 49.60686911937419,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=3; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=quarterly; skip_month=0; slippage_each_leg_bps=10; top_n=50; universe_size=500",
+      "return_pct": 370.6074431606976,
+      "sharpe": 0.914908932252783,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:19:00.645310Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 36,
+      "max_drawdown": 61.508451949962925,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=3; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=monthly; skip_month=0; slippage_each_leg_bps=10; top_n=50; universe_size=500",
+      "return_pct": 247.95407006952394,
+      "sharpe": 0.7278332894858789,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:18:59.600014Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 35,
+      "max_drawdown": 56.191162946662885,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=3; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=quarterly; skip_month=0; slippage_each_leg_bps=10; top_n=30; universe_size=500",
+      "return_pct": 437.93493761157947,
+      "sharpe": 0.8885399300470697,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:18:59.171278Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 34,
+      "max_drawdown": 67.4599053963999,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=3; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=monthly; skip_month=0; slippage_each_leg_bps=10; top_n=30; universe_size=500",
+      "return_pct": 365.7652546928028,
+      "sharpe": 0.795099204976086,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:18:58.565952Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 33,
+      "max_drawdown": 57.85250336447707,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=3; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=quarterly; skip_month=0; slippage_each_leg_bps=10; top_n=20; universe_size=500",
+      "return_pct": 626.5877528582088,
+      "sharpe": 0.9415389757129203,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:18:58.280494Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 32,
+      "max_drawdown": 70.17190400832214,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=3; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=monthly; skip_month=0; slippage_each_leg_bps=10; top_n=20; universe_size=500",
+      "return_pct": 366.88329281444095,
+      "sharpe": 0.7527905219734616,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:18:57.926035Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 31,
+      "max_drawdown": 59.90897529025718,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=3; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=quarterly; skip_month=0; slippage_each_leg_bps=10; top_n=10; universe_size=500",
+      "return_pct": 955.8632518063515,
+      "sharpe": 0.9622095578240503,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:18:56.400002Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "evaluation": "descriptive_only; no pass declared",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_sweep",
+      "id": 30,
+      "max_drawdown": 75.59486590930771,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; lookback_months=3; max_deployment=1.0; momentum_definition=close before rebalance month minus skip months divided by close before rebalance month minus lookbac; rebalance=monthly; skip_month=0; slippage_each_leg_bps=10; top_n=10; universe_size=500",
+      "return_pct": 370.43189580968783,
+      "sharpe": 0.6956802677963387,
+      "source": "strategy_bench_sweep"
+    },
+    {
+      "created_at": "2026-09-03T02:01:08.171690Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01",
+        "windows": [
+          {
+            "end": "2020-12-31",
+            "name": "2019_2020",
+            "start": "2019-02-01"
+          },
+          {
+            "end": "2022-12-31",
+            "name": "2021_2022",
+            "start": "2021-01-01"
+          },
+          {
+            "end": "2024-12-31",
+            "name": "2023_2024",
+            "start": "2023-01-01"
+          },
+          {
+            "end": "2026-07-31",
+            "name": "2025_latest_complete",
+            "start": "2025-01-01"
+          },
+          {
+            "end": "2026-07-31",
+            "name": "pooled_2019-02_latest_complete",
+            "start": "2019-02-01"
+          }
+        ]
+      },
+      "family": "bot2_momentum_rank500",
+      "id": 26,
+      "max_drawdown": 72.01566486898376,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; idle_capital=cash; max_deployment=1.0; momentum=12-1; random_control_iterations=1000; random_control_seed=2712026; rebalance=monthly first-trading-day; screening=4 fields; slippage_each_leg_bps=10.0; top_n=20; universe_rule=top 500 by trailing 60-session median dollar volume; universe_size=500",
+      "return_pct": 3.218342604572803,
+      "sharpe": 0.7016876886753177,
+      "source": "bench_gate"
+    },
+    {
+      "created_at": "2026-08-31T07:09:20.166807Z",
+      "data_window": {
+        "backtest_end": "2024-12-31",
+        "backtest_start": "2019-02-01",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500",
+      "id": 25,
+      "max_drawdown": 72.01566486898376,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; idle_capital=cash; max_deployment=1.0; momentum=12-1; rebalance=monthly first-trading-day; slippage_each_leg_bps=10.0; top_n=20; universe_size=500",
+      "return_pct": 156.6093936397123,
+      "sharpe": 0.6295614927616174,
+      "source": "strategy_bench"
+    },
+    {
+      "created_at": "2026-08-31T01:35:35.411354Z",
+      "data_window": {
+        "backtest_end": "2024-12-31",
+        "backtest_start": "2019-02-01",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500",
+      "id": 24,
+      "max_drawdown": 72.01566486898376,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; idle_capital=cash; max_deployment=1.0; momentum=12-1; rebalance=monthly first-trading-day; slippage_each_leg_bps=10.0; top_n=20; universe_size=500",
+      "return_pct": 156.6093936397123,
+      "sharpe": 0.6295614927616174,
+      "source": "strategy_bench"
+    },
+    {
+      "created_at": "2026-08-31T01:30:10.411439Z",
+      "data_window": {
+        "backtest_end": "2024-12-31",
+        "backtest_start": "2019-02-01",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_regime",
+      "id": 23,
+      "max_drawdown": 75.10445609691249,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; idle_capital=cash; market_regime=4 fields; max_deployment=1.0; momentum=12-1; rebalance=monthly first-trading-day; slippage_each_leg_bps=10.0; top_n=20; universe_size=500",
+      "return_pct": 31.914292411035472,
+      "sharpe": 0.30629829786780133,
+      "source": "strategy_bench"
+    },
+    {
+      "created_at": "2026-08-31T01:30:10.140495Z",
+      "data_window": {
+        "backtest_end": "2024-12-31",
+        "backtest_start": "2019-02-01",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500",
+      "id": 22,
+      "max_drawdown": 72.01566486898376,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; idle_capital=cash; max_deployment=1.0; momentum=12-1; rebalance=monthly first-trading-day; slippage_each_leg_bps=10.0; top_n=20; universe_size=500",
+      "return_pct": 156.6093936397123,
+      "sharpe": 0.6295614927616174,
+      "source": "strategy_bench"
+    },
+    {
+      "created_at": "2026-08-31T01:30:09.920555Z",
+      "data_window": {
+        "backtest_end": "2024-12-31",
+        "backtest_start": "2019-02-01",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500_regime",
+      "id": 21,
+      "max_drawdown": 75.10445609691249,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; idle_capital=cash; market_regime=4 fields; max_deployment=1.0; momentum=12-1; rebalance=monthly first-trading-day; slippage_each_leg_bps=10.0; top_n=20; universe_size=500",
+      "return_pct": 31.914292411035472,
+      "sharpe": 0.30629829786780133,
+      "source": "strategy_bench"
+    },
+    {
+      "created_at": "2026-08-31T01:07:47.814239Z",
+      "data_window": {
+        "backtest_end": "2024-12-31",
+        "backtest_start": "2019-02-01",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500",
+      "id": 20,
+      "max_drawdown": 72.01566486898376,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; idle_capital=cash; max_deployment=1.0; momentum=12-1; rebalance=monthly first-trading-day; slippage_each_leg_bps=10.0; top_n=20; universe_size=500",
+      "return_pct": 156.6093936397123,
+      "sharpe": 0.6295614927616174,
+      "source": "strategy_bench"
+    },
+    {
+      "created_at": "2026-08-31T00:45:33.142091Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "baseline_experiment_id": 18,
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "regime_rule": {
+          "evaluation_timing": "each monthly rebalance using bars strictly before date",
+          "lookback_sessions": 200,
+          "position_policy": "binary; no momentum positions while RISK_OFF",
+          "risk_off_asset": "SGOV",
+          "rule": "RISK_ON iff prior SPY close > prior 200-session SMA; otherwise RISK_OFF",
+          "signal_symbol": "SPY",
+          "symbol": "SGOV"
+        },
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01",
+        "windows": [
+          {
+            "end": "2020-12-31",
+            "name": "2019_2020",
+            "start": "2019-02-01"
+          },
+          {
+            "end": "2022-12-31",
+            "name": "2021_2022",
+            "start": "2021-01-01"
+          },
+          {
+            "end": "2024-12-31",
+            "name": "2023_2024",
+            "start": "2023-01-01"
+          },
+          {
+            "end": "2026-07-31",
+            "name": "2025_latest_complete",
+            "start": "2025-01-01"
+          },
+          {
+            "end": "2026-07-31",
+            "name": "pooled_2019-02_latest_complete",
+            "start": "2019-02-01"
+          }
+        ]
+      },
+      "family": "bot2_momentum_rank500_regime",
+      "id": 19,
+      "max_drawdown": 75.10445609691249,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; direct_baseline_experiment_id=18; idle_capital=cash; market_regime=7 fields; max_deployment=1.0; momentum=12-1; random_control_iterations=1000; random_control_seed=2712026; rebalance=monthly first-trading-day; screening=4 fields; slippage_each_leg_bps=10.0; top_n=20; universe_rule=top 500 by trailing 60-session median dollar volume; universe_size=500",
+      "return_pct": 0.7067014573376627,
+      "sharpe": 0.38094908257762955,
+      "source": "bench_gate"
+    },
+    {
+      "created_at": "2026-08-31T00:39:53.974696Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "baseline_experiment_id": 18,
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "regime_rule": {
+          "evaluation_timing": "each monthly rebalance using bars strictly before date",
+          "lookback_sessions": 200,
+          "position_policy": "binary; no momentum positions while RISK_OFF",
+          "risk_off_asset": "SGOV",
+          "rule": "RISK_ON iff prior SPY close > prior 200-session SMA; otherwise RISK_OFF",
+          "signal_symbol": "SPY",
+          "symbol": "SGOV"
+        },
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01",
+        "windows": [
+          {
+            "end": "2020-12-31",
+            "name": "2019_2020",
+            "start": "2019-02-01"
+          },
+          {
+            "end": "2022-12-31",
+            "name": "2021_2022",
+            "start": "2021-01-01"
+          },
+          {
+            "end": "2024-12-31",
+            "name": "2023_2024",
+            "start": "2023-01-01"
+          },
+          {
+            "end": "2026-07-31",
+            "name": "2025_latest_complete",
+            "start": "2025-01-01"
+          },
+          {
+            "end": "2026-07-31",
+            "name": "pooled_2019-02_latest_complete",
+            "start": "2019-02-01"
+          }
+        ]
+      },
+      "family": "bot2_momentum_rank500_regime",
+      "id": 18,
+      "max_drawdown": 75.10445609691249,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; direct_baseline_experiment_id=18; idle_capital=cash; market_regime=7 fields; max_deployment=1.0; momentum=12-1; random_control_iterations=1000; random_control_seed=2712026; rebalance=monthly first-trading-day; screening=4 fields; slippage_each_leg_bps=10.0; top_n=20; universe_rule=top 500 by trailing 60-session median dollar volume; universe_size=500",
+      "return_pct": 0.7067014573376627,
+      "sharpe": 0.38094908257762955,
+      "source": "bench_gate"
+    },
+    {
+      "created_at": "2026-08-31T00:23:37.949464Z",
+      "data_window": {
+        "backtest_end": "2024-12-31",
+        "backtest_start": "2019-02-01",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500",
+      "id": 17,
+      "max_drawdown": 72.01566486898376,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; idle_capital=cash; max_deployment=1.0; momentum=12-1; rebalance=monthly first-trading-day; slippage_each_leg_bps=10.0; top_n=20; universe_size=500",
+      "return_pct": 156.6093936397123,
+      "sharpe": 0.6295614927616174,
+      "source": "strategy_bench"
+    },
+    {
+      "created_at": "2026-08-31T00:22:59.492923Z",
+      "data_window": {
+        "backtest_end": "2024-12-31",
+        "backtest_start": "2019-02-01",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500",
+      "id": 16,
+      "max_drawdown": 72.01566486898376,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; idle_capital=cash; max_deployment=1.0; momentum=12-1; rebalance=monthly first-trading-day; slippage_each_leg_bps=10.0; top_n=20; universe_size=500",
+      "return_pct": 156.6093936397123,
+      "sharpe": 0.6295614927616174,
+      "source": "strategy_bench"
+    },
+    {
+      "created_at": "2026-08-31T00:21:52.549262Z",
+      "data_window": {
+        "backtest_end": "2024-12-31",
+        "backtest_start": "2019-02-01",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500",
+      "id": 15,
+      "max_drawdown": 72.01566486898376,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; idle_capital=cash; max_deployment=1.0; momentum=12-1; rebalance=monthly first-trading-day; slippage_each_leg_bps=10.0; top_n=20; universe_size=500",
+      "return_pct": 156.6093936397123,
+      "sharpe": 0.6295614927616174,
+      "source": "strategy_bench"
+    },
+    {
+      "created_at": "2026-08-31T00:20:25.920890Z",
+      "data_window": {
+        "backtest_end": "2024-12-31",
+        "backtest_start": "2019-02-01",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500",
+      "id": 14,
+      "max_drawdown": 72.01566486898376,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; idle_capital=cash; max_deployment=1.0; momentum=12-1; rebalance=monthly first-trading-day; slippage_each_leg_bps=10.0; top_n=20; universe_size=500",
+      "return_pct": 156.6093936397123,
+      "sharpe": 0.6295614927616174,
+      "source": "strategy_bench"
+    },
+    {
+      "created_at": "2026-08-31T00:20:12.481140Z",
+      "data_window": {
+        "backtest_end": "2024-12-31",
+        "backtest_start": "2019-02-01",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500",
+      "id": 13,
+      "max_drawdown": 72.01566486898376,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; idle_capital=cash; max_deployment=1.0; momentum=12-1; rebalance=monthly first-trading-day; slippage_each_leg_bps=10.0; top_n=20; universe_size=500",
+      "return_pct": 156.6093936397123,
+      "sharpe": 0.6295614927616174,
+      "source": "strategy_bench"
+    },
+    {
+      "created_at": "2026-08-31T00:18:42.637855Z",
+      "data_window": {
+        "backtest_end": "2024-12-31",
+        "backtest_start": "2019-02-01",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500",
+      "id": 12,
+      "max_drawdown": 72.01566486898376,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; idle_capital=cash; max_deployment=1.0; momentum=12-1; rebalance=monthly first-trading-day; slippage_each_leg_bps=10.0; top_n=20; universe_size=500",
+      "return_pct": 156.6093936397123,
+      "sharpe": 0.6295614927616174,
+      "source": "strategy_bench"
+    },
+    {
+      "created_at": "2026-08-31T00:17:18.561266Z",
+      "data_window": {
+        "backtest_end": "2024-06-30",
+        "backtest_start": "2024-01-01",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500",
+      "id": 11,
+      "max_drawdown": 13.84900126134618,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; idle_capital=cash; max_deployment=1.0; momentum=12-1; rebalance=monthly first-trading-day; slippage_each_leg_bps=10.0; top_n=20; universe_size=500",
+      "return_pct": 41.19693623190788,
+      "sharpe": 2.0168909296489157,
+      "source": "strategy_bench"
+    },
+    {
+      "created_at": "2026-08-31T00:13:09.146055Z",
+      "data_window": {
+        "backtest_end": "2024-12-31",
+        "backtest_start": "2019-02-01",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500",
+      "id": 10,
+      "max_drawdown": 72.01566486898376,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; idle_capital=cash; max_deployment=1.0; momentum=12-1; rebalance=monthly first-trading-day; slippage_each_leg_bps=10.0; top_n=20; universe_size=500",
+      "return_pct": 156.6093936397123,
+      "sharpe": 0.6295614927616174,
+      "source": "strategy_bench"
+    },
+    {
+      "created_at": "2026-08-31T00:13:08.898323Z",
+      "data_window": {
+        "backtest_end": "2024-12-31",
+        "backtest_start": "2019-02-01",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500",
+      "id": 9,
+      "max_drawdown": 72.01566486898376,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; idle_capital=cash; max_deployment=1.0; momentum=12-1; rebalance=monthly first-trading-day; slippage_each_leg_bps=10.0; top_n=20; universe_size=500",
+      "return_pct": 156.6093936397123,
+      "sharpe": 0.6295614927616174,
+      "source": "strategy_bench"
+    },
+    {
+      "created_at": "2026-08-31T00:11:10.134236Z",
+      "data_window": {
+        "backtest_end": "2024-06-30",
+        "backtest_start": "2024-01-01",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500",
+      "id": 8,
+      "max_drawdown": 13.84900126134618,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; idle_capital=cash; max_deployment=1.0; momentum=12-1; rebalance=monthly first-trading-day; slippage_each_leg_bps=10.0; top_n=20; universe_size=500",
+      "return_pct": 41.19693623190788,
+      "sharpe": 2.0168909296489157,
+      "source": "strategy_bench"
+    },
+    {
+      "created_at": "2026-08-31T00:10:21.076146Z",
+      "data_window": {
+        "backtest_end": "2024-06-30",
+        "backtest_start": "2024-01-01",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500",
+      "id": 7,
+      "max_drawdown": 15.30314679064766,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; idle_capital=cash; max_deployment=1.0; momentum=12-1; rebalance=monthly first-trading-day; slippage_each_leg_bps=10.0; top_n=20; universe_size=200",
+      "return_pct": 42.91029999511298,
+      "sharpe": 2.156902220480989,
+      "source": "strategy_bench"
+    },
+    {
+      "created_at": "2026-08-31T00:09:33.673067Z",
+      "data_window": {
+        "backtest_end": "2024-06-30",
+        "backtest_start": "2024-01-01",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500",
+      "id": 6,
+      "max_drawdown": 15.135230674974027,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; idle_capital=cash; max_deployment=1.0; momentum=12-1; rebalance=monthly first-trading-day; slippage_each_leg_bps=10.0; top_n=20; universe_size=100",
+      "return_pct": 41.58148171596323,
+      "sharpe": 2.211201006349198,
+      "source": "strategy_bench"
+    },
+    {
+      "created_at": "2026-08-31T00:06:29.053930Z",
+      "data_window": {
+        "backtest_end": "2024-06-30",
+        "backtest_start": "2024-01-01",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01"
+      },
+      "family": "bot2_momentum_rank500",
+      "id": 5,
+      "max_drawdown": 13.84900126134618,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; idle_capital=cash; max_deployment=1.0; momentum=12-1; rebalance=monthly first-trading-day; slippage_each_leg_bps=10.0; top_n=20; universe_size=500",
+      "return_pct": 41.19693623190788,
+      "sharpe": 2.0168909296489157,
+      "source": "strategy_bench"
+    },
+    {
+      "created_at": "2026-08-31T00:05:01.422632Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "baseline_experiment_id": 18,
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "regime_rule": {
+          "evaluation_timing": "each monthly rebalance using bars strictly before date",
+          "lookback_sessions": 200,
+          "position_policy": "binary; no momentum positions while RISK_OFF",
+          "risk_off_asset": "SGOV",
+          "rule": "RISK_ON iff prior SPY close > prior 200-session SMA; otherwise RISK_OFF",
+          "signal_symbol": "SPY",
+          "symbol": "SGOV"
+        },
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01",
+        "windows": [
+          {
+            "end": "2020-12-31",
+            "name": "2019_2020",
+            "start": "2019-02-01"
+          },
+          {
+            "end": "2022-12-31",
+            "name": "2021_2022",
+            "start": "2021-01-01"
+          },
+          {
+            "end": "2024-12-31",
+            "name": "2023_2024",
+            "start": "2023-01-01"
+          },
+          {
+            "end": "2026-07-31",
+            "name": "2025_latest_complete",
+            "start": "2025-01-01"
+          },
+          {
+            "end": "2026-07-31",
+            "name": "pooled_2019-02_latest_complete",
+            "start": "2019-02-01"
+          }
+        ]
+      },
+      "family": "bot2_momentum_rank500_regime",
+      "id": 4,
+      "max_drawdown": null,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; direct_baseline_experiment_id=18; idle_capital=cash; market_regime=7 fields; max_deployment=1.0; momentum=12-1; random_control_iterations=1000; random_control_seed=2712026; rebalance=monthly first-trading-day; screening=4 fields; slippage_each_leg_bps=10.0; top_n=20; universe_rule=top 500 by trailing 60-session median dollar volume; universe_size=500",
+      "return_pct": null,
+      "sharpe": null,
+      "source": "bench_gate"
+    },
+    {
+      "created_at": "2026-08-31T00:03:17.861893Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01",
+        "windows": [
+          {
+            "end": "2020-12-31",
+            "name": "2019_2020",
+            "start": "2019-02-01"
+          },
+          {
+            "end": "2022-12-31",
+            "name": "2021_2022",
+            "start": "2021-01-01"
+          },
+          {
+            "end": "2024-12-31",
+            "name": "2023_2024",
+            "start": "2023-01-01"
+          },
+          {
+            "end": "2026-07-31",
+            "name": "2025_latest_complete",
+            "start": "2025-01-01"
+          },
+          {
+            "end": "2026-07-31",
+            "name": "pooled_2019-02_latest_complete",
+            "start": "2019-02-01"
+          }
+        ]
+      },
+      "family": "bot2_momentum_rank500",
+      "id": 3,
+      "max_drawdown": 72.01566486898376,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; idle_capital=cash; max_deployment=1.0; momentum=12-1; random_control_iterations=1000; random_control_seed=2712026; rebalance=monthly first-trading-day; screening=4 fields; slippage_each_leg_bps=10.0; top_n=20; universe_rule=top 500 by trailing 60-session median dollar volume; universe_size=500",
+      "return_pct": 3.218342604572803,
+      "sharpe": 0.7016876886753177,
+      "source": "bench_gate"
+    },
+    {
+      "created_at": "2026-08-30T23:44:43.929863Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "baseline_experiment_id": 18,
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "regime_rule": {
+          "evaluation_timing": "each monthly rebalance using bars strictly before date",
+          "lookback_sessions": 200,
+          "position_policy": "binary; no momentum positions while RISK_OFF",
+          "risk_off_asset": "SGOV",
+          "rule": "RISK_ON iff prior SPY close > prior 200-session SMA; otherwise RISK_OFF",
+          "signal_symbol": "SPY",
+          "symbol": "SGOV"
+        },
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01",
+        "windows": [
+          {
+            "end": "2020-12-31",
+            "name": "2019_2020",
+            "start": "2019-02-01"
+          },
+          {
+            "end": "2022-12-31",
+            "name": "2021_2022",
+            "start": "2021-01-01"
+          },
+          {
+            "end": "2024-12-31",
+            "name": "2023_2024",
+            "start": "2023-01-01"
+          },
+          {
+            "end": "2026-07-31",
+            "name": "2025_latest_complete",
+            "start": "2025-01-01"
+          },
+          {
+            "end": "2026-07-31",
+            "name": "pooled_2019-02_latest_complete",
+            "start": "2019-02-01"
+          }
+        ]
+      },
+      "family": "bot2_momentum_rank500_regime",
+      "id": 2,
+      "max_drawdown": 75.10410224421416,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; direct_baseline_experiment_id=18; idle_capital=cash; market_regime=7 fields; max_deployment=1.0; momentum=12-1; random_control_iterations=1000; random_control_seed=2712026; rebalance=monthly first-trading-day; screening=4 fields; slippage_each_leg_bps=10.0; top_n=20; universe_rule=top 500 by trailing 60-session median dollar volume; universe_size=500",
+      "return_pct": 0.7066196787364019,
+      "sharpe": 0.38093018518404276,
+      "source": "bench_gate"
+    },
+    {
+      "created_at": "2026-08-30T23:43:10.581668Z",
+      "data_window": {
+        "backtest_end": "2026-07-31",
+        "backtest_start": "2019-02-01",
+        "price_sources": [
+          "alpaca_sip_adjusted",
+          "alpaca_iex_adjusted"
+        ],
+        "price_table": "bot2_sp500_prices",
+        "screener_implementation": "core.equity_universe.screen_universe",
+        "warmup_start": "2018-01-01",
+        "windows": [
+          {
+            "end": "2020-12-31",
+            "name": "2019_2020",
+            "start": "2019-02-01"
+          },
+          {
+            "end": "2022-12-31",
+            "name": "2021_2022",
+            "start": "2021-01-01"
+          },
+          {
+            "end": "2024-12-31",
+            "name": "2023_2024",
+            "start": "2023-01-01"
+          },
+          {
+            "end": "2026-07-31",
+            "name": "2025_latest_complete",
+            "start": "2025-01-01"
+          },
+          {
+            "end": "2026-07-31",
+            "name": "pooled_2019-02_latest_complete",
+            "start": "2019-02-01"
+          }
+        ]
+      },
+      "family": "bot2_momentum_rank500",
+      "id": 1,
+      "max_drawdown": 72.01566486898376,
+      "parameters_summary": "allocation=equal_weight; catastrophe_stop=0.2; idle_capital=cash; max_deployment=1.0; momentum=12-1; random_control_iterations=1000; random_control_seed=2712026; rebalance=monthly first-trading-day; screening=4 fields; slippage_each_leg_bps=10.0; top_n=20; universe_rule=top 500 by trailing 60-session median dollar volume; universe_size=500",
+      "return_pct": 3.218342604572803,
+      "sharpe": 0.7016876886753177,
+      "source": "bench_gate"
+    }
+  ],
+  "generated_at": "2026-10-05T00:45:45.754501Z",
+  "row_counts": {
+    "experiments": 21,
+    "exploration_runs": 136
+  },
+  "schema_version": 1,
+  "snapshot_as_of": "2026-10-05T00:45:45.754501Z",
+  "source": "helium_research_database_snapshot",
+  "source_label": "Helium research database · read-only export"
+}

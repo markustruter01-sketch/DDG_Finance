@@ -52,6 +52,7 @@
 - [Bot 3 rebalance stop policy](bot3-rebalance-stop-policy.md) — sells retain the stored stop price; buys recalculate from the broker-reported post-fill average entry and existing percentage.
 - [Bot 2 mechanical-gate parity](bot2-mechanical-gate-parity.md) — streaming checks must preserve shared asset eligibility and point-in-time screening semantics, not just matching final counts.
 - [Strategy bench isolation](strategy-bench-isolation.md) — the bench is a static development-only research surface and must remain isolated from live trading and streaming navigation.
+- [Strategy Bench canvas previews](strategy-bench-canvas-previews.md) — keep concept frames desktop-landscape and present one at readable scale.
 - [Strategy Bench loading behavior](strategy-bench-loading.md) — canonical Helium runs can take minutes; render the research shell while the verified server run is pending.
 - [Research registry result shapes](research-registry-result-shapes.md) — pooled metrics may be direct or nested; ambiguous multi-strategy windows must remain NULL.
 - [Bot 3 plan history source](bot3-plan-history-source.md) — production price tables are empty; use verified explicit-range Alpaca bars, never silent dev fallback.

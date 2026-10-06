@@ -26,7 +26,7 @@ import time
 import uuid
 from datetime import date, datetime, time as dt_time, timedelta, timezone
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Iterator, Sequence
 
 import requests
 
@@ -38,10 +38,13 @@ sys.path.insert(0, _TRADING_PLATFORM)
 
 from db.postgres import get_conn  # noqa: E402
 from core.equity_universe import (  # noqa: E402
+    EquitySymbolSummary,
     eligible_asset_records,
     last_screen_observations,
+    last_screen_summaries,
     screen_universe as shared_screen_universe,
     set_screen_data,
+    summarize_symbol_bars,
 )
 from core.cash_park import CASH_PARK_SYMBOLS, is_cash_park  # noqa: E402
 from core.bot2_universe_gate import BOT2_UNIVERSE_GATE_FILE  # noqa: E402
@@ -202,28 +205,56 @@ def universe_gate_is_passed() -> bool:
 
 def momentum_12_1(bars: list[dict[str, Any]], as_of: date) -> float | None:
     """Return 12-1 momentum: price 21 sessions ago / price 252 sessions ago."""
-    prior = _prior_bars(bars, as_of)
-    if len(prior) < MIN_PRIOR_SESSIONS:
-        return None
-    old_price = float(prior[-MIN_PRIOR_SESSIONS].get("c", 0) or 0)
-    skip_end_price = float(prior[-SKIP_RECENT_SESSIONS - 1].get("c", 0) or 0)
-    if old_price <= 0 or skip_end_price <= 0:
-        return None
-    return skip_end_price / old_price - 1.0
+    return summarize_symbol_bars(
+        bars,
+        as_of,
+        MIN_PRIOR_SESSIONS,
+        momentum_lookback=MIN_PRIOR_SESSIONS,
+        skip_recent_sessions=SKIP_RECENT_SESSIONS,
+    ).momentum
 
 
 def rank_momentum(
     screened: set[str],
-    bars_by_symbol: dict[str, list[dict[str, Any]]],
+    bars_by_symbol: dict[str, Any],
     as_of: date,
     top_n: int = MAX_POSITIONS,
 ) -> list[dict[str, float | str]]:
     observations = last_screen_observations()
+    screened_summaries = last_screen_summaries(bars_by_symbol)
     ranked = []
     for symbol in screened:
         if canonical_symbol(symbol) == SPY_SLEEVE_SYMBOL:
             continue
-        score = momentum_12_1(bars_by_symbol.get(symbol, []), as_of)
+        source = bars_by_symbol.get(symbol, [])
+        if isinstance(source, EquitySymbolSummary):
+            summary = source
+        else:
+            summary = screened_summaries.get(symbol)
+            if summary is not None and not summary.matches(
+                as_of,
+                MIN_PRIOR_SESSIONS,
+                MIN_PRIOR_SESSIONS,
+                SKIP_RECENT_SESSIONS,
+            ):
+                summary = None
+        if summary is None:
+            summary = summarize_symbol_bars(
+                source,
+                as_of,
+                MIN_PRIOR_SESSIONS,
+                momentum_lookback=MIN_PRIOR_SESSIONS,
+                skip_recent_sessions=SKIP_RECENT_SESSIONS,
+            )
+        elif isinstance(source, EquitySymbolSummary) and not summary.matches(
+            as_of,
+            MIN_PRIOR_SESSIONS,
+            MIN_PRIOR_SESSIONS,
+            SKIP_RECENT_SESSIONS,
+        ):
+            raise ValueError(f"summary parameters do not match ranking inputs for {symbol}")
+
+        score = summary.momentum
         if score is not None and math.isfinite(score):
             if score > MOMENTUM_ARTEFACT_THRESHOLD:
                 logger.warning(
@@ -231,12 +262,13 @@ def rank_momentum(
                     symbol, score, MOMENTUM_ARTEFACT_THRESHOLD,
                 )
                 continue
+            assert summary.prior_close is not None
             ranked.append({
                 "symbol": symbol,
                 "momentum": score,
                 "asset_class": observations[symbol].get("asset_class", "us_equity"),
                 "median_dollar_volume": observations[symbol]["median_dollar_volume_60"],
-                "price": float(_prior_bars(bars_by_symbol.get(symbol, []), as_of)[-1]["c"]),
+                "price": summary.prior_close,
             })
     return sorted(ranked, key=lambda item: (-float(item["momentum"]), str(item["symbol"])))[:top_n]
 
@@ -432,10 +464,12 @@ class AlpacaMomentumClient:
         # audit inactive, non-equity, OTC, and excluded-product records.
         return self._request("GET", "/v2/assets") or []
 
-    def daily_bars(
+    def daily_bar_batches(
         self, symbols: list[str], as_of: date, batch_size: int = 100
-    ) -> dict[str, list[dict[str, Any]]]:
-        result: dict[str, list[dict[str, Any]]] = {}
+    ) -> Iterator[dict[str, list[dict[str, Any]]]]:
+        """Yield one complete paginated symbol batch at a time."""
+        if batch_size < 1:
+            raise ValueError("batch_size must be positive")
         start = as_of - timedelta(days=540)
         now = datetime.now(timezone.utc).replace(microsecond=0)
         end_time = now - timedelta(minutes=SIP_DELAY_MINUTES)
@@ -447,6 +481,7 @@ class AlpacaMomentumClient:
         )
         for offset in range(0, len(symbols), batch_size):
             batch = symbols[offset:offset + batch_size]
+            batch_result: dict[str, list[dict[str, Any]]] = {}
             token = None
             while True:
                 params = {
@@ -469,12 +504,22 @@ class AlpacaMomentumClient:
                         or _bar_date(bar) != unfinished_session
                     ]
                     if eligible_bars:
-                        result.setdefault(canonical_symbol(symbol), []).extend(
+                        batch_result.setdefault(canonical_symbol(symbol), []).extend(
                             eligible_bars
                         )
                 token = payload.get("next_page_token")
                 if not token:
                     break
+            del payload
+            yield batch_result
+
+    def daily_bars(
+        self, symbols: list[str], as_of: date, batch_size: int = 100
+    ) -> dict[str, list[dict[str, Any]]]:
+        result: dict[str, list[dict[str, Any]]] = {}
+        for batch_result in self.daily_bar_batches(symbols, as_of, batch_size):
+            for symbol, bars in batch_result.items():
+                result.setdefault(symbol, []).extend(bars)
         return result
 
     def latest_price(self, symbol: str) -> float:
@@ -1778,6 +1823,8 @@ def _build_book(
         UNIVERSE_SIZE,
         MIN_PRIOR_SESSIONS,
         MIN_MEDIAN_CLOSE,
+        momentum_lookback=MIN_PRIOR_SESSIONS,
+        skip_recent_sessions=SKIP_RECENT_SESSIONS,
     )
     screened = {
         canonical_symbol(symbol)
@@ -1796,6 +1843,81 @@ def _build_book(
         + f" | ranked_top50={len(ranked)}"
     )
     return ranked, screened, bars
+
+
+def _build_book_batched(
+    client: AlpacaMomentumClient,
+    as_of: date,
+    batch_size: int = 100,
+) -> tuple[
+    list[dict[str, float | str]],
+    set[str],
+    dict[str, EquitySymbolSummary],
+]:
+    """Memory-bounded parity path; the live cycle continues to call _build_book."""
+    assets = client.assets()
+    candidate_assets, asset_report = eligible_asset_records(assets)
+    candidate_assets = [
+        asset for asset in candidate_assets
+        if canonical_symbol(asset.get("symbol", "")) != SPY_SLEEVE_SYMBOL
+    ]
+    logger.info(
+        "Bot 2 | shared asset filter total=%d asset_eligible=%d "
+        "excluded_name=%d excluded_symbol_structure=%d",
+        asset_report["total_assets"],
+        asset_report["asset_eligible_records"],
+        asset_report["excluded_name"],
+        asset_report["excluded_symbol_structure"],
+    )
+    symbols = [
+        canonical_symbol(asset["symbol"])
+        for asset in candidate_assets
+    ]
+    summaries: dict[str, EquitySymbolSummary] = {}
+    for batch in client.daily_bar_batches(symbols, as_of, batch_size):
+        for symbol in tuple(batch):
+            bars = batch.pop(symbol)
+            normalized = canonical_symbol(symbol)
+            summaries[normalized] = summarize_symbol_bars(
+                bars,
+                as_of,
+                MIN_PRIOR_SESSIONS,
+                momentum_lookback=MIN_PRIOR_SESSIONS,
+                skip_recent_sessions=SKIP_RECENT_SESSIONS,
+            )
+            del bars
+        del batch
+
+    screen_assets = [
+        asset for asset in assets
+        if canonical_symbol(asset.get("symbol", "")) != SPY_SLEEVE_SYMBOL
+    ]
+    set_screen_data(screen_assets, summaries)
+    screened, funnel = shared_screen_universe(
+        as_of,
+        UNIVERSE_SIZE,
+        MIN_PRIOR_SESSIONS,
+        MIN_MEDIAN_CLOSE,
+        momentum_lookback=MIN_PRIOR_SESSIONS,
+        skip_recent_sessions=SKIP_RECENT_SESSIONS,
+    )
+    screened = {
+        canonical_symbol(symbol)
+        for symbol in screened
+        if canonical_symbol(symbol) != SPY_SLEEVE_SYMBOL
+    }
+    ranked = rank_momentum(screened, summaries, as_of)
+    logger.info(
+        "Bot 2 | LIVE_FUNNEL %s ranked_top50=%d",
+        " ".join(f"{key}={value}" for key, value in sorted(funnel.items())),
+        len(ranked),
+    )
+    print(
+        "LIVE_FUNNEL | "
+        + " | ".join(f"{key}={value}" for key, value in sorted(funnel.items()))
+        + f" | ranked_top50={len(ranked)}"
+    )
+    return ranked, screened, summaries
 
 
 def _park_idle_cash(

@@ -65,11 +65,47 @@ class _ScreenData:
     bars_by_symbol: Mapping[str, Any]
 
 
+@dataclass(frozen=True)
+class EquitySymbolSummary:
+    """Small point-in-time summary of the bars used by screen and rank."""
+
+    as_of_date: date
+    min_sessions: int
+    momentum_lookback: int | None
+    skip_recent_sessions: int
+    has_bars: bool
+    has_current_bar: bool
+    sessions_available: int
+    last_data_day: date | None
+    adjusted_price_artifact: bool
+    median_close_60: float | None
+    median_dollar_volume_60: float | None
+    momentum: float | None
+    prior_close: float | None
+
+    def matches(
+        self,
+        as_of_date: date,
+        min_sessions: int,
+        momentum_lookback: int | None,
+        skip_recent_sessions: int,
+    ) -> bool:
+        return (
+            self.as_of_date == as_of_date
+            and self.min_sessions == min_sessions
+            and self.momentum_lookback == momentum_lookback
+            and self.skip_recent_sessions == skip_recent_sessions
+        )
+
+
 _SCREEN_DATA: ContextVar[_ScreenData | None] = ContextVar(
     "equity_universe_screen_data", default=None
 )
 _LAST_OBSERVATIONS: ContextVar[dict[str, dict[str, Any]]] = ContextVar(
     "equity_universe_last_observations", default={}
+)
+_LAST_SUMMARIES: ContextVar[dict[str, EquitySymbolSummary]] = ContextVar(
+    "equity_universe_last_summaries", default={}
 )
 
 
@@ -115,6 +151,130 @@ def _bars_for(value: Any) -> list[Any]:
         return sorted(list(bars), key=_bar_date)
     except TypeError:
         return []
+
+
+def _momentum_close(bar: Any) -> float:
+    value = bar.get("c", 0) if isinstance(bar, Mapping) else getattr(bar, "c", 0)
+    return float(value or 0)
+
+
+def summarize_symbol_bars(
+    value: Any,
+    as_of_date: date,
+    min_sessions: int,
+    *,
+    momentum_lookback: int | None = None,
+    skip_recent_sessions: int = 0,
+) -> EquitySymbolSummary:
+    """Reduce one full bar series to the only values needed by screen and rank.
+
+    The helper deliberately uses the same strictly-prior window and adjusted
+    close, liquidity, and momentum rules as the full-bars entry points.
+    """
+    if min_sessions < 1:
+        raise ValueError("min_sessions must be positive")
+    if momentum_lookback is not None and momentum_lookback < 1:
+        raise ValueError("momentum_lookback must be positive when supplied")
+    if skip_recent_sessions < 0:
+        raise ValueError("skip_recent_sessions must be non-negative")
+
+    bars = _bars_for(value)
+    if not bars:
+        return EquitySymbolSummary(
+            as_of_date=as_of_date,
+            min_sessions=min_sessions,
+            momentum_lookback=momentum_lookback,
+            skip_recent_sessions=skip_recent_sessions,
+            has_bars=False,
+            has_current_bar=False,
+            sessions_available=0,
+            last_data_day=None,
+            adjusted_price_artifact=False,
+            median_close_60=None,
+            median_dollar_volume_60=None,
+            momentum=None,
+            prior_close=None,
+        )
+
+    window_size = max(
+        min_sessions,
+        LIQUIDITY_SESSIONS,
+        momentum_lookback or 0,
+    )
+    source_days = getattr(value, "days", None)
+    if source_days is not None:
+        cutoff = bisect_left(source_days, as_of_date)
+        has_current_bar = (
+            cutoff < len(source_days) and source_days[cutoff] == as_of_date
+        )
+        sessions_available = cutoff
+        prior = bars[max(0, cutoff - window_size):cutoff]
+    else:
+        has_current_bar = any(_bar_date(bar) == as_of_date for bar in bars)
+        all_prior = [bar for bar in bars if _bar_date(bar) < as_of_date]
+        sessions_available = len(all_prior)
+        prior = all_prior[-window_size:]
+
+    last_data_day = _bar_date(prior[-1]) if prior else None
+    artifact_window = prior[-min_sessions:]
+    valid_closes = [
+        close for bar in artifact_window
+        if (close := _bar_number(bar, "c", "close")) is not None and close > 0
+    ]
+    adjusted_price_artifact = any(
+        previous > 0 and current > 0 and (
+            current / previous > MAX_ADJUSTED_CLOSE_RATIO
+            or current / previous < 1 / MAX_ADJUSTED_CLOSE_RATIO
+        )
+        for previous, current in zip(valid_closes, valid_closes[1:])
+    )
+
+    trailing = prior[-LIQUIDITY_SESSIONS:]
+    closes: list[float] = []
+    dollar_volumes: list[float] = []
+    for bar in trailing:
+        close = _bar_number(bar, "c", "close")
+        volume = _bar_number(bar, "v", "volume")
+        if close is None or volume is None or close <= 0 or volume < 0:
+            continue
+        closes.append(close)
+        dollar_volumes.append(close * volume)
+
+    median_close = (
+        float(statistics.median(closes))
+        if len(closes) >= LIQUIDITY_SESSIONS else None
+    )
+    median_dollar_volume = (
+        float(statistics.median(dollar_volumes))
+        if len(dollar_volumes) >= LIQUIDITY_SESSIONS else None
+    )
+
+    momentum: float | None = None
+    prior_close: float | None = None
+    if momentum_lookback is not None and len(prior) >= momentum_lookback:
+        skip_index = skip_recent_sessions + 1
+        if skip_index <= len(prior):
+            old_price = _momentum_close(prior[-momentum_lookback])
+            skip_end_price = _momentum_close(prior[-skip_index])
+            if old_price > 0 and skip_end_price > 0:
+                momentum = skip_end_price / old_price - 1.0
+            prior_close = _momentum_close(prior[-1])
+
+    return EquitySymbolSummary(
+        as_of_date=as_of_date,
+        min_sessions=min_sessions,
+        momentum_lookback=momentum_lookback,
+        skip_recent_sessions=skip_recent_sessions,
+        has_bars=True,
+        has_current_bar=has_current_bar,
+        sessions_available=sessions_available,
+        last_data_day=last_data_day,
+        adjusted_price_artifact=adjusted_price_artifact,
+        median_close_60=median_close,
+        median_dollar_volume_60=median_dollar_volume,
+        momentum=momentum,
+        prior_close=prior_close,
+    )
 
 
 def _excluded_name_reason(asset: Mapping[str, Any]) -> str | None:
@@ -206,6 +366,19 @@ def last_screen_observations() -> dict[str, dict[str, Any]]:
     return {symbol: dict(value) for symbol, value in _LAST_OBSERVATIONS.get().items()}
 
 
+def last_screen_summaries(
+    bars_by_symbol: Mapping[str, Any] | None = None,
+) -> dict[str, EquitySymbolSummary]:
+    """Return compact per-symbol summaries from the most recent screen."""
+    data = _SCREEN_DATA.get()
+    if (
+        bars_by_symbol is not None
+        and (data is None or data.bars_by_symbol is not bars_by_symbol)
+    ):
+        return {}
+    return dict(_LAST_SUMMARIES.get())
+
+
 def screen_universe(
     as_of_date: date,
     universe_size: int = 500,
@@ -213,6 +386,8 @@ def screen_universe(
     min_price: float = 5.0,
     *,
     require_current_bar: bool = False,
+    momentum_lookback: int | None = None,
+    skip_recent_sessions: int = 0,
 ) -> tuple[set[str], dict[str, Any]]:
     """Apply one point-in-time screen to the configured asset/bar data.
 
@@ -247,85 +422,66 @@ def screen_universe(
         "qualifying_symbols": 0,
     })
     observations: dict[str, dict[str, Any]] = {}
+    summaries: dict[str, EquitySymbolSummary] = {}
     ranked_candidates: list[tuple[str, float]] = []
 
     for asset in asset_records:
         symbol = _canonical_symbol(_asset_value(asset, "symbol"))
         source = data.bars_by_symbol.get(symbol)
-        bars = _bars_for(source)
-        if not bars:
+        if isinstance(source, EquitySymbolSummary):
+            if not source.matches(
+                as_of_date,
+                min_sessions,
+                momentum_lookback,
+                skip_recent_sessions,
+            ):
+                raise ValueError(
+                    f"summary parameters do not match screen inputs for {symbol}"
+                )
+            summary = source
+        else:
+            summary = summarize_symbol_bars(
+                source,
+                as_of_date,
+                min_sessions,
+                momentum_lookback=momentum_lookback,
+                skip_recent_sessions=skip_recent_sessions,
+            )
+        summaries[symbol] = summary
+
+        if not summary.has_bars:
             funnel["no_price_data"] += 1
             continue
-        source_days = getattr(source, "days", None)
-        if source_days is not None:
-            cutoff = bisect_left(source_days, as_of_date)
-            has_current_bar = cutoff < len(source_days) and source_days[cutoff] == as_of_date
-            if require_current_bar and not has_current_bar:
-                funnel["missing_current_bar"] += 1
-                continue
-            # Every downstream eligibility and artifact check is bounded to
-            # the most recent min_sessions bars.  Avoid materializing a
-            # symbol's entire history for each point-in-time screen.
-            sessions_available = cutoff
-            prior = bars[max(0, cutoff - min_sessions):cutoff]
-        else:
-            if require_current_bar and not any(_bar_date(bar) == as_of_date for bar in bars):
-                funnel["missing_current_bar"] += 1
-                continue
-            prior = [bar for bar in bars if _bar_date(bar) < as_of_date]
-            sessions_available = len(prior)
-        if sessions_available < min_sessions:
+        if require_current_bar and not summary.has_current_bar:
+            funnel["missing_current_bar"] += 1
+            continue
+        if summary.sessions_available < min_sessions:
             funnel["fewer_than_min_sessions"] += 1
             continue
         funnel["history_eligible"] += 1
-        # Live screening only requests a bounded recent history window.  A
-        # research panel may contain older split artifacts that the live
-        # caller cannot observe; artifact detection must therefore be
-        # point-in-time over the same lookback used for eligibility.
-        artifact_window = prior[-min_sessions:]
-        valid_closes = [
-            close for bar in artifact_window
-            if (close := _bar_number(bar, "c", "close")) is not None and close > 0
-        ]
-        artifact = any(
-            previous > 0 and current > 0 and (
-                current / previous > MAX_ADJUSTED_CLOSE_RATIO
-                or current / previous < 1 / MAX_ADJUSTED_CLOSE_RATIO
-            )
-            for previous, current in zip(valid_closes, valid_closes[1:])
-        )
-        if artifact:
+        if summary.adjusted_price_artifact:
             funnel["adjusted_price_artifacts"] += 1
             continue
-        trailing = prior[-LIQUIDITY_SESSIONS:]
-        closes: list[float] = []
-        dollar_volumes: list[float] = []
-        for bar in trailing:
-            close = _bar_number(bar, "c", "close")
-            volume = _bar_number(bar, "v", "volume")
-            if close is None or volume is None or close <= 0 or volume < 0:
-                continue
-            closes.append(close)
-            dollar_volumes.append(close * volume)
-        if len(closes) < LIQUIDITY_SESSIONS:
+        if (
+            summary.median_close_60 is None
+            or summary.median_dollar_volume_60 is None
+        ):
             continue
-        median_close = float(statistics.median(closes))
-        median_dollar_volume = float(statistics.median(dollar_volumes))
         observation = {
-            "last_data_day": _bar_date(prior[-1]),
-            "sessions_available": sessions_available,
-            "median_close_60": median_close,
-            "median_dollar_volume_60": median_dollar_volume,
+            "last_data_day": summary.last_data_day,
+            "sessions_available": summary.sessions_available,
+            "median_close_60": summary.median_close_60,
+            "median_dollar_volume_60": summary.median_dollar_volume_60,
             "asset_class": "us_equity",
             "name": str(_asset_value(asset, "name", default="") or ""),
             "exchange": str(_asset_value(asset, "exchange", default="") or ""),
             "uses_future_data": False,
         }
         observations[symbol] = observation
-        if median_close <= min_price:
+        if summary.median_close_60 <= min_price:
             funnel["below_min_price"] += 1
             continue
-        ranked_candidates.append((symbol, median_dollar_volume))
+        ranked_candidates.append((symbol, summary.median_dollar_volume_60))
 
     ranked_candidates.sort(key=lambda item: (-item[1], item[0]))
     funnel["ranked_candidates"] = len(ranked_candidates)
@@ -337,6 +493,7 @@ def screen_universe(
     qualifying = {symbol for symbol, _ in selected}
     funnel["qualifying_symbols"] = len(qualifying)
     _LAST_OBSERVATIONS.set(observations)
+    _LAST_SUMMARIES.set(summaries)
     return qualifying, funnel
 
 

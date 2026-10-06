@@ -7,6 +7,7 @@ import json
 import logging
 import pathlib
 import re
+import statistics
 import sys
 from datetime import date, datetime, timezone
 
@@ -18,10 +19,12 @@ bot2 = importlib.util.module_from_spec(_SPEC)
 sys.modules[_SPEC.name] = bot2
 _SPEC.loader.exec_module(bot2)
 from core.equity_universe import (  # noqa: E402
+    EquitySymbolSummary,
     asset_is_eligible,
     eligible_asset_records,
     screen_universe as shared_screen_universe,
     set_screen_data,
+    summarize_symbol_bars,
 )
 from core.bot2_universe_gate import BOT2_UNIVERSE_GATE_FILE
 
@@ -47,6 +50,37 @@ def _asset(symbol: str, **overrides):
         "exchange": "NASDAQ",
         **overrides,
     }
+
+
+def test_symbol_summary_captures_screen_and_rank_values_without_retaining_bars() -> None:
+    as_of = date(2026, 1, 1)
+    bars = _bars(count=260, close=100.0, volume=1_000_000)
+    bars.append({"t": as_of.isoformat(), "c": 999_999.0, "v": 999_999_999})
+
+    summary = summarize_symbol_bars(
+        bars,
+        as_of,
+        min_sessions=252,
+        momentum_lookback=252,
+        skip_recent_sessions=21,
+    )
+    prior = bars[:-1]
+
+    assert isinstance(summary, EquitySymbolSummary)
+    assert summary.has_bars
+    assert summary.has_current_bar
+    assert summary.sessions_available == 260
+    assert summary.last_data_day == date.fromisoformat(prior[-1]["t"])
+    assert summary.adjusted_price_artifact is False
+    assert summary.median_close_60 == statistics.median(
+        bar["c"] for bar in prior[-60:]
+    )
+    assert summary.median_dollar_volume_60 == statistics.median(
+        bar["c"] * bar["v"] for bar in prior[-60:]
+    )
+    assert summary.momentum == prior[-22]["c"] / prior[-252]["c"] - 1
+    assert summary.prior_close == prior[-1]["c"]
+    assert not hasattr(summary, "bars")
 
 
 def test_daily_bars_end_twenty_minutes_before_now(monkeypatch) -> None:
@@ -95,6 +129,37 @@ def test_daily_bars_drop_today_during_open_nyse_session(monkeypatch) -> None:
     assert bars == {
         "AAPL": [{"t": "2026-10-01T04:00:00Z", "c": 100.0, "v": 1000}]
     }
+
+
+def test_daily_bar_batches_yield_completed_symbol_batches() -> None:
+    requests_seen = []
+    client = object.__new__(bot2.AlpacaMomentumClient)
+
+    def data_request(method, path, **kwargs):
+        symbols = kwargs["params"]["symbols"].split(",")
+        requests_seen.append((method, path, symbols))
+        return {
+            "bars": {
+                symbol: [{"t": "2026-09-30T04:00:00Z", "c": 100.0, "v": 1000}]
+                for symbol in symbols
+            }
+        }
+
+    client._data_request = data_request
+    batches = list(
+        client.daily_bar_batches(
+            ["AAA", "BBB", "CCC"], date(2026, 10, 1), batch_size=2
+        )
+    )
+
+    assert [sorted(batch) for batch in batches] == [
+        ["AAA", "BBB"],
+        ["CCC"],
+    ]
+    assert requests_seen == [
+        ("GET", "/v2/stocks/bars", ["AAA", "BBB"]),
+        ("GET", "/v2/stocks/bars", ["CCC"]),
+    ]
 
 
 def test_latest_price_falls_back_to_iex_only_after_sip_403(capsys) -> None:
@@ -320,6 +385,74 @@ def test_rank_rejects_extreme_adjusted_momentum_artifact() -> None:
     ranked = bot2.rank_momentum(screened, bars, as_of)
 
     assert [item["symbol"] for item in ranked] == ["NORMAL"]
+
+
+def test_batched_book_matches_full_bar_book_on_fixed_data(capsys) -> None:
+    as_of = date(2026, 1, 1)
+    assets = [
+        _asset("AAA"),
+        _asset("BBB"),
+        _asset("CCC"),
+        _asset("HIGHMOM"),
+        _asset("ARTI"),
+        _asset("NODATA"),
+        _asset("SPY"),
+        _asset("ETF", name="Example ETF"),
+        _asset("OTC", exchange="OTC"),
+    ]
+    bars = {
+        "AAA": _bars(close=70.0),
+        "BBB": _bars(close=100.0),
+        "CCC": _bars(close=150.0),
+        "HIGHMOM": _bars(close=6.0),
+        "ARTI": _bars(close=100.0),
+    }
+    bars["ARTI"][-22]["c"] = 50_000.0
+
+    class FullBarsClient:
+        def assets(self):
+            return assets
+
+        def daily_bars(self, symbols, _as_of, batch_size=100):
+            assert batch_size == 100
+            return {symbol: bars[symbol] for symbol in symbols if symbol in bars}
+
+    class BatchedBarsClient(FullBarsClient):
+        def daily_bar_batches(self, symbols, _as_of, batch_size=100):
+            for offset in range(0, len(symbols), batch_size):
+                batch_symbols = symbols[offset:offset + batch_size]
+                yield {
+                    symbol: bars[symbol]
+                    for symbol in batch_symbols
+                    if symbol in bars
+                }
+
+    full_ranked, full_screened, _full_bars = bot2._build_book(
+        FullBarsClient(), as_of
+    )
+    full_output = capsys.readouterr().out
+    compact_ranked, compact_screened, summaries = bot2._build_book_batched(
+        BatchedBarsClient(), as_of, batch_size=2
+    )
+    compact_output = capsys.readouterr().out
+
+    def live_funnel(output):
+        return next(
+            line for line in output.splitlines()
+            if line.startswith("LIVE_FUNNEL | ")
+        )
+
+    assert compact_screened == full_screened
+    assert compact_ranked == full_ranked
+    assert live_funnel(compact_output) == live_funnel(full_output)
+    assert len(compact_screened) == 4
+    assert all(isinstance(value, EquitySymbolSummary) for value in summaries.values())
+    assert all(not hasattr(value, "bars") for value in summaries.values())
+    assert [row["symbol"] for row in compact_ranked] == [
+        row["symbol"] for row in full_ranked
+    ]
+    assert "HIGHMOM" not in {row["symbol"] for row in compact_ranked}
+    assert "ARTI" not in compact_screened
 
 
 def test_allocation_excludes_vault_from_sizing_base_and_equal_weights() -> None:

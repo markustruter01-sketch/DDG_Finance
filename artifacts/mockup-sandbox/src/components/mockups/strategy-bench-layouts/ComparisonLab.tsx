@@ -313,68 +313,57 @@ export default function ComparisonLab() {
 
   return (
     <main className="bench-shell bench-catalog bench-record-page bench-comparison-lab" data-testid="page-bench">
-      <aside className="bench-rail">
-        <div className="bench-rail-brand">
-          <div className="bench-brand-mark"><FlaskConical size={18} /></div>
-          <div><span className="bench-overline">RESEARCH LEDGER</span><strong>Strategy Bench</strong></div>
-        </div>
-        <div className="bench-rail-rule" />
-        <div className="bench-rail-spacer" />
-        <div className="bench-rail-note"><span className="bench-status-dot" /><div><strong>READ ONLY</strong><span>NO ORDER PATHS</span></div></div>
-        <div className="bench-rail-meta"><span>Record set</span><code>Version {catalog.schema_version}</code><span>Execution</span><code>Separate system</code></div>
-      </aside>
-
       <section className="bench-content">
-        <header className="bench-topbar">
+        <header className="bench-topbar cl-topbar">
           <div className="bench-title-group">
-            <div className="bench-breadcrumb"><BookOpen size={13} /> Research / Bench</div>
-            <h1>Strategy Bench</h1>
+            <div className="cl-brand-mark" aria-hidden="true"><FlaskConical size={16} /></div>
+            <div className="cl-title-copy">
+              <div className="bench-breadcrumb"><BookOpen size={12} /> Research / Bench</div>
+              <h1>Strategy Bench</h1>
+            </div>
           </div>
-          <span className="bench-readonly"><Database size={13} /> Read-only catalog</span>
+          <div className="cl-header-meta">
+            <span className="bench-readonly"><Database size={13} /> Read-only catalog</span>
+            <span className="cl-static-indicator"><i /> Static sample records</span>
+          </div>
         </header>
 
-        <div className="bench-ledger-body bench-record-body">
-          <div className="cl-intro">
-            <section className="bench-record-headline" aria-labelledby="cl-page-title">
-              <div className="bench-record-eyebrow"><BookOpen size={14} /> Research record · Version {catalog.schema_version}</div>
-              <div className="cl-headline-row">
-                <div>
-                  <h2 id="cl-page-title">{headline}</h2>
-                  <p>Historical hypotheses and outcomes for inspection. This page cannot start research or route an order.</p>
-                </div>
-                <div className="cl-count-block" aria-label={`${runs.length} historical runs`}>
-                  <strong>{runs.length}</strong><span>historical<br />runs</span>
-                </div>
-              </div>
-              <div className="bench-record-outcomes" aria-label="Experiment outcome counts">
+        <div className="bench-ledger-body bench-record-body cl-body">
+          <section className="cl-ledger-strip" aria-label="Research record summary">
+            <div className="cl-ledger-summary">
+              <span className="bench-record-eyebrow"><BookOpen size={12} /> Research record · Version {catalog.schema_version}</span>
+              <h2 id="cl-page-title">{headline}</h2>
+              <p>Historical hypotheses and outcomes for inspection. This page cannot start research or route an order.</p>
+            </div>
+            <div className="cl-ledger-stats">
+              <div className="cl-total-count"><strong>{experiments.length}</strong><span>hypotheses</span></div>
+              <div className="cl-outcome-counts" aria-label="Experiment outcome counts">
                 {outcomeCounts.length > 0 ? outcomeCounts.map(([outcome, count]) => (
                   <span className={`bench-record-outcome ${outcomeTone(outcome)}`} key={outcome}>
                     <b>{count}</b> {outcomeLabel(outcome)}
                   </span>
                 )) : <span className="bench-record-outcome is-neutral">No outcomes recorded</span>}
               </div>
-            </section>
-            <aside className="bench-record-provenance" aria-label="Catalog snapshot source">
+              <div className="cl-total-count cl-run-count"><strong>{runs.length}</strong><span>exploration<br />runs</span></div>
+            </div>
+            <aside className="cl-provenance" aria-label="Catalog snapshot source">
               <div className="bench-record-provenance-title"><Database size={15} /> Snapshot provenance</div>
-              <dl>
-                <div><dt>Source</dt><dd>{catalog.source_label || catalog.source}</dd></div>
-                <div><dt>As of</dt><dd>{formatDate(catalog.snapshot_as_of)}</dd></div>
-                <div><dt>Generated</dt><dd>{formatDate(catalog.generated_at)}</dd></div>
-              </dl>
+              <div className="cl-prov-values">
+                <span><b>Source</b>{catalog.source_label || catalog.source}</span>
+                <span><b>As of</b>{formatDate(catalog.snapshot_as_of)}</span>
+                <span><b>Generated</b>{formatDate(catalog.generated_at)}</span>
+              </div>
               {catalog.source_detail && <p>{catalog.source_detail}</p>}
             </aside>
-          </div>
+          </section>
 
-          <div className="cl-comparison-kicker" aria-hidden="true">
-            <span>Comparison surface</span><i /> <span>Risk profile</span><i /> <span>Recorded runs</span>
-          </div>
-
+          <div className="cl-analysis-grid">
           <section className="bench-record-panel bench-record-chart-panel cl-chart-panel" aria-labelledby="bench-chart-title">
             <div className="bench-record-panel-heading">
               <div>
                 <span className="bench-record-section-label">01 · Risk and return</span>
                 <h2 id="bench-chart-title">Sharpe vs maximum drawdown</h2>
-                <p>Compare the recorded risk profile of each exploration run.</p>
+                <p>Each point is an exploration run with both chart metrics recorded.</p>
               </div>
               <span className="bench-record-chart-count">{chartPoints.length} of {runs.length} runs plotted</span>
             </div>
@@ -449,56 +438,72 @@ export default function ComparisonLab() {
                 <h2 id="bench-runs-title">Exploration runs</h2>
                 <p>Recorded parameter trials and metrics. Filter by family or sort a column.</p>
               </div>
-              <label className="bench-record-filter">
-                <span>Family</span>
-                <select aria-label="Filter runs by family" value={familyFilter} onChange={(event) => setFamilyFilter(event.target.value)}>
-                  <option value="all">All families</option>
-                  {families.map((family) => <option key={family} value={family}>{familyLabel(family)}</option>)}
-                </select>
-              </label>
+              <div className="cl-run-controls">
+                <label className="bench-record-filter">
+                  <span>Family</span>
+                  <select aria-label="Filter runs by family" value={familyFilter} onChange={(event) => setFamilyFilter(event.target.value)}>
+                    <option value="all">All families</option>
+                    {families.map((family) => <option key={family} value={family}>{familyLabel(family)}</option>)}
+                  </select>
+                </label>
+              </div>
             </div>
             <div className="bench-record-table-meta">
               <span>{visibleRuns.length} of {runs.length} runs</span>
-              <span>Sort by a metric to compare recorded outcomes</span>
+              <div className="cl-sort-tools" role="group" aria-label="Sort historical runs">
+                <span>Sort</span>
+                {([
+                  ["sharpe", "Sharpe"],
+                  ["return_pct", "Return"],
+                  ["max_drawdown", "Drawdown"],
+                  ["created_at", "Recorded"],
+                ] as [SortKey, string][]).map(([key, label]) => {
+                  const SortIcon = sortKey === key ? sortDirection === "asc" ? ArrowUp : ArrowDown : ArrowUpDown;
+                  return (
+                    <button
+                      type="button"
+                      className={sortKey === key ? "is-active" : undefined}
+                      aria-label={`Sort by ${label.toLowerCase()}`}
+                      aria-pressed={sortKey === key}
+                      key={key}
+                      onClick={() => changeSort(key)}
+                    >
+                      {label}<SortIcon size={11} aria-hidden="true" />
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-            <div className="bench-record-table-scroll" role="region" aria-label="Exploration run records" tabIndex={0}>
+            <div className="cl-run-list" role="region" aria-label="Exploration run records" tabIndex={0}>
               {visibleRuns.length > 0 ? (
-                <table className="bench-record-table">
-                  <thead>
-                    <tr>
-                      <th scope="col">Record</th>
-                      <th scope="col">Family</th>
-                      {([
-                        ["sharpe", "Sharpe"],
-                        ["return_pct", "Return"],
-                        ["max_drawdown", "Max drawdown"],
-                        ["created_at", "Recorded"],
-                      ] as [SortKey, string][]).map(([key, label]) => {
-                        const SortIcon = sortKey === key ? sortDirection === "asc" ? ArrowUp : ArrowDown : ArrowUpDown;
-                        return <th scope="col" key={key}><button type="button" className="bench-record-sort" aria-label={`Sort by ${label.toLowerCase()}`} aria-sort={sortKey === key ? sortDirection === "asc" ? "ascending" : "descending" : "none"} onClick={() => changeSort(key)}>{label}<SortIcon size={12} aria-hidden="true" /></button></th>;
-                      })}
-                      <th scope="col">Source</th>
-                      <th scope="col">Parameters and window</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {visibleRuns.map((run) => (
-                      <tr key={run.id} className={selectedRunId === String(run.id) ? "is-selected" : undefined}>
-                        <td className="bench-record-mono"><button type="button" className="bench-record-run-link" onClick={() => setSelectedRunId(String(run.id))} aria-label={`Inspect exploration run ${run.id}`}>#{run.id}</button></td>
-                        <td><span className="bench-record-family"><i style={{ backgroundColor: GROUP_COLORS[researchGroup(run.family)] }} />{familyLabel(run.family)}</span></td>
-                        <td className="bench-record-mono">{formatMetric(run.sharpe, 3)}</td>
-                        <td className="bench-record-mono">{formatPercent(run.return_pct, 2)}</td>
-                        <td className="bench-record-mono">{formatDrawdown(run.max_drawdown)}</td>
-                        <td className="bench-record-mono"><span className="bench-record-date"><CalendarClock size={12} />{formatDate(run.created_at)}</span></td>
-                        <td className="bench-record-mono">{run.source || "Not recorded"}</td>
-                        <td><details className="bench-record-run-details"><summary>Inspect <ChevronDown size={13} /></summary><div>
-                          <section><span>Parameters</span><pre>{formatSummary(run.parameters_summary)}</pre></section>
-                          <section><span>Data window</span><pre>{formatSummary(run.data_window)}</pre></section>
-                        </div></details></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <div className="cl-run-items">
+                  {visibleRuns.map((run) => (
+                    <article className={`cl-run-record${selectedRunId === String(run.id) ? " is-selected" : ""}`} key={run.id}>
+                      <div className="cl-run-record-heading">
+                        <div className="cl-run-identity">
+                          <button type="button" className="bench-record-run-link" onClick={() => setSelectedRunId(String(run.id))} aria-label={`Inspect exploration run ${run.id}`}>#{run.id}</button>
+                          <span className="bench-record-family"><i style={{ backgroundColor: GROUP_COLORS[researchGroup(run.family)] }} />{familyLabel(run.family)}</span>
+                        </div>
+                        <span className="cl-run-date"><CalendarClock size={11} />{formatDate(run.created_at)}</span>
+                      </div>
+                      <dl className="cl-run-metrics" aria-label={`Run ${run.id} recorded metrics`}>
+                        <div><dt>Sharpe</dt><dd>{formatMetric(run.sharpe, 3)}</dd></div>
+                        <div><dt>Return</dt><dd>{formatPercent(run.return_pct, 2)}</dd></div>
+                        <div><dt>Max drawdown</dt><dd>{formatDrawdown(run.max_drawdown)}</dd></div>
+                      </dl>
+                      <div className="cl-run-record-foot">
+                        <span><b>Source</b>{run.source || "Not recorded"}</span>
+                        <details className="bench-record-run-details">
+                          <summary>Parameters &amp; window <ChevronDown size={12} /></summary>
+                          <div>
+                            <section><span>Parameters</span><pre>{formatSummary(run.parameters_summary)}</pre></section>
+                            <section><span>Data window</span><pre>{formatSummary(run.data_window)}</pre></section>
+                          </div>
+                        </details>
+                      </div>
+                    </article>
+                  ))}
+                </div>
               ) : (
                 <div className="bench-record-empty-runs"><strong>{runs.length === 0 ? "No exploration runs" : "No runs for this family"}</strong><span>{runs.length === 0 ? "The current catalog contains no exploration records." : "Choose another family to view recorded runs."}</span></div>
               )}
@@ -508,13 +513,14 @@ export default function ComparisonLab() {
               <span>Source: {catalog.source_label || catalog.source}</span>
             </footer>
           </section>
+          </div>
 
           <section className="bench-record-experiments cl-hypotheses" aria-labelledby="bench-experiments-title">
             <div className="bench-record-section-heading">
               <div>
                 <span className="bench-record-section-label">03 · Supporting declarations</span>
-                <h2 id="bench-experiments-title">Registered hypotheses</h2>
-                <p>Declared pass bars, historical outcomes, parameters and data windows.</p>
+                <h2 id="bench-experiments-title">Experiments by research family</h2>
+                <p>Declared pass bars and recorded outcomes. Parameters and data windows open on demand.</p>
               </div>
               <span className="bench-record-section-count">{experiments.length} total records</span>
             </div>

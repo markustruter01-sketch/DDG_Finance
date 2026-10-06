@@ -127,10 +127,6 @@ function outcomeLabel(outcome: string) {
   return outcome.replace(/[_-]+/g, " ").replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
 }
 
-function isPassed(outcome: string) {
-  return /^(pass|passed|verified|accepted|success)$/i.test(outcome.trim());
-}
-
 type TooltipProps = { active?: boolean; payload?: Array<{ payload?: ChartPoint }> };
 
 function RunTooltip({ active, payload }: TooltipProps) {
@@ -169,7 +165,6 @@ export default function StrategyCatalog() {
     });
     return [...counts.entries()];
   }, [experiments]);
-  const passedCount = experiments.filter((item) => isPassed(item.outcome)).length;
   const families = useMemo(() => [...new Set(runs.map((run) => run.family))].sort((a, b) => a.localeCompare(b)), [runs]);
   const selectedExperiment = experiments.find((item) => String(item.id) === selectedExperimentId)
     ?? experiments[0]
@@ -248,42 +243,37 @@ export default function StrategyCatalog() {
 
   return (
     <main className="bench-shell bench-catalog bench-record-page strategy-catalog-page" data-testid="page-bench-catalog">
-      <aside className="bench-rail">
-        <div className="bench-rail-brand">
-          <div className="bench-brand-mark"><FlaskConical size={18} /></div>
-          <div><span className="bench-overline">RESEARCH LEDGER</span><strong>Strategy Bench</strong></div>
-        </div>
-        <div className="bench-rail-rule" />
-        <div className="bench-rail-spacer" />
-        <div className="bench-rail-note"><span className="bench-status-dot" /><div><strong>READ ONLY</strong><span>NO ORDER PATHS</span></div></div>
-        <div className="bench-rail-meta"><span>Record set</span><code>Version {MOCK_CATALOG.schema_version}</code><span>Execution</span><code>Separate system</code></div>
-      </aside>
-
       <section className="bench-content">
-        <header className="bench-topbar">
-          <div className="bench-title-group">
-            <div className="bench-breadcrumb"><BookOpen size={13} /> Research / Bench</div>
-            <h1>Strategy Bench</h1>
+        <header className="bench-topbar strategy-masthead">
+          <div className="strategy-masthead-brand">
+            <div className="bench-brand-mark"><FlaskConical size={18} /></div>
+            <div className="bench-title-group">
+              <div className="bench-breadcrumb"><BookOpen size={13} /> Research / Bench</div>
+              <h1>Strategy Bench</h1>
+            </div>
           </div>
-          <span className="bench-readonly"><Database size={13} /> Read-only catalog</span>
+          <div className="strategy-masthead-status">
+            <span className="bench-readonly"><Database size={13} /> Read-only catalog</span>
+            <div className="bench-rail-note"><span className="bench-status-dot" /><div><strong>READ ONLY</strong><span>NO ORDER PATHS</span></div></div>
+          </div>
         </header>
 
         <div className="bench-ledger-body bench-record-body strategy-catalog-body">
-          <section className="strategy-catalog-intro" aria-labelledby="catalog-title">
-            <div className="strategy-catalog-summary">
-              <span className="bench-record-eyebrow"><BookOpen size={14} /> Research record · Version {MOCK_CATALOG.schema_version}</span>
-              <h2 id="catalog-title">{experiments.length} research ideas recorded<span className="strategy-catalog-period">.</span></h2>
+          <section className="strategy-meta-strip" aria-label="Snapshot summary and provenance">
+            <div className="strategy-meta-overview">
+              <div className="strategy-meta-kicker"><BookOpen size={13} /><span>Research record · Version {MOCK_CATALOG.schema_version}</span></div>
               <p>Registered hypotheses and historical outcomes for inspection. This page cannot start research or route an order.</p>
-              <div className="bench-record-outcomes" aria-label="Experiment outcome counts">
+              <div className="strategy-meta-counts">
+                <div className="strategy-count-block"><strong>{experiments.length}</strong><span>Hypotheses</span></div>
                 {outcomeCounts.length ? outcomeCounts.map(([outcome, count]) => (
                   <span className={`bench-record-outcome ${outcomeTone(outcome)}`} key={outcome}><b>{count}</b> {outcomeLabel(outcome)}</span>
                 )) : <span className="bench-record-outcome is-neutral">No outcomes recorded</span>}
-                <span className="strategy-catalog-pass-count"><b>{passedCount}</b> passed</span>
+                <div className="strategy-count-block strategy-runs-count"><strong>{runs.length}</strong><span>Exploration runs</span></div>
               </div>
             </div>
-            <aside className="bench-record-provenance" aria-label="Catalog snapshot source">
+            <aside className="bench-record-provenance strategy-provenance-strip" aria-label="Catalog snapshot source">
               <div className="bench-record-provenance-title"><Database size={15} /> Snapshot provenance</div>
-              <dl>
+              <dl className="strategy-provenance-values">
                 <div><dt>Source</dt><dd>{MOCK_CATALOG.source_label || MOCK_CATALOG.source}</dd></div>
                 <div><dt>As of</dt><dd>{formatDate(MOCK_CATALOG.snapshot_as_of)}</dd></div>
                 <div><dt>Generated</dt><dd>{formatDate(MOCK_CATALOG.generated_at)}</dd></div>
@@ -305,6 +295,7 @@ export default function StrategyCatalog() {
               <div className="strategy-catalog-records">
                 {GROUPS.map((group, index) => {
                   const groupItems = experiments.filter((item) => researchGroup(item.family) === group);
+                  if (groupItems.length === 0) return null;
                   return (
                     <section className="strategy-catalog-group" key={group} aria-label={`${group} hypotheses`}>
                       <div className="strategy-catalog-group-heading">
@@ -312,7 +303,7 @@ export default function StrategyCatalog() {
                         <strong>{group}</strong>
                         <small>{groupItems.length} {groupItems.length === 1 ? "record" : "records"}</small>
                       </div>
-                      {groupItems.length ? groupItems.map((experiment) => (
+                      {groupItems.map((experiment) => (
                         <button
                           key={experiment.id}
                           type="button"
@@ -324,7 +315,7 @@ export default function StrategyCatalog() {
                           <strong>{familyLabel(experiment.family)}</strong>
                           <span className="strategy-item-hypothesis">{experiment.hypothesis || "No hypothesis was recorded."}</span>
                         </button>
-                      )) : <p className="strategy-no-records">No registered experiments in this family.</p>}
+                      ))}
                     </section>
                   );
                 })}

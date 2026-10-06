@@ -139,3 +139,250 @@
   .research-overview *::before,
   .research-overview *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
 }
+
+/* A's overview structure: ledger counts are a distinct scan row above the evidence plot. */
+.research-overview .ro-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  border-radius: 10px;
+}
+
+.research-overview .ro-overview-main {
+  padding: 13px 18px 12px;
+}
+
+.ro-overview-kicker {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ro-overview-kicker .ro-sample {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #6b7b72;
+  font: 8px "IBM Plex Mono", monospace;
+  white-space: nowrap;
+}
+
+.ro-overview-kicker .ro-sample i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #806c37;
+}
+
+.ro-intro-copy {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 18px;
+  margin-top: 7px;
+}
+
+.ro-intro-copy h2 {
+  margin: 0;
+  color: #20332f;
+  font: 600 clamp(20px, 2vw, 26px)/1.15 "Space Grotesk", sans-serif;
+  letter-spacing: -.045em;
+}
+
+.ro-intro-copy p {
+  max-width: 430px;
+  margin: 0;
+  color: #475c55;
+  font-size: 10px;
+  line-height: 1.45;
+  text-align: right;
+}
+
+.ro-metric-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-top: 1px solid rgba(55, 78, 69, .17);
+  border-bottom: 1px solid rgba(55, 78, 69, .16);
+  background: rgba(235, 240, 229, .42);
+}
+
+.ro-metric-cell {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  align-content: center;
+  align-items: baseline;
+  column-gap: 10px;
+  min-width: 0;
+  min-height: 70px;
+  padding: 9px 17px 8px;
+  border-left: 1px solid rgba(55, 78, 69, .15);
+}
+
+.ro-metric-cell:first-child { border-left: 0; }
+
+.ro-metric-cell > span {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  color: #61766b;
+  font: 8px "IBM Plex Mono", monospace;
+  letter-spacing: .07em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.ro-metric-cell > strong {
+  grid-row: 2;
+  color: #30483c;
+  font: 600 25px/.98 "Space Grotesk", sans-serif;
+  letter-spacing: -.045em;
+  font-variant-numeric: tabular-nums;
+}
+
+.ro-metric-cell > small {
+  grid-row: 2;
+  align-self: center;
+  min-width: 0;
+  color: #728078;
+  font: 8px "IBM Plex Mono", monospace;
+  line-height: 1.25;
+}
+
+.ro-metric-cell.is-pass > strong { color: #3e6549; }
+.ro-metric-cell.is-fail > strong { color: #8c5142; }
+.ro-metric-cell.is-neutral > strong { color: #74643b; }
+
+.research-overview .ro-provenance {
+  display: grid;
+  grid-template-columns: 156px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px 14px;
+  margin: 0;
+  padding: 9px 16px 10px;
+  border: 0;
+  border-radius: 0;
+  background: rgba(247, 249, 241, .45);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.ro-provenance-heading {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #395d4d;
+  font: 600 9px "IBM Plex Mono", monospace;
+}
+
+.ro-provenance > dl {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, .8fr) minmax(0, .9fr);
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+}
+
+.ro-provenance > dl > div {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ro-provenance dt {
+  color: #687871;
+  font-size: 8px;
+}
+
+.ro-provenance dd {
+  min-width: 0;
+  overflow: hidden;
+  color: #2c403b;
+  font: 500 8px/1.35 "IBM Plex Mono", monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ro-provenance > p {
+  grid-column: 2;
+  margin: 0;
+  color: #6b7b72;
+  font-size: 8px;
+  line-height: 1.35;
+}
+
+.research-overview .ro-chart-panel {
+  margin-top: 12px;
+}
+
+.research-overview .ro-chart-panel .bench-record-chart {
+  height: 330px;
+}
+
+@media (max-width: 900px) {
+  .ro-metric-cell { padding-right: 12px; padding-left: 12px; }
+  .research-overview .ro-provenance {
+    grid-template-columns: 135px minmax(0, 1fr);
+    gap: 7px 10px;
+  }
+  .ro-provenance > dl { gap: 7px; }
+}
+
+@media (max-width: 640px) {
+  .research-overview .ro-overview { border-radius: 7px; }
+  .research-overview .ro-overview-main { padding: 11px 12px 10px; }
+  .ro-overview-kicker .bench-record-eyebrow { font-size: 8px; }
+  .ro-overview-kicker .ro-sample { font-size: 7px; }
+  .ro-intro-copy {
+    display: block;
+    margin-top: 7px;
+  }
+  .ro-intro-copy h2 { font-size: 21px; }
+  .ro-intro-copy p {
+    max-width: none;
+    margin-top: 4px;
+    font-size: 9px;
+    text-align: left;
+  }
+  .ro-metric-cell {
+    grid-column: auto;
+    min-height: 55px;
+    padding: 6px 10px 5px;
+    column-gap: 7px;
+  }
+  .ro-metric-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ro-metric-cell:nth-child(odd) { border-left: 0; }
+  .ro-metric-cell:nth-child(n + 3) { border-top: 1px solid rgba(55, 78, 69, .14); }
+  .ro-metric-cell > span { font-size: 7px; }
+  .ro-metric-cell > strong { font-size: 21px; }
+  .ro-metric-cell > small { font-size: 7px; }
+  .research-overview .ro-provenance {
+    grid-template-columns: 1fr;
+    gap: 5px;
+    padding: 8px 10px;
+  }
+  .ro-provenance-heading { font-size: 8px; }
+  .ro-provenance > dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px 9px;
+  }
+  .ro-provenance > dl > div {
+    grid-template-columns: 42px minmax(0, 1fr);
+    gap: 4px;
+  }
+  .ro-provenance > dl > div:first-child dd {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .ro-provenance dt { font-size: 7px; }
+  .ro-provenance dd { font-size: 7px; }
+  .ro-provenance > p { grid-column: 1; font-size: 7px; }
+  .research-overview .ro-chart-panel { margin-top: 10px; }
+  .research-overview .ro-chart-panel .bench-record-chart { height: 226px; }
+}

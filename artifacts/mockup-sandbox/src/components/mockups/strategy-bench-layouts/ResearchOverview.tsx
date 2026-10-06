@@ -256,27 +256,34 @@ export default function ResearchOverview() {
         <div className="bench-ledger-body bench-record-body">
           <section className="ro-overview" aria-labelledby="ro-title">
             <div className="ro-overview-main">
-              <div className="bench-record-eyebrow"><BookOpen size={14} /> Research record · Version {catalog.schema_version}</div>
-              <div className="ro-overview-titleline">
-                <div>
-                  <h2 id="ro-title">{experiments.length} research ideas recorded.</h2>
-                  <p>Historical hypotheses and outcomes for inspection. This page cannot start research or route an order.</p>
-                </div>
-                <div className="ro-pass-tally" aria-label={`${passedCount} hypotheses passed`}>
-                  <strong>{passedCount}</strong><span>passed</span>
-                </div>
+              <div className="ro-overview-kicker">
+                <div className="bench-record-eyebrow"><BookOpen size={14} /> Research record · Version {catalog.schema_version}</div>
+                <span className="ro-sample"><i /> Static sample records</span>
               </div>
-              <div className="bench-record-outcomes" aria-label="Experiment outcome counts">
-                {outcomeCounts.map(([outcome, count]) => (
-                  <span className={`bench-record-outcome ${outcomeTone(outcome)}`} key={outcome}>
-                    <b>{count}</b> {outcomeLabel(outcome)}
-                  </span>
-                ))}
-                {!outcomeCounts.length && <span className="bench-record-outcome is-neutral">No outcomes recorded</span>}
+              <div className="ro-intro-copy">
+                <h2 id="ro-title">{experiments.length} research ideas recorded. {passedCount} passed.</h2>
+                <p>Historical hypotheses and outcomes for inspection. This page cannot start research or route an order.</p>
               </div>
             </div>
-            <aside className="bench-record-provenance ro-provenance" aria-label="Catalog snapshot source">
-              <div className="bench-record-provenance-title"><Database size={15} /> Snapshot provenance</div>
+            <div className="ro-metric-strip" role="group" aria-label="Snapshot hypothesis and run counts">
+              <div className="ro-metric-cell">
+                <span>Hypotheses</span><strong>{experiments.length}</strong><small>Registered</small>
+              </div>
+              {outcomeCounts.length > 0 ? outcomeCounts.map(([outcome, count]) => (
+                <div className={`ro-metric-cell ${outcomeTone(outcome)}`} key={outcome}>
+                  <span>{outcomeLabel(outcome)}</span><strong>{count}</strong><small>Of {experiments.length} hypotheses</small>
+                </div>
+              )) : (
+                <div className="ro-metric-cell is-neutral">
+                  <span>Outcomes</span><strong>0</strong><small>No outcomes recorded</small>
+                </div>
+              )}
+              <div className="ro-metric-cell">
+                <span>Exploration runs</span><strong>{runs.length}</strong><small>Historical records</small>
+              </div>
+            </div>
+            <aside className="ro-provenance" aria-label="Catalog snapshot source">
+              <div className="ro-provenance-heading"><Database size={14} /> Snapshot provenance</div>
               <dl>
                 <div><dt>Source</dt><dd>{catalog.source_label || catalog.source}</dd></div>
                 <div><dt>As of</dt><dd>{formatDate(catalog.snapshot_as_of)}</dd></div>
@@ -284,11 +291,6 @@ export default function ResearchOverview() {
               </dl>
               {catalog.source_detail && <p>{catalog.source_detail}</p>}
             </aside>
-            <div className="ro-overview-footer">
-              <span><b>{experiments.length}</b> registered hypotheses</span>
-              <span><b>{runs.length}</b> historical exploration runs</span>
-              <span className="ro-sample"><i /> Static sample records</span>
-            </div>
           </section>
 
           <section className="bench-record-panel bench-record-chart-panel ro-chart-panel" aria-labelledby="bench-chart-title">

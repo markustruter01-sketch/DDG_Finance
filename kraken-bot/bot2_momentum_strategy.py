@@ -76,7 +76,7 @@ def _load_bot2_profile() -> dict[str, Any]:
 
 BOT2_PROFILE = _load_bot2_profile()
 BOT_ID = "spy_qqq_trend"
-BOT_PAUSED = True
+BOT_PAUSED = False
 ALPACA_BASE_URL = "https://paper-api.alpaca.markets"
 ALPACA_DATA_BASE_URL = "https://data.alpaca.markets"
 MAX_POSITIONS = int(BOT2_PROFILE["MAX_POSITIONS"])
@@ -2013,7 +2013,7 @@ def run_bot2_cycle(
         _park_idle_cash(client, vault_symbols)
         return {"status": "complete", "orders": 0, "reason": "not_first_trading_day"}
     as_of = now.astimezone(_eastern()).date()
-    ranked, screened, bars = _build_book(client, as_of)
+    ranked, screened, summaries = _build_book_batched(client, as_of)
     closed_rows, history_available = load_closed_position_history()
     cooldowns = build_stop_cooldowns(closed_rows, as_of)
     eligible_ranked = [
@@ -2097,7 +2097,7 @@ def run_bot2_cycle(
         symbol = str(item["symbol"])
         if symbol in held:
             continue
-        close = float(_prior_bars(bars[symbol], now.astimezone(_eastern()).date())[-1]["c"])
+        close = float(summaries[symbol].prior_close)
         target_notional = plan["target_allocations"][symbol]
         qty = math.floor(target_notional / close)
         if qty < 1:
@@ -2154,7 +2154,7 @@ def dry_run_cycle() -> dict[str, Any]:
         float(p["market_value"]) for p in positions
         if canonical_symbol(p["symbol"]) in vault_symbols
     )
-    ranked, screened, bars = _build_book(client, as_of)
+    ranked, screened, _summaries = _build_book_batched(client, as_of)
     closed_rows, history_available = load_closed_position_history()
     cooldowns = build_stop_cooldowns(closed_rows, as_of)
     eligible_ranked = [

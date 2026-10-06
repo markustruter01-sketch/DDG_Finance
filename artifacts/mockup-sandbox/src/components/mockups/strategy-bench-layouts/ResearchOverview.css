@@ -386,3 +386,301 @@
   .research-overview .ro-chart-panel { margin-top: 10px; }
   .research-overview .ro-chart-panel .bench-record-chart { height: 226px; }
 }
+
+/* Risk atlas hierarchy: a narrow snapshot bar feeds one dominant evidence plot. */
+.research-overview .ro-overview {
+  border-radius: 7px;
+  background: rgba(247, 249, 241, .78);
+  box-shadow: 0 6px 16px rgba(37, 52, 41, .055);
+}
+
+.research-overview .ro-overview-main {
+  padding: 10px 15px 9px;
+}
+
+.ro-overview-kicker .bench-record-eyebrow { font-size: 8px; }
+.ro-overview-kicker .ro-sample { font-size: 7px; }
+
+.ro-intro-copy {
+  align-items: center;
+  gap: 14px;
+  margin-top: 4px;
+}
+
+.ro-intro-copy h2 {
+  font-size: clamp(18px, 1.7vw, 22px);
+}
+
+.ro-intro-copy p {
+  max-width: 390px;
+  font-size: 9px;
+}
+
+.ro-metric-cell {
+  min-height: 55px;
+  padding: 6px 13px;
+}
+
+.ro-metric-cell > span { font-size: 7px; }
+.ro-metric-cell > strong { font-size: 21px; }
+.ro-metric-cell > small { font-size: 7px; }
+
+.research-overview .ro-provenance {
+  padding: 7px 14px 8px;
+  gap: 5px 12px;
+}
+
+.ro-provenance-heading { font-size: 8px; }
+.ro-provenance dt { font-size: 7px; }
+.ro-provenance dd { font-size: 7px; }
+.ro-provenance > p { font-size: 7px; }
+
+.research-overview .ro-chart-panel {
+  margin-top: 10px;
+  border-radius: 9px;
+}
+
+.research-overview .ro-chart-panel .bench-record-panel-heading {
+  padding: 13px 17px 8px;
+}
+
+.research-overview .ro-chart-panel .bench-record-panel-heading h2 {
+  font-size: 20px;
+}
+
+.research-overview .ro-chart-panel .bench-record-chart-layout {
+  grid-template-columns: minmax(0, 1fr) 190px;
+  gap: 8px;
+  padding: 0 14px 0 8px;
+}
+
+.research-overview .ro-chart-panel .bench-record-chart {
+  height: auto;
+  aspect-ratio: 2.45 / 1;
+}
+
+.research-overview .ro-chart-panel .bench-record-legend {
+  padding-bottom: 7px;
+}
+
+.research-overview .ro-chart-panel .bench-record-selection {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.research-overview .ro-chart-panel .bench-record-chart-notes {
+  margin-top: 0;
+  padding-top: 8px;
+  padding-bottom: 9px;
+}
+
+.research-overview .bench-record-experiments {
+  margin-top: 18px;
+}
+
+.research-overview .bench-record-section-heading {
+  margin-bottom: 8px;
+}
+
+.research-overview .bench-record-section-heading h2 { font-size: 20px; }
+.research-overview .bench-record-section-heading p { margin-top: 4px; }
+
+.research-overview .bench-record-groups {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+
+.research-overview .bench-record-group {
+  border-radius: 7px;
+  background: rgba(247, 249, 241, .82);
+}
+
+.research-overview .bench-record-group-items {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+}
+
+.research-overview .ro-family-records-2 .bench-record-group-items {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.research-overview .bench-record-experiment {
+  padding: 11px 13px 10px;
+}
+
+.research-overview .ro-family-records-2 .bench-record-experiment + .bench-record-experiment {
+  border-top: 0;
+  border-left: 1px solid rgba(55, 78, 69, .19);
+}
+
+.research-overview .bench-record-hypothesis {
+  margin-top: 7px;
+  margin-bottom: 9px;
+  -webkit-line-clamp: 2;
+}
+
+.research-overview .bench-record-disclosure {
+  margin-top: 8px;
+}
+
+.research-overview .bench-record-runs {
+  margin-top: 18px;
+}
+
+.research-overview .bench-record-table-scroll {
+  max-height: none;
+  overflow-x: auto;
+  overflow-y: visible;
+}
+
+.research-overview .bench-record-table-meta,
+.research-overview .bench-record-table-foot {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+@media (max-width: 900px) {
+  .research-overview .ro-chart-panel .bench-record-chart-layout {
+    grid-template-columns: minmax(0, 1fr) 175px;
+    padding-right: 9px;
+  }
+
+  .research-overview .ro-chart-panel .bench-record-chart {
+    aspect-ratio: 2.1 / 1;
+  }
+}
+
+@media (max-width: 640px) {
+  .research-overview .bench-record-body { padding: 10px 10px 0; }
+
+  .research-overview .ro-overview-main { padding: 8px 10px 7px; }
+  .ro-overview-kicker { gap: 7px; }
+  .ro-overview-kicker .bench-record-eyebrow {
+    gap: 5px;
+    font-size: 7px;
+  }
+
+  .ro-intro-copy {
+    display: block;
+    margin-top: 4px;
+  }
+
+  .ro-intro-copy h2 { font-size: 17px; }
+  .ro-intro-copy p {
+    margin-top: 3px;
+    font-size: 8px;
+    line-height: 1.35;
+  }
+
+  .ro-metric-cell {
+    min-height: 47px;
+    padding: 5px 8px;
+    column-gap: 6px;
+  }
+
+  .ro-metric-cell > span { font-size: 6px; }
+  .ro-metric-cell > strong { font-size: 19px; }
+  .ro-metric-cell > small { font-size: 6px; }
+
+  .research-overview .ro-provenance {
+    grid-template-columns: 1fr;
+    gap: 4px;
+    padding: 6px 9px;
+  }
+
+  .ro-provenance-heading { font-size: 7px; }
+  .ro-provenance > dl {
+    grid-template-columns: minmax(0, 1.45fr) minmax(0, .8fr) minmax(0, .9fr);
+    gap: 4px 6px;
+  }
+
+  .ro-provenance > dl > div {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 2px;
+    align-content: start;
+  }
+
+  .ro-provenance dt,
+  .ro-provenance dd { font-size: 6px; }
+  .ro-provenance > dl > div:first-child dd { overflow-wrap: anywhere; }
+  .ro-provenance > p { font-size: 6px; }
+
+  .research-overview .ro-chart-panel .bench-record-panel-heading {
+    align-items: flex-start;
+    flex-direction: row;
+    gap: 8px;
+    padding: 11px 11px 7px;
+  }
+
+  .research-overview .ro-chart-panel .bench-record-panel-heading h2 {
+    font-size: 16px;
+  }
+
+  .research-overview .ro-chart-panel .bench-record-panel-heading p {
+    margin-top: 3px;
+    font-size: 8px;
+  }
+
+  .research-overview .ro-chart-panel .bench-record-chart-count {
+    padding-top: 2px;
+    font-size: 7px;
+  }
+
+  .research-overview .ro-chart-panel .bench-record-chart-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    padding: 0 5px;
+  }
+
+  .research-overview .ro-chart-panel .bench-record-chart {
+    aspect-ratio: 1.42 / 1;
+  }
+
+  .research-overview .ro-chart-panel .bench-record-legend {
+    gap: 6px 10px;
+    padding: 0 6px 7px 26px;
+  }
+
+  .research-overview .ro-chart-panel .bench-record-selection {
+    padding: 8px 7px 7px;
+  }
+
+  .research-overview .ro-chart-panel .bench-record-selection dl {
+    margin: 7px 0 6px;
+  }
+
+  .research-overview .ro-chart-panel .bench-record-chart-notes {
+    gap: 4px;
+    margin: 0 11px;
+    padding: 7px 0 8px;
+    font-size: 7px;
+  }
+
+  .research-overview .bench-record-experiments,
+  .research-overview .bench-record-runs { margin-top: 16px; }
+
+  .research-overview .bench-record-section-heading h2 { font-size: 17px; }
+
+  .research-overview .ro-family-records-2 .bench-record-group-items {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .research-overview .ro-family-records-2 .bench-record-experiment + .bench-record-experiment {
+    border-top: 1px solid rgba(55, 78, 69, .19);
+    border-left: 0;
+  }
+
+  .research-overview .bench-record-runs-heading {
+    align-items: stretch;
+  }
+
+  .research-overview .bench-record-filter { min-width: 0; }
+  .research-overview .bench-record-table-meta { gap: 8px; }
+  .research-overview .bench-record-page-foot { padding-top: 11px; }
+}
+
+@media (min-width: 641px) {
+  .research-overview .bench-rail { position: fixed; }
+}

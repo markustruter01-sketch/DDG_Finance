@@ -149,13 +149,13 @@ function RunTooltip({ active, payload }: TooltipProps) {
 export default function StrategyCatalog() {
   const experiments = MOCK_CATALOG.experiments as Experiment[];
   const runs = MOCK_CATALOG.exploration_runs as ExplorationRun[];
-  const [selectedExperimentId, setSelectedExperimentId] = useState<string | null>(
-    experiments[0] ? String(experiments[0].id) : null,
-  );
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [familyFilter, setFamilyFilter] = useState("all");
   const [sortKey, setSortKey] = useState<SortKey>("created_at");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const experimentGroups = GROUPS
+    .map((group) => ({ group, items: experiments.filter((item) => researchGroup(item.family) === group) }))
+    .filter(({ items }) => items.length > 0);
 
   const outcomeCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -166,9 +166,6 @@ export default function StrategyCatalog() {
     return [...counts.entries()];
   }, [experiments]);
   const families = useMemo(() => [...new Set(runs.map((run) => run.family))].sort((a, b) => a.localeCompare(b)), [runs]);
-  const selectedExperiment = experiments.find((item) => String(item.id) === selectedExperimentId)
-    ?? experiments[0]
-    ?? null;
   const chartPoints = useMemo<ChartPoint[]>(() => runs.flatMap((run) => {
     if (
       typeof run.sharpe !== "number" || !Number.isFinite(run.sharpe)
@@ -282,87 +279,72 @@ export default function StrategyCatalog() {
             </aside>
           </section>
 
-          <section className="strategy-workspace" aria-label="Registered hypothesis catalog and selected record">
-            <section className="strategy-catalog-list bench-record-panel" aria-labelledby="hypothesis-list-title">
-              <header className="strategy-panel-head">
-                <div>
-                  <span className="bench-record-section-label">01 · Registered hypotheses</span>
-                  <h2 id="hypothesis-list-title">Research catalog</h2>
-                  <p>{experiments.length} records, grouped by research family</p>
-                </div>
-                <span className="bench-record-section-count">{experiments.length} total</span>
-              </header>
-              <div className="strategy-catalog-records">
-                {GROUPS.map((group, index) => {
-                  const groupItems = experiments.filter((item) => researchGroup(item.family) === group);
-                  if (groupItems.length === 0) return null;
-                  return (
-                    <section className="strategy-catalog-group" key={group} aria-label={`${group} hypotheses`}>
-                      <div className="strategy-catalog-group-heading">
-                        <span>{String(index + 1).padStart(2, "0")}</span>
-                        <strong>{group}</strong>
-                        <small>{groupItems.length} {groupItems.length === 1 ? "record" : "records"}</small>
-                      </div>
-                      {groupItems.map((experiment) => (
-                        <button
-                          key={experiment.id}
-                          type="button"
-                          className={`strategy-catalog-item ${String(selectedExperiment?.id) === String(experiment.id) ? "is-selected" : ""}`}
-                          aria-current={String(selectedExperiment?.id) === String(experiment.id) ? "true" : undefined}
-                          onClick={() => setSelectedExperimentId(String(experiment.id))}
-                        >
-                          <span className="strategy-item-topline"><span>Record {experiment.id}</span><span className={`bench-record-verdict ${outcomeTone(experiment.outcome)}`}>{outcomeLabel(experiment.outcome)}</span></span>
-                          <strong>{familyLabel(experiment.family)}</strong>
-                          <span className="strategy-item-hypothesis">{experiment.hypothesis || "No hypothesis was recorded."}</span>
-                        </button>
-                      ))}
-                    </section>
-                  );
-                })}
-                {experiments.length === 0 && <div className="strategy-empty"><strong>No hypotheses in this snapshot</strong><span>The current catalog contains no registered experiment records.</span></div>}
+          <section className="strategy-hypothesis-board" aria-labelledby="hypothesis-board-title">
+            <header className="strategy-board-heading">
+              <div>
+                <span className="bench-record-section-label">01 · Registered hypotheses</span>
+                <h2 id="hypothesis-board-title">Research evidence board</h2>
+                <p>Compare declared pass bars with recorded outcomes across each research family.</p>
               </div>
-            </section>
-
-            <section className="strategy-record-detail bench-record-panel" aria-labelledby="selected-hypothesis-title" aria-live="polite">
-              {selectedExperiment ? (
-                <>
-                  <div className="strategy-detail-kicker">
-                    <span className="bench-record-section-label">Selected hypothesis · Record {selectedExperiment.id}</span>
-                    <span className={`bench-record-verdict ${outcomeTone(selectedExperiment.outcome)}`}>{outcomeLabel(selectedExperiment.outcome)}</span>
-                  </div>
-                  <h2 id="selected-hypothesis-title">{familyLabel(selectedExperiment.family)}</h2>
-                  <p className="strategy-detail-hypothesis">{selectedExperiment.hypothesis || "No hypothesis was recorded."}</p>
-                  <div className="strategy-detail-evidence">
-                    <section className="strategy-passbar">
-                      <span className="bench-record-field-label">Declared pass bar</span>
-                      <strong>{formatPassBar(selectedExperiment.pass_bar)}</strong>
-                    </section>
-                    <section className="strategy-results" aria-label="Recorded outcome metrics">
-                      <span className="bench-record-field-label">Recorded result</span>
-                      <div className="strategy-result-metrics">
-                        <span><b>{formatMetric(selectedExperiment.metrics?.sharpe, 3)}</b><small>Sharpe</small></span>
-                        <span><b>{formatPercent(selectedExperiment.metrics?.return_pct, 2)}</b><small>Return</small></span>
-                        <span><b>{formatDrawdown(selectedExperiment.metrics?.max_drawdown_pct)}</b><small>Max drawdown</small></span>
-                      </div>
-                    </section>
-                  </div>
-                  <div className="strategy-detail-foot">Recorded {formatDate(selectedExperiment.created_at)} <span>Outcome is historical, not actionable.</span></div>
-                  <details className="bench-record-disclosure strategy-detail-disclosure" open>
-                    <summary><span>Parameters and data window</span><ChevronDown size={15} /></summary>
-                    <div>
-                      <section><span>Parameters</span><pre>{formatSummary(selectedExperiment.parameters_summary)}</pre></section>
-                      <section><span>Data window</span><pre>{formatSummary(selectedExperiment.data_window)}</pre></section>
+              <span className="bench-record-section-count">{experiments.length} {experiments.length === 1 ? "record" : "records"}</span>
+            </header>
+            {experimentGroups.length ? (
+              <div className="strategy-family-board">
+                {experimentGroups.map(({ group, items }, index) => (
+                  <section className="strategy-family-section" key={group} aria-labelledby={`strategy-family-${group.toLowerCase()}`}>
+                    <header className="strategy-family-heading">
+                      <span>{String(index + 1).padStart(2, "0")}</span>
+                      <h3 id={`strategy-family-${group.toLowerCase()}`}>{group}</h3>
+                      <small>{items.length} {items.length === 1 ? "record" : "records"}</small>
+                    </header>
+                    <div className="strategy-comparison-grid">
+                      {items.map((experiment) => (
+                        <article className="strategy-compare-card" key={experiment.id} aria-labelledby={`strategy-hypothesis-${experiment.id}`}>
+                          <div className="strategy-card-topline">
+                            <span>Record {experiment.id}</span>
+                            <span className={`bench-record-verdict ${outcomeTone(experiment.outcome)}`} data-testid={`status-outcome-${experiment.id}`}>
+                              {outcomeLabel(experiment.outcome)}
+                            </span>
+                          </div>
+                          <h4 id={`strategy-hypothesis-${experiment.id}`}>{familyLabel(experiment.family)}</h4>
+                          <p className="strategy-hypothesis-copy">{experiment.hypothesis || "No hypothesis was recorded."}</p>
+                          <div className="strategy-compare-evidence">
+                            <section className="strategy-compare-passbar">
+                              <span className="bench-record-field-label">Declared pass bar</span>
+                              <strong>{formatPassBar(experiment.pass_bar)}</strong>
+                            </section>
+                            <section className="strategy-compare-result" aria-label="Recorded outcome metrics">
+                              <span className="bench-record-field-label">Recorded result</span>
+                              <div className="strategy-result-metrics">
+                                <span><b>{formatMetric(experiment.metrics?.sharpe, 3)}</b><small>Sharpe</small></span>
+                                <span><b>{formatPercent(experiment.metrics?.return_pct, 2)}</b><small>Return</small></span>
+                                <span><b>{formatDrawdown(experiment.metrics?.max_drawdown_pct)}</b><small>Max drawdown</small></span>
+                              </div>
+                            </section>
+                          </div>
+                          <div className="strategy-card-foot">
+                            <span>Recorded {formatDate(experiment.created_at)}</span>
+                            <span>Outcome is historical, not actionable.</span>
+                          </div>
+                          <details className="bench-record-disclosure strategy-card-disclosure">
+                            <summary><span>Parameters and data window</span><ChevronDown size={15} /></summary>
+                            <div>
+                              <section><span>Parameters</span><pre>{formatSummary(experiment.parameters_summary)}</pre></section>
+                              <section><span>Data window</span><pre>{formatSummary(experiment.data_window)}</pre></section>
+                            </div>
+                          </details>
+                        </article>
+                      ))}
                     </div>
-                  </details>
-                </>
-              ) : (
-                <div className="strategy-empty-detail">
-                  <BookOpen size={20} />
-                  <strong>No hypothesis selected</strong>
-                  <span>Choose a registered record to inspect its declared criteria and results.</span>
-                </div>
-              )}
-            </section>
+                  </section>
+                ))}
+              </div>
+            ) : (
+              <div className="strategy-board-empty" role="status">
+                <strong>No hypotheses in this snapshot</strong>
+                <span>The current catalog contains no registered experiment records.</span>
+              </div>
+            )}
           </section>
 
           <section className="bench-record-panel bench-record-chart-panel strategy-chart-panel" aria-labelledby="bench-chart-title">

@@ -183,6 +183,10 @@ export default function ResearchOverview() {
     group,
     points: chartPoints.filter((point) => point.group === group && String(point.id) !== String(referencePoint?.id)),
   })).filter(({ points }) => points.length);
+  const experimentGroups = useMemo(() => GROUPS.map((group) => ({
+    group,
+    records: experiments.filter((experiment) => researchGroup(experiment.family) === group),
+  })).filter(({ records }) => records.length > 0), [experiments]);
   const visibleRuns = useMemo(() => {
     const filtered = familyFilter === "all" ? runs : runs.filter((run) => run.family === familyFilter);
     return [...filtered].sort((a, b) => {
@@ -357,19 +361,14 @@ export default function ResearchOverview() {
               <span className="bench-record-section-count">{experiments.length} total records</span>
             </div>
             <div className="bench-record-groups">
-              {GROUPS.map((group, index) => {
-                const grouped = experiments.filter((experiment) => researchGroup(experiment.family) === group);
-                return (
-                  <section className={`bench-record-group bench-record-group-${group.toLowerCase()}`} key={group} aria-labelledby={`ro-group-${group.toLowerCase()}`}>
-                    <header><span>{String(index + 1).padStart(2, "0")}</span><h3 id={`ro-group-${group.toLowerCase()}`}>{group}</h3><small>{grouped.length} {grouped.length === 1 ? "record" : "records"}</small></header>
-                    {grouped.length ? (
-                      <div className="bench-record-group-items">
-                        {grouped.map((experiment) => <HypothesisRecord key={experiment.id} experiment={experiment} />)}
-                      </div>
-                    ) : <p className="bench-record-group-empty">No registered experiments in this snapshot.</p>}
-                  </section>
-                );
-              })}
+              {experimentGroups.map(({ group, records }, index) => (
+                <section className={`bench-record-group bench-record-group-${group.toLowerCase()} ro-family-records-${records.length}`} key={group} aria-labelledby={`ro-group-${group.toLowerCase()}`}>
+                  <header><span>{String(index + 1).padStart(2, "0")}</span><h3 id={`ro-group-${group.toLowerCase()}`}>{group}</h3><small>{records.length} {records.length === 1 ? "record" : "records"}</small></header>
+                  <div className="bench-record-group-items">
+                    {records.map((experiment) => <HypothesisRecord key={experiment.id} experiment={experiment} />)}
+                  </div>
+                </section>
+              ))}
             </div>
           </section>
 

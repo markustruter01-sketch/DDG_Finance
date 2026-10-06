@@ -310,6 +310,9 @@ export default function ComparisonLab() {
   const headline = experiments.length === 0
     ? "No research ideas recorded yet."
     : `${experiments.length} research idea${experiments.length === 1 ? "" : "s"} recorded. ${passedCount} passed.`;
+  const activeHypothesisGroups = RESEARCH_GROUPS.filter((group) =>
+    experiments.some((experiment) => researchGroup(experiment.family) === group),
+  );
 
   return (
     <main className="bench-shell bench-catalog bench-record-page bench-comparison-lab" data-testid="page-bench">
@@ -344,97 +347,14 @@ export default function ComparisonLab() {
                   </span>
                 )) : <span className="bench-record-outcome is-neutral">No outcomes recorded</span>}
               </div>
-              <div className="cl-total-count cl-run-count"><strong>{runs.length}</strong><span>exploration<br />runs</span></div>
-            </div>
-            <aside className="cl-provenance" aria-label="Catalog snapshot source">
-              <div className="bench-record-provenance-title"><Database size={15} /> Snapshot provenance</div>
-              <div className="cl-prov-values">
-                <span><b>Source</b>{catalog.source_label || catalog.source}</span>
-                <span><b>As of</b>{formatDate(catalog.snapshot_as_of)}</span>
-                <span><b>Generated</b>{formatDate(catalog.generated_at)}</span>
-              </div>
-              {catalog.source_detail && <p>{catalog.source_detail}</p>}
-            </aside>
-          </section>
-
-          <div className="cl-analysis-grid">
-          <section className="bench-record-panel bench-record-chart-panel cl-chart-panel" aria-labelledby="bench-chart-title">
-            <div className="bench-record-panel-heading">
-              <div>
-                <span className="bench-record-section-label">01 · Risk and return</span>
-                <h2 id="bench-chart-title">Sharpe vs maximum drawdown</h2>
-                <p>Each point is an exploration run with both chart metrics recorded.</p>
-              </div>
-              <span className="bench-record-chart-count">{chartPoints.length} of {runs.length} runs plotted</span>
-            </div>
-            <div className="bench-record-chart-layout">
-              <div className="bench-record-chart-column">
-                {chartPoints.length > 0 ? (
-                  <div className="bench-record-chart" role="group" aria-label="Sharpe ratio against maximum drawdown. Select a point for run details.">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <ScatterChart margin={{ top: 14, right: 24, bottom: 26, left: 8 }}>
-                        <CartesianGrid stroke="rgba(55, 78, 69, .18)" vertical strokeDasharray="3 5" />
-                        <XAxis
-                          type="number" dataKey="sharpe" name="Sharpe"
-                          tick={{ fill: "#5d7067", fontSize: 11 }} tickLine={false}
-                          axisLine={{ stroke: "rgba(53, 75, 66, .45)" }}
-                          tickFormatter={(value: number) => Number(value).toFixed(1)}
-                          label={{ value: "Sharpe ratio", position: "insideBottom", offset: -13, fill: "#4f665c", fontSize: 11 }}
-                        />
-                        <YAxis
-                          type="number" dataKey="drawdown" name="Maximum drawdown" reversed domain={[0, "auto"]} width={54}
-                          tick={{ fill: "#5d7067", fontSize: 10 }} tickLine={false} axisLine={false}
-                          tickFormatter={(value: number) => `−${Math.abs(value).toFixed(0)}%`}
-                        />
-                        <Tooltip content={<RunTooltip />} cursor={{ stroke: "rgba(50, 83, 66, .42)", strokeDasharray: "3 4" }} />
-                        {chartGroups.map(({ group, points }) => (
-                          <Scatter key={group} name={group} data={points} fill={GROUP_COLORS[group]} shape={renderPoint} isAnimationActive={false} />
-                        ))}
-                        {spyBenchmark && <Scatter name="SPY buy-and-hold" data={[spyBenchmark]} fill="#20332f" shape="diamond" isAnimationActive={false} />}
-                      </ScatterChart>
-                    </ResponsiveContainer>
-                  </div>
-                ) : (
-                  <div className="bench-record-empty-chart" data-testid="status-no-plottable-runs">
-                    <BarChart3 size={20} /><strong>No runs can be plotted</strong>
-                    <span>The catalog has no exploration runs with both Sharpe and maximum drawdown values.</span>
-                  </div>
-                )}
-                {chartGroups.length > 0 && (
-                  <div className="bench-record-legend" aria-label="Chart groups">
-                    {chartGroups.map(({ group }) => <span key={group}><i style={{ backgroundColor: GROUP_COLORS[group] }} />{group}</span>)}
-                    {spyBenchmark && <span><i className="is-benchmark" />SPY buy-and-hold</span>}
-                  </div>
-                )}
-              </div>
-              <aside className="bench-record-selection" aria-live="polite" aria-label="Selected exploration run">
-                {selectedRun ? (
-                  <>
-                    <span className="bench-record-selection-label">{plottedRunIds.has(String(selectedRun.id)) ? "Selected run" : "Selected run · chart metrics incomplete"}</span>
-                    <strong>{familyLabel(selectedRun.family)}</strong>
-                    <span className="bench-record-selection-id">Record {selectedRun.id} · {selectedRun.source}</span>
-                    <dl>
-                      <div><dt>Sharpe</dt><dd>{formatMetric(selectedRun.sharpe, 3)}</dd></div>
-                      <div><dt>Maximum drawdown</dt><dd>{formatDrawdown(selectedRun.max_drawdown)}</dd></div>
-                      <div><dt>Return</dt><dd>{formatPercent(selectedRun.return_pct, 2)}</dd></div>
-                    </dl>
-                    <time>{formatDate(selectedRun.created_at)}</time>
-                  </>
-                ) : <p>Select any plotted point—or a record below—to inspect its metrics.</p>}
-              </aside>
-            </div>
-            <div className="bench-record-chart-notes">
-              <span>{runs.length - chartPoints.length} {runs.length - chartPoints.length === 1 ? "run is" : "runs are"} missing one or both chart metrics; all remain in the table below.</span>
-              <span>{spyReference
-                ? spyBenchmark ? "SPY buy-and-hold is marked as a reference point." : "A SPY buy-and-hold record exists but lacks the metrics needed for a reference point."
-                : "No SPY buy-and-hold reference is recorded in this catalog."}</span>
+              <div className="cl-total-count cl-run-count"><strong>{runs.length}</strong><span>exploration runs</span></div>
             </div>
           </section>
 
-          <section className="bench-record-panel bench-record-runs cl-runs" aria-labelledby="bench-runs-title">
+          <section className="bench-record-panel bench-record-runs cl-runs cl-archive-ledger" aria-labelledby="bench-runs-title">
             <div className="bench-record-panel-heading bench-record-runs-heading">
               <div>
-                <span className="bench-record-section-label">02 · Historical search space</span>
+                <span className="bench-record-section-label">01 · Historical search space</span>
                 <h2 id="bench-runs-title">Exploration runs</h2>
                 <p>Recorded parameter trials and metrics. Filter by family or sort a column.</p>
               </div>
@@ -477,35 +397,54 @@ export default function ComparisonLab() {
             <div className="cl-run-list" role="region" aria-label="Exploration run records" tabIndex={0}>
               {visibleRuns.length > 0 ? (
                 <div className="cl-run-items">
-                  {visibleRuns.map((run) => (
-                    <article className={`cl-run-record${selectedRunId === String(run.id) ? " is-selected" : ""}`} key={run.id}>
-                      <div className="cl-run-record-heading">
-                        <div className="cl-run-identity">
-                          <button type="button" className="bench-record-run-link" onClick={() => setSelectedRunId(String(run.id))} aria-label={`Inspect exploration run ${run.id}`}>#{run.id}</button>
-                          <span className="bench-record-family"><i style={{ backgroundColor: GROUP_COLORS[researchGroup(run.family)] }} />{familyLabel(run.family)}</span>
-                        </div>
-                        <span className="cl-run-date"><CalendarClock size={11} />{formatDate(run.created_at)}</span>
-                      </div>
-                      <dl className="cl-run-metrics" aria-label={`Run ${run.id} recorded metrics`}>
-                        <div><dt>Sharpe</dt><dd>{formatMetric(run.sharpe, 3)}</dd></div>
-                        <div><dt>Return</dt><dd>{formatPercent(run.return_pct, 2)}</dd></div>
-                        <div><dt>Max drawdown</dt><dd>{formatDrawdown(run.max_drawdown)}</dd></div>
-                      </dl>
-                      <div className="cl-run-record-foot">
-                        <span><b>Source</b>{run.source || "Not recorded"}</span>
-                        <details className="bench-record-run-details">
-                          <summary>Parameters &amp; window <ChevronDown size={12} /></summary>
-                          <div>
-                            <section><span>Parameters</span><pre>{formatSummary(run.parameters_summary)}</pre></section>
-                            <section><span>Data window</span><pre>{formatSummary(run.data_window)}</pre></section>
+                  {visibleRuns.map((run) => {
+                    const selected = selectedRunId === String(run.id);
+                    return (
+                      <article className={`cl-run-record${selected ? " is-selected" : ""}`} key={run.id}>
+                        <div className="cl-run-record-heading">
+                          <div className="cl-run-identity">
+                            <button
+                              type="button"
+                              className="bench-record-run-link"
+                              onClick={() => setSelectedRunId(String(run.id))}
+                              aria-label={`Inspect exploration run ${run.id}`}
+                              aria-expanded={selected}
+                              aria-controls={`cl-run-context-${run.id}`}
+                            >#{run.id}</button>
+                            <span className="bench-record-family"><i style={{ backgroundColor: GROUP_COLORS[researchGroup(run.family)] }} />{familyLabel(run.family)}</span>
                           </div>
-                        </details>
-                      </div>
-                    </article>
-                  ))}
+                          <time className="cl-run-date" dateTime={run.created_at}><CalendarClock size={11} />{formatDate(run.created_at)}</time>
+                        </div>
+                        <dl className="cl-run-metrics" aria-label={`Run ${run.id} recorded metrics`}>
+                          <div><dt>Sharpe</dt><dd>{formatMetric(run.sharpe, 3)}</dd></div>
+                          <div><dt>Return</dt><dd>{formatPercent(run.return_pct, 2)}</dd></div>
+                          <div><dt>Max drawdown</dt><dd>{formatDrawdown(run.max_drawdown)}</dd></div>
+                        </dl>
+                        <div className="cl-run-record-foot">
+                          <span><b>Source</b>{run.source || "Not recorded"}</span>
+                          <details className="bench-record-run-details">
+                            <summary>Parameters &amp; window <ChevronDown size={12} /></summary>
+                            <div>
+                              <section><span>Parameters</span><pre>{formatSummary(run.parameters_summary)}</pre></section>
+                              <section><span>Data window</span><pre>{formatSummary(run.data_window)}</pre></section>
+                            </div>
+                          </details>
+                        </div>
+                        {selected && (
+                          <div className="cl-selected-run-context" id={`cl-run-context-${run.id}`} role="status" aria-live="polite">
+                            <span><b>Selected for comparison</b> · Record {run.id}</span>
+                            <span>{familyLabel(run.family)} · {run.source || "Not recorded"} · {formatDate(run.created_at)}</span>
+                          </div>
+                        )}
+                      </article>
+                    );
+                  })}
                 </div>
               ) : (
-                <div className="bench-record-empty-runs"><strong>{runs.length === 0 ? "No exploration runs" : "No runs for this family"}</strong><span>{runs.length === 0 ? "The current catalog contains no exploration records." : "Choose another family to view recorded runs."}</span></div>
+                <div className="bench-record-empty-runs">
+                  <strong>{runs.length === 0 ? "No exploration runs" : "No runs for this family"}</strong>
+                  <span>{runs.length === 0 ? "The current catalog contains no exploration records." : "Choose another family to view recorded runs."}</span>
+                </div>
               )}
             </div>
             <footer className="bench-record-table-foot">
@@ -513,24 +452,109 @@ export default function ComparisonLab() {
               <span>Source: {catalog.source_label || catalog.source}</span>
             </footer>
           </section>
+
+          <div className="cl-secondary-grid">
+            <section className="bench-record-panel bench-record-chart-panel cl-chart-panel cl-overview-chart" aria-labelledby="bench-chart-title">
+              <div className="bench-record-panel-heading">
+                <div>
+                  <span className="bench-record-section-label">02 · Risk and return overview</span>
+                  <h2 id="bench-chart-title">Sharpe vs maximum drawdown</h2>
+                  <p>Each point is an exploration run with both chart metrics recorded.</p>
+                </div>
+                <span className="bench-record-chart-count">{chartPoints.length} of {runs.length} runs plotted</span>
+              </div>
+              <div className="bench-record-chart-layout">
+                <div className="bench-record-chart-column">
+                  {chartPoints.length > 0 ? (
+                    <div className="bench-record-chart" role="group" aria-label="Sharpe ratio against maximum drawdown. Select a point for run details.">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <ScatterChart margin={{ top: 8, right: 18, bottom: 22, left: 4 }}>
+                          <CartesianGrid stroke="rgba(55, 78, 69, .18)" vertical strokeDasharray="3 5" />
+                          <XAxis
+                            type="number" dataKey="sharpe" name="Sharpe"
+                            tick={{ fill: "#5d7067", fontSize: 10 }} tickLine={false}
+                            axisLine={{ stroke: "rgba(53, 75, 66, .45)" }}
+                            tickFormatter={(value: number) => Number(value).toFixed(1)}
+                            label={{ value: "Sharpe ratio", position: "insideBottom", offset: -13, fill: "#4f665c", fontSize: 10 }}
+                          />
+                          <YAxis
+                            type="number" dataKey="drawdown" name="Maximum drawdown" reversed domain={[0, "auto"]} width={50}
+                            tick={{ fill: "#5d7067", fontSize: 9 }} tickLine={false} axisLine={false}
+                            tickFormatter={(value: number) => `−${Math.abs(value).toFixed(0)}%`}
+                          />
+                          <Tooltip content={<RunTooltip />} cursor={{ stroke: "rgba(50, 83, 66, .42)", strokeDasharray: "3 4" }} />
+                          {chartGroups.map(({ group, points }) => (
+                            <Scatter key={group} name={group} data={points} fill={GROUP_COLORS[group]} shape={renderPoint} isAnimationActive={false} />
+                          ))}
+                          {spyBenchmark && <Scatter name="SPY buy-and-hold" data={[spyBenchmark]} fill="#20332f" shape="diamond" isAnimationActive={false} />}
+                        </ScatterChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : (
+                    <div className="bench-record-empty-chart" data-testid="status-no-plottable-runs">
+                      <BarChart3 size={20} /><strong>No runs can be plotted</strong>
+                      <span>The catalog has no exploration runs with both Sharpe and maximum drawdown values.</span>
+                    </div>
+                  )}
+                  {chartGroups.length > 0 && (
+                    <div className="bench-record-legend" aria-label="Chart groups">
+                      {chartGroups.map(({ group }) => <span key={group}><i style={{ backgroundColor: GROUP_COLORS[group] }} />{group}</span>)}
+                      {spyBenchmark && <span><i className="is-benchmark" />SPY buy-and-hold</span>}
+                    </div>
+                  )}
+                </div>
+                <aside className="bench-record-selection" aria-live="polite" aria-label="Selected exploration run">
+                  {selectedRun ? (
+                    <>
+                      <span className="bench-record-selection-label">{plottedRunIds.has(String(selectedRun.id)) ? "Selected run" : "Selected run · chart metrics incomplete"}</span>
+                      <strong>{familyLabel(selectedRun.family)}</strong>
+                      <span className="bench-record-selection-id">Record {selectedRun.id} · {selectedRun.source}</span>
+                      <dl>
+                        <div><dt>Sharpe</dt><dd>{formatMetric(selectedRun.sharpe, 3)}</dd></div>
+                        <div><dt>Maximum drawdown</dt><dd>{formatDrawdown(selectedRun.max_drawdown)}</dd></div>
+                        <div><dt>Return</dt><dd>{formatPercent(selectedRun.return_pct, 2)}</dd></div>
+                      </dl>
+                      <time>{formatDate(selectedRun.created_at)}</time>
+                    </>
+                  ) : <p>Select any plotted point—or a record above—to inspect its metrics.</p>}
+                </aside>
+              </div>
+              <div className="bench-record-chart-notes">
+                <span>{runs.length - chartPoints.length} {runs.length - chartPoints.length === 1 ? "run is" : "runs are"} missing one or both chart metrics; all remain in the archive above.</span>
+                <span>{spyReference
+                  ? spyBenchmark ? "SPY buy-and-hold is marked as a reference point." : "A SPY buy-and-hold record exists but lacks the metrics needed for a reference point."
+                  : "No SPY buy-and-hold reference is recorded in this catalog."}</span>
+              </div>
+            </section>
+
+            <aside className="cl-provenance-card" aria-label="Catalog snapshot source">
+              <span className="bench-record-section-label">Snapshot record</span>
+              <h2><Database size={15} /> Snapshot provenance</h2>
+              <dl className="cl-prov-values">
+                <div><dt>Source</dt><dd>{catalog.source_label || catalog.source}</dd></div>
+                <div><dt>As of</dt><dd>{formatDate(catalog.snapshot_as_of)}</dd></div>
+                <div><dt>Generated</dt><dd>{formatDate(catalog.generated_at)}</dd></div>
+              </dl>
+              {catalog.source_detail && <p>{catalog.source_detail}</p>}
+            </aside>
           </div>
 
           <section className="bench-record-experiments cl-hypotheses" aria-labelledby="bench-experiments-title">
             <div className="bench-record-section-heading">
               <div>
-                <span className="bench-record-section-label">03 · Supporting declarations</span>
+                <span className="bench-record-section-label">03 · Evidence reference</span>
                 <h2 id="bench-experiments-title">Experiments by research family</h2>
                 <p>Declared pass bars and recorded outcomes. Parameters and data windows open on demand.</p>
               </div>
               <span className="bench-record-section-count">{experiments.length} total records</span>
             </div>
-            <div className="bench-record-groups">
-              {RESEARCH_GROUPS.map((group, index) => {
-                const groupExperiments = experiments.filter((experiment) => researchGroup(experiment.family) === group);
-                return (
-                  <section className={`bench-record-group bench-record-group-${group.toLowerCase()}`} key={group} aria-labelledby={`cl-group-${group.toLowerCase()}`}>
-                    <header><span>{String(index + 1).padStart(2, "0")}</span><h3 id={`cl-group-${group.toLowerCase()}`}>{group}</h3><small>{groupExperiments.length} {groupExperiments.length === 1 ? "record" : "records"}</small></header>
-                    {groupExperiments.length > 0 ? (
+            {activeHypothesisGroups.length > 0 ? (
+              <div className="bench-record-groups">
+                {activeHypothesisGroups.map((group, index) => {
+                  const groupExperiments = experiments.filter((experiment) => researchGroup(experiment.family) === group);
+                  return (
+                    <section className={`bench-record-group bench-record-group-${group.toLowerCase()}`} key={group} aria-labelledby={`cl-group-${group.toLowerCase()}`}>
+                      <header><span>{String(index + 1).padStart(2, "0")}</span><h3 id={`cl-group-${group.toLowerCase()}`}>{group}</h3><small>{groupExperiments.length} {groupExperiments.length === 1 ? "record" : "records"}</small></header>
                       <div className="bench-record-group-items">
                         {groupExperiments.map((experiment) => (
                           <article className="bench-record-experiment" key={experiment.id}>
@@ -558,12 +582,13 @@ export default function ComparisonLab() {
                           </article>
                         ))}
                       </div>
-                    ) : <p className="bench-record-group-empty">No registered experiments in this snapshot.</p>}
-                  </section>
-                );
-              })}
-            </div>
-            {experiments.length === 0 && <p className="bench-record-empty-note">The current catalog contains no experiment records.</p>}
+                    </section>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="bench-record-empty-note">The current catalog contains no experiment records.</p>
+            )}
           </section>
 
           <footer className="bench-record-page-foot">

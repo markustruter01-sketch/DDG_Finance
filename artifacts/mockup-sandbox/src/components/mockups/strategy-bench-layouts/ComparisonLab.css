@@ -595,3 +595,498 @@
     animation-duration: .01ms !important;
   }
 }
+
+/* Archive-first research desk: the run ledger is the primary index. */
+.bench-comparison-lab .cl-body {
+  width: min(1660px, 100%);
+  padding: 12px 26px 0;
+}
+
+.bench-comparison-lab .cl-ledger-strip {
+  grid-template-columns: minmax(0, 1.2fr) minmax(260px, .8fr);
+  min-height: 0;
+  margin-bottom: 10px;
+  border-radius: 8px;
+}
+.bench-comparison-lab .cl-ledger-summary { padding: 10px 14px; }
+.bench-comparison-lab .cl-ledger-summary h2 { font-size: 16px; }
+.bench-comparison-lab .cl-ledger-summary p { font-size: 9px; }
+.bench-comparison-lab .cl-ledger-stats {
+  min-height: 0;
+  justify-content: flex-end;
+  padding: 7px 12px;
+  border-right: 0;
+}
+
+.bench-comparison-lab .cl-archive-ledger {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 9px;
+}
+.bench-comparison-lab .cl-archive-ledger .bench-record-panel-heading {
+  align-items: flex-end;
+  gap: 16px;
+  padding: 14px 16px 10px;
+}
+.bench-comparison-lab .cl-archive-ledger .bench-record-section-label {
+  color: #7c7048;
+}
+.bench-comparison-lab .cl-archive-ledger .bench-record-panel-heading h2 {
+  margin: 4px 0 2px;
+  font-size: 19px;
+}
+.bench-comparison-lab .cl-archive-ledger .bench-record-panel-heading p {
+  margin: 0;
+  font-size: 9px;
+}
+.bench-comparison-lab .cl-run-controls {
+  width: min(240px, 30%);
+  flex: 0 0 auto;
+}
+.bench-comparison-lab .cl-archive-ledger .bench-record-filter {
+  min-width: 0;
+  font-size: 8px;
+}
+.bench-comparison-lab .cl-archive-ledger .bench-record-filter select {
+  width: 100%;
+  min-height: 31px;
+  font-size: 9px;
+}
+.bench-comparison-lab .cl-archive-ledger .bench-record-table-meta {
+  min-height: 0;
+  padding: 6px 16px;
+  border-top: 1px solid rgba(55, 78, 69, .14);
+  border-bottom: 1px solid rgba(55, 78, 69, .14);
+  background: rgba(231, 237, 227, .31);
+  font-size: 8px;
+}
+.bench-comparison-lab .cl-sort-tools {
+  gap: 3px 13px;
+}
+.bench-comparison-lab .cl-sort-tools button {
+  min-height: 27px;
+  font-size: 9px;
+}
+.bench-comparison-lab .cl-run-list {
+  max-height: none;
+  overflow: visible;
+}
+.bench-comparison-lab .cl-run-record {
+  display: grid;
+  grid-template-columns: minmax(190px, .8fr) minmax(300px, 1.45fr) minmax(165px, .7fr);
+  grid-template-areas:
+    "identity metrics footer"
+    "context context context";
+  align-items: center;
+  gap: 7px 14px;
+  min-width: 0;
+  padding: 10px 16px;
+  border-bottom-color: rgba(55, 78, 69, .14);
+}
+.bench-comparison-lab .cl-run-record-heading {
+  grid-area: identity;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.bench-comparison-lab .cl-run-identity {
+  min-width: 0;
+}
+.bench-comparison-lab .cl-run-identity .bench-record-family {
+  font-size: 10px;
+}
+.bench-comparison-lab .cl-run-date {
+  margin-left: 1px;
+  font-size: 8px;
+}
+.bench-comparison-lab .cl-run-metrics {
+  grid-area: metrics;
+  gap: 6px;
+  margin: 0;
+}
+.bench-comparison-lab .cl-run-metrics > div {
+  display: grid;
+  justify-content: start;
+  gap: 2px;
+  padding: 5px 7px;
+}
+.bench-comparison-lab .cl-run-metrics dt { font-size: 8px; }
+.bench-comparison-lab .cl-run-metrics dd { font-size: 10px; }
+.bench-comparison-lab .cl-run-record-foot {
+  grid-area: footer;
+  align-items: flex-end;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.bench-comparison-lab .cl-run-record-foot > span {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  font-size: 8px;
+}
+.bench-comparison-lab .cl-archive-ledger .bench-record-run-details summary {
+  min-height: 24px;
+  font-size: 8px;
+}
+.bench-comparison-lab .cl-archive-ledger .bench-record-run-details > div {
+  position: relative;
+  inset: auto;
+  width: min(430px, calc(100vw - 48px));
+  max-height: 220px;
+  margin-top: 6px;
+  padding: 9px;
+  border: 1px solid rgba(55, 78, 69, .18);
+  background: rgba(246, 247, 239, .97);
+  box-shadow: 0 7px 18px rgba(37, 52, 41, .09);
+}
+.bench-comparison-lab .cl-archive-ledger .bench-record-table-foot {
+  padding: 8px 16px;
+  font-size: 8px;
+}
+.bench-comparison-lab .cl-selected-run-context {
+  grid-area: context;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 10px;
+  padding: 7px 9px;
+  border-left: 2px solid #577762;
+  background: rgba(220, 232, 218, .48);
+  color: #50665b;
+  font: 8px/1.4 "IBM Plex Mono", monospace;
+}
+.bench-comparison-lab .cl-selected-run-context b {
+  color: #355b46;
+  font-weight: 600;
+}
+
+.bench-comparison-lab .cl-secondary-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(230px, .55fr);
+  align-items: stretch;
+  gap: 10px;
+  margin-top: 12px;
+}
+.bench-comparison-lab .cl-overview-chart,
+.bench-comparison-lab .cl-provenance-card {
+  min-width: 0;
+  margin: 0;
+  border: 1px solid rgba(55, 78, 69, .2);
+  border-radius: 8px;
+  background: rgba(247, 249, 241, .78);
+  box-shadow: 0 7px 18px rgba(37, 52, 41, .055);
+  backdrop-filter: blur(12px) saturate(110%);
+  -webkit-backdrop-filter: blur(12px) saturate(110%);
+}
+.bench-comparison-lab .cl-overview-chart .bench-record-panel-heading {
+  align-items: center;
+  padding: 11px 13px 5px;
+}
+.bench-comparison-lab .cl-overview-chart .bench-record-panel-heading h2 {
+  margin: 3px 0 2px;
+  font-size: 15px;
+}
+.bench-comparison-lab .cl-overview-chart .bench-record-panel-heading p {
+  margin: 0;
+  font-size: 8px;
+}
+.bench-comparison-lab .cl-overview-chart .bench-record-chart-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  padding: 0 7px;
+}
+.bench-comparison-lab .cl-overview-chart .bench-record-chart {
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  aspect-ratio: 3.8 / 1;
+}
+.bench-comparison-lab .cl-overview-chart .bench-record-legend {
+  gap: 5px 10px;
+  padding: 0 7px 5px 34px;
+  font-size: 8px;
+}
+.bench-comparison-lab .cl-overview-chart .bench-record-selection {
+  display: flex;
+  flex-wrap: wrap;
+  min-height: 0;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px 10px;
+  padding: 6px 9px;
+  border-top: 1px solid rgba(55, 78, 69, .14);
+  border-left: 0;
+  background: rgba(226, 235, 225, .25);
+}
+.bench-comparison-lab .cl-overview-chart .bench-record-selection-label { font-size: 8px; }
+.bench-comparison-lab .cl-overview-chart .bench-record-selection > strong {
+  max-width: 160px;
+  margin: 0;
+  font-size: 9px;
+}
+.bench-comparison-lab .cl-overview-chart .bench-record-selection-id {
+  max-width: none;
+  margin: 0;
+  font-size: 8px;
+}
+.bench-comparison-lab .cl-overview-chart .bench-record-selection dl {
+  display: flex;
+  gap: 9px;
+  margin: 0;
+}
+.bench-comparison-lab .cl-overview-chart .bench-record-selection dl > div {
+  display: flex;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+}
+.bench-comparison-lab .cl-overview-chart .bench-record-selection dt,
+.bench-comparison-lab .cl-overview-chart .bench-record-selection dd { font-size: 8px; }
+.bench-comparison-lab .cl-overview-chart .bench-record-selection time { font-size: 8px; }
+.bench-comparison-lab .cl-overview-chart .bench-record-selection > p {
+  margin: 0;
+  font-size: 8px;
+}
+.bench-comparison-lab .cl-overview-chart .bench-record-chart-notes {
+  gap: 5px 12px;
+  margin: 0 12px;
+  padding: 5px 0 7px;
+  font-size: 7px;
+}
+.bench-comparison-lab .cl-provenance-card {
+  align-self: stretch;
+  padding: 13px 15px;
+}
+.bench-comparison-lab .cl-provenance-card > .bench-record-section-label {
+  color: #7c7048;
+  font: 8px "IBM Plex Mono", monospace;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.bench-comparison-lab .cl-provenance-card h2 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 6px 0 12px;
+  color: #304a3e;
+  font: 600 15px/1.2 "Space Grotesk", sans-serif;
+}
+.bench-comparison-lab .cl-prov-values {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+.bench-comparison-lab .cl-prov-values > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding-bottom: 7px;
+  border-bottom: 1px solid rgba(55, 78, 69, .12);
+}
+.bench-comparison-lab .cl-prov-values dt {
+  color: #687871;
+  font: 8px "IBM Plex Sans", sans-serif;
+}
+.bench-comparison-lab .cl-prov-values dd {
+  margin: 0;
+  color: #2c403b;
+  font: 9px/1.4 "IBM Plex Mono", monospace;
+  overflow-wrap: anywhere;
+}
+.bench-comparison-lab .cl-provenance-card > p {
+  margin: 10px 0 0;
+  color: #6a7a71;
+  font-size: 8px;
+  line-height: 1.45;
+}
+
+.bench-comparison-lab .cl-hypotheses {
+  margin-top: 12px;
+}
+.bench-comparison-lab .cl-hypotheses .bench-record-section-heading {
+  margin-bottom: 8px;
+  padding: 10px 13px;
+}
+.bench-comparison-lab .cl-hypotheses .bench-record-section-heading h2 { font-size: 17px; }
+.bench-comparison-lab .cl-hypotheses .bench-record-groups {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 410px), 1fr));
+}
+.bench-comparison-lab .cl-hypotheses .bench-record-group {
+  min-width: 0;
+}
+
+@media (max-width: 1100px) {
+  .bench-comparison-lab .cl-body { padding-right: 16px; padding-left: 16px; }
+  .bench-comparison-lab .cl-secondary-grid { grid-template-columns: minmax(0, 1.25fr) minmax(210px, .75fr); }
+  .bench-comparison-lab .cl-run-record {
+    grid-template-columns: minmax(165px, .7fr) minmax(0, 1.3fr);
+    grid-template-areas:
+      "identity metrics"
+      "footer footer"
+      "context context";
+  }
+  .bench-comparison-lab .cl-run-record-heading {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: space-between;
+  }
+  .bench-comparison-lab .cl-run-record-foot {
+    align-items: center;
+    flex-direction: row;
+  }
+}
+
+@media (max-width: 860px) {
+  .bench-comparison-lab .cl-secondary-grid { grid-template-columns: minmax(0, 1fr); }
+  .bench-comparison-lab .cl-provenance-card { padding: 12px 14px; }
+  .bench-comparison-lab .cl-prov-values { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 640px) {
+  .bench-comparison-lab .cl-body { padding: 8px 10px 0; }
+  .bench-comparison-lab .cl-ledger-strip {
+    grid-template-columns: minmax(0, 1fr);
+    margin-bottom: 8px;
+  }
+  .bench-comparison-lab .cl-ledger-summary { padding: 8px 10px 6px; }
+  .bench-comparison-lab .cl-ledger-summary h2 { font-size: 15px; }
+  .bench-comparison-lab .cl-ledger-summary p { font-size: 8px; line-height: 1.4; }
+  .bench-comparison-lab .cl-ledger-stats {
+    justify-content: flex-start;
+    gap: 10px;
+    padding: 5px 10px;
+    border-top: 1px solid rgba(55, 78, 69, .14);
+    border-left: 0;
+  }
+  .bench-comparison-lab .cl-total-count strong { font-size: 18px; }
+  .bench-comparison-lab .cl-total-count { font-size: 7px; }
+  .bench-comparison-lab .cl-total-count span { max-width: none; }
+  .bench-comparison-lab .cl-outcome-counts .bench-record-outcome { min-height: 20px; }
+  .bench-comparison-lab .cl-archive-ledger .bench-record-panel-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 11px 8px;
+  }
+  .bench-comparison-lab .cl-archive-ledger .bench-record-panel-heading h2 { font-size: 16px; }
+  .bench-comparison-lab .cl-archive-ledger .bench-record-panel-heading p { font-size: 8px; }
+  .bench-comparison-lab .cl-run-controls { width: 100%; }
+  .bench-comparison-lab .cl-archive-ledger .bench-record-filter { width: 100%; }
+  .bench-comparison-lab .cl-archive-ledger .bench-record-filter select { width: 100%; }
+  .bench-comparison-lab .cl-archive-ledger .bench-record-table-meta {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
+    padding: 5px 11px;
+  }
+  .bench-comparison-lab .cl-sort-tools { justify-content: flex-start; gap: 2px 11px; }
+  .bench-comparison-lab .cl-sort-tools button { min-height: 27px; font-size: 8px; }
+  .bench-comparison-lab .cl-run-record {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "identity"
+      "metrics"
+      "footer"
+      "context";
+    gap: 6px;
+    padding: 9px 10px;
+  }
+  .bench-comparison-lab .cl-run-record-heading {
+    align-items: center;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    gap: 6px;
+  }
+  .bench-comparison-lab .cl-run-identity { flex: 1 1 auto; }
+  .bench-comparison-lab .cl-run-identity .bench-record-family { font-size: 9px; }
+  .bench-comparison-lab .cl-run-date {
+    max-width: 46%;
+    margin: 0;
+    white-space: nowrap;
+    font-size: 7px;
+  }
+  .bench-comparison-lab .cl-run-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 5px;
+  }
+  .bench-comparison-lab .cl-run-metrics > div {
+    display: grid;
+    min-width: 0;
+    gap: 2px;
+    padding: 4px 5px;
+  }
+  .bench-comparison-lab .cl-run-metrics dt {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 7px;
+  }
+  .bench-comparison-lab .cl-run-metrics dd { font-size: 9px; }
+  .bench-comparison-lab .cl-run-record-foot {
+    align-items: center;
+    flex-direction: row;
+    gap: 7px;
+  }
+  .bench-comparison-lab .cl-run-record-foot > span { font-size: 7px; }
+  .bench-comparison-lab .cl-archive-ledger .bench-record-run-details summary { min-height: 25px; }
+  .bench-comparison-lab .cl-archive-ledger .bench-record-run-details > div {
+    width: min(100%, calc(100vw - 44px));
+    max-height: 220px;
+  }
+  .bench-comparison-lab .cl-selected-run-context {
+    justify-content: flex-start;
+    gap: 2px 8px;
+    font-size: 7px;
+  }
+  .bench-comparison-lab .cl-archive-ledger .bench-record-table-foot {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+    padding: 7px 10px;
+  }
+  .bench-comparison-lab .cl-secondary-grid { gap: 8px; margin-top: 9px; }
+  .bench-comparison-lab .cl-overview-chart .bench-record-panel-heading { padding: 10px 11px 5px; }
+  .bench-comparison-lab .cl-overview-chart .bench-record-panel-heading h2 { font-size: 14px; }
+  .bench-comparison-lab .cl-overview-chart .bench-record-panel-heading p { font-size: 8px; }
+  .bench-comparison-lab .cl-overview-chart .bench-record-chart {
+    aspect-ratio: 1.8 / 1;
+  }
+  .bench-comparison-lab .cl-overview-chart .bench-record-selection {
+    align-items: flex-start;
+    gap: 4px 8px;
+  }
+  .bench-comparison-lab .cl-overview-chart .bench-record-selection dl {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .bench-comparison-lab .cl-overview-chart .bench-record-chart-notes {
+    flex-direction: column;
+    gap: 3px;
+    margin: 0 10px;
+    font-size: 7px;
+  }
+  .bench-comparison-lab .cl-overview-chart .bench-record-chart-notes span + span { text-align: left; }
+  .bench-comparison-lab .cl-prov-values { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .bench-comparison-lab .cl-prov-values > div { padding-bottom: 5px; }
+  .bench-comparison-lab .cl-hypotheses { margin-top: 10px; }
+  .bench-comparison-lab .cl-hypotheses .bench-record-section-heading { padding: 9px 10px; }
+  .bench-comparison-lab .cl-hypotheses .bench-record-section-heading h2 { font-size: 16px; }
+  .bench-comparison-lab .cl-hypotheses .bench-record-section-heading p { font-size: 8px; }
+  .bench-comparison-lab .cl-hypotheses .bench-record-groups { grid-template-columns: minmax(0, 1fr); }
+  .bench-comparison-lab .bench-record-page-foot {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+    padding-top: 11px;
+  }
+}
+
+@media (max-width: 370px) {
+  .bench-comparison-lab .cl-run-date { max-width: 42%; font-size: 6px; }
+  .bench-comparison-lab .cl-sort-tools { gap: 2px 8px; }
+}

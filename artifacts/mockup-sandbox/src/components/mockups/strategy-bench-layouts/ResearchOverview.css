@@ -1,0 +1,141 @@
+/* Variant A: move the research snapshot and outcomes ahead of record inspection. */
+.research-overview .bench-record-body {
+  max-width: 1580px;
+  padding-top: 20px;
+}
+
+.ro-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(290px, .8fr);
+  gap: 0 20px;
+  overflow: hidden;
+  border: 1px solid rgba(55, 78, 69, .22);
+  background: rgba(247, 249, 241, .87);
+  box-shadow: 0 10px 24px rgba(37, 52, 41, .075);
+  backdrop-filter: blur(16px) saturate(112%);
+  -webkit-backdrop-filter: blur(16px) saturate(112%);
+}
+
+.ro-overview-main {
+  min-width: 0;
+  padding: 23px 25px 17px;
+}
+
+.ro-overview-titleline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-top: 13px;
+}
+
+.ro-overview-titleline h2 {
+  max-width: 720px;
+  margin: 0;
+  color: #20332f;
+  font: 600 clamp(28px, 3vw, 39px)/1.08 "Space Grotesk", sans-serif;
+  letter-spacing: -.05em;
+  text-wrap: balance;
+}
+
+.ro-overview-titleline p {
+  max-width: 650px;
+  margin: 8px 0 0;
+  color: #475c55;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.ro-pass-tally {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 88px;
+  height: 88px;
+  border: 1px solid rgba(57, 103, 72, .22);
+  background: rgba(224, 237, 224, .58);
+}
+
+.ro-pass-tally strong {
+  color: #3e6549;
+  font: 600 34px/1 "Space Grotesk", sans-serif;
+  letter-spacing: -.06em;
+  font-variant-numeric: tabular-nums;
+}
+
+.ro-pass-tally span {
+  margin-top: 5px;
+  color: #61766b;
+  font: 9px "IBM Plex Mono", monospace;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.ro-overview .bench-record-outcomes { margin-top: 17px; }
+.ro-provenance {
+  align-self: center;
+  margin: 18px 18px 18px 0;
+}
+
+.ro-overview-footer {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  grid-column: 1 / -1;
+  min-height: 41px;
+  padding: 0 24px;
+  border-top: 1px solid rgba(55, 78, 69, .17);
+  background: rgba(235, 240, 229, .42);
+  color: #61736a;
+  font: 9px "IBM Plex Mono", monospace;
+}
+
+.ro-overview-footer > span { display: inline-flex; align-items: center; gap: 5px; }
+.ro-overview-footer b { color: #30483c; font-weight: 600; }
+.ro-overview-footer .ro-sample { margin-left: auto; color: #6b7b72; }
+.ro-sample i { width: 6px; height: 6px; border-radius: 50%; background: #806c37; }
+
+.ro-chart-panel { margin-top: 14px; }
+.ro-chart-panel .bench-record-chart { height: 330px; }
+.research-overview .bench-record-experiments { margin-top: 30px; }
+.research-overview .bench-record-runs { margin-top: 28px; }
+
+.research-overview .bench-record-table thead { position: sticky; top: 0; z-index: 1; }
+.research-overview .bench-record-table th { background: rgba(239, 242, 231, .98); }
+.research-overview .bench-record-table td { overflow-wrap: anywhere; }
+.research-overview .bench-record-sort[aria-sort="ascending"],
+.research-overview .bench-record-sort[aria-sort="descending"] { color: #355b46; }
+
+@media (max-width: 900px) {
+  .research-overview .bench-record-body { padding-right: 20px; padding-left: 20px; }
+  .ro-overview { grid-template-columns: minmax(0, 1.25fr) minmax(250px, .8fr); gap: 0 12px; }
+  .ro-overview-main { padding: 20px 19px 15px; }
+  .ro-overview-titleline { gap: 14px; }
+  .ro-pass-tally { width: 72px; height: 72px; }
+  .ro-provenance { margin-right: 12px; }
+}
+
+@media (max-width: 640px) {
+  .research-overview .bench-record-body { padding: 13px 12px 0; }
+  .ro-overview { grid-template-columns: 1fr; }
+  .ro-overview-main { padding: 17px 14px 14px; }
+  .ro-overview-titleline { align-items: flex-start; gap: 10px; margin-top: 11px; }
+  .ro-overview-titleline h2 { font-size: clamp(27px, 8vw, 35px); }
+  .ro-overview-titleline p { font-size: 10px; }
+  .ro-pass-tally { width: 59px; height: 59px; margin-top: 3px; }
+  .ro-pass-tally strong { font-size: 26px; }
+  .ro-pass-tally span { font-size: 7px; }
+  .ro-overview .bench-record-outcomes { gap: 6px; margin-top: 12px; }
+  .ro-provenance { margin: 0 10px 10px; padding: 12px; }
+  .ro-overview-footer { align-items: flex-start; flex-wrap: wrap; gap: 7px 15px; padding: 10px 13px; font-size: 8px; }
+  .ro-overview-footer .ro-sample { margin-left: 0; }
+  .ro-chart-panel .bench-record-chart { height: 246px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .research-overview *,
+  .research-overview *::before,
+  .research-overview *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
+}

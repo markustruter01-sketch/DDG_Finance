@@ -1,0 +1,172 @@
+.bench-comparison-lab .bench-record-body {
+  max-width: 1660px;
+  padding-top: 17px;
+}
+
+.bench-comparison-lab .cl-intro {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(270px, 360px);
+  gap: 13px;
+  align-items: stretch;
+}
+
+.bench-comparison-lab .bench-record-headline {
+  padding: 17px 21px 15px;
+}
+
+.bench-comparison-lab .cl-headline-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 18px;
+}
+
+.bench-comparison-lab .cl-headline-row h2 {
+  margin-top: 9px;
+  margin-bottom: 6px;
+  font-size: clamp(25px, 2.5vw, 34px);
+}
+
+.bench-comparison-lab .cl-headline-row > div:first-child { min-width: 0; }
+
+.bench-comparison-lab .cl-count-block {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+  padding-left: 18px;
+  border-left: 1px solid var(--record-line);
+  color: #61766b;
+  font: 9px/1.35 "IBM Plex Mono", monospace;
+  text-transform: uppercase;
+  letter-spacing: .045em;
+}
+
+.bench-comparison-lab .cl-count-block strong {
+  color: #395d4d;
+  font: 600 30px/1 "Space Grotesk", sans-serif;
+  letter-spacing: -.06em;
+  font-variant-numeric: tabular-nums;
+}
+
+.bench-comparison-lab .bench-record-outcomes { margin-top: 12px; }
+.bench-comparison-lab .bench-record-provenance { padding: 13px 16px 11px; }
+.bench-comparison-lab .bench-record-provenance dl { gap: 6px; margin-top: 9px; }
+.bench-comparison-lab .bench-record-provenance > p { margin-top: 8px; padding-top: 7px; }
+
+.bench-comparison-lab .cl-comparison-kicker {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 18px 0 7px 2px;
+  color: #66786f;
+  font: 9px "IBM Plex Mono", monospace;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+
+.bench-comparison-lab .cl-comparison-kicker i {
+  width: 17px;
+  height: 1px;
+  background: rgba(55, 78, 69, .36);
+}
+
+.bench-comparison-lab .cl-chart-panel { margin-top: 0; }
+.bench-comparison-lab .cl-chart-panel .bench-record-panel-heading { padding: 17px 20px 10px; }
+.bench-comparison-lab .cl-chart-panel .bench-record-chart-layout {
+  grid-template-columns: minmax(0, 1fr) 250px;
+  gap: 8px;
+  padding-right: 19px;
+}
+.bench-comparison-lab .cl-chart-panel .bench-record-chart { height: 300px; }
+.bench-comparison-lab .cl-chart-panel .bench-record-selection {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding-left: 19px;
+  background: linear-gradient(90deg, rgba(227, 235, 224, .25), transparent);
+}
+.bench-comparison-lab .cl-chart-panel .bench-record-chart-notes { margin-top: 0; padding-top: 8px; padding-bottom: 10px; }
+
+.bench-comparison-lab .cl-runs { margin-top: 13px; }
+.bench-comparison-lab .cl-runs .bench-record-panel-heading { padding-top: 16px; }
+.bench-comparison-lab .cl-runs .bench-record-table-scroll { max-height: 368px; }
+.bench-comparison-lab .cl-runs .bench-record-table tbody tr.is-selected { background: rgba(220, 232, 218, .58); }
+.bench-comparison-lab .cl-runs .bench-record-table tbody tr.is-selected td:first-child { box-shadow: inset 3px 0 #577762; }
+
+.bench-comparison-lab .cl-hypotheses { margin-top: 26px; }
+.bench-comparison-lab .cl-hypotheses .bench-record-section-heading { margin-bottom: 11px; }
+.bench-comparison-lab .cl-hypotheses .bench-record-groups { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.bench-comparison-lab .bench-record-page-foot {
+  align-items: center;
+  margin-top: 19px;
+}
+.bench-comparison-lab .cl-sample-mark {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border: 1px solid rgba(91, 117, 99, .55);
+  border-radius: 50%;
+  background: rgba(117, 150, 122, .42);
+}
+
+.bench-comparison-lab button:focus-visible,
+.bench-comparison-lab select:focus-visible,
+.bench-comparison-lab summary:focus-visible,
+.bench-comparison-lab .bench-record-chart g[role="button"]:focus-visible {
+  outline: 2px solid #577762;
+  outline-offset: 3px;
+}
+
+@media (max-width: 1100px) {
+  .bench-comparison-lab .cl-intro { grid-template-columns: minmax(0, 1fr) 300px; }
+  .bench-comparison-lab .cl-hypotheses .bench-record-groups { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .bench-comparison-lab .cl-chart-panel .bench-record-chart-layout { grid-template-columns: minmax(0, 1fr) 220px; }
+}
+
+@media (max-width: 760px) {
+  .bench-comparison-lab .bench-record-body { padding: 16px 16px 0; }
+  .bench-comparison-lab .cl-intro { grid-template-columns: 1fr; }
+  .bench-comparison-lab .cl-headline-row { align-items: flex-start; }
+  .bench-comparison-lab .cl-count-block { margin-top: 12px; }
+  .bench-comparison-lab .cl-chart-panel .bench-record-chart-layout { grid-template-columns: 1fr; padding: 0 10px; }
+  .bench-comparison-lab .cl-chart-panel .bench-record-selection {
+    min-height: 104px;
+    padding: 12px 6px 10px;
+    border-top: 1px solid var(--record-line);
+    border-left: 0;
+    background: none;
+  }
+  .bench-comparison-lab .cl-chart-panel .bench-record-chart { height: 270px; }
+  .bench-comparison-lab .cl-hypotheses .bench-record-groups { grid-template-columns: 1fr; }
+  .bench-comparison-lab .bench-record-page-foot { align-items: flex-start; }
+}
+
+@media (max-width: 640px) {
+  .bench-comparison-lab .bench-record-body { padding: 13px 12px 0; }
+  .bench-comparison-lab .bench-record-headline { padding: 15px 14px 13px; }
+  .bench-comparison-lab .cl-headline-row h2 { font-size: clamp(25px, 7vw, 32px); }
+  .bench-comparison-lab .cl-headline-row > div:first-child > p { font-size: 10px; }
+  .bench-comparison-lab .cl-count-block { gap: 7px; padding-left: 10px; font-size: 8px; }
+  .bench-comparison-lab .cl-count-block strong { font-size: 25px; }
+  .bench-comparison-lab .bench-record-provenance { padding: 12px; }
+  .bench-comparison-lab .cl-comparison-kicker { gap: 6px; margin-top: 14px; font-size: 8px; }
+  .bench-comparison-lab .cl-comparison-kicker i { width: 10px; }
+  .bench-comparison-lab .cl-chart-panel .bench-record-panel-heading { padding: 15px 13px 10px; }
+  .bench-comparison-lab .cl-chart-panel .bench-record-chart-layout { padding: 0 7px; }
+  .bench-comparison-lab .cl-chart-panel .bench-record-chart { height: 246px; }
+  .bench-comparison-lab .cl-runs .bench-record-table-scroll { max-height: 340px; }
+  .bench-comparison-lab .cl-hypotheses { margin-top: 23px; }
+  .bench-comparison-lab .bench-record-page-foot { padding-top: 13px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bench-comparison-lab *,
+  .bench-comparison-lab *::before,
+  .bench-comparison-lab *::after {
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+    animation-duration: .01ms !important;
+  }
+}

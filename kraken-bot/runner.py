@@ -879,16 +879,48 @@ def _run_bot_loop(bot_id: str, module_name: str, fn_name: str):
                     f"[{bot_id}] Paused — "
                     f"profile={profile_paused} database={db_paused}; skipping cycle"
                 )
-                _update_status(
-                    bot_id,
-                    status="paused",
-                    pause_source="profile" if profile_paused else "database",
-                    consecutive_errors=0,
-                )
-                _record_cycle_liveness(
-                    bot_id, cycle_started_at, datetime.now(timezone.utc), cycle_count,
-                    "paused", consecutive_failures=0,
-                )
+                pause_source = "profile" if profile_paused else "database"
+                if bot_id == "forex_ai":
+                    monitor_error = None
+                    try:
+                        _refresh_paused_portfolio(bot_id, profile)
+                    except Exception as exc:
+                        consecutive_errors += 1
+                        monitor_error = str(exc)
+                        logger.error(
+                            f"[{bot_id}] paused monitor refresh failed "
+                            f"(consecutive={consecutive_errors}): {exc}"
+                        )
+                    else:
+                        consecutive_errors = 0
+                    _update_status(
+                        bot_id,
+                        status="paused",
+                        pause_source=pause_source,
+                        consecutive_errors=consecutive_errors,
+                        error=monitor_error,
+                    )
+                    _record_cycle_liveness(
+                        bot_id,
+                        cycle_started_at,
+                        datetime.now(timezone.utc),
+                        cycle_count,
+                        "paused",
+                        success=monitor_error is None,
+                        consecutive_failures=consecutive_errors,
+                        last_error=monitor_error,
+                    )
+                else:
+                    _update_status(
+                        bot_id,
+                        status="paused",
+                        pause_source=pause_source,
+                        consecutive_errors=0,
+                    )
+                    _record_cycle_liveness(
+                        bot_id, cycle_started_at, datetime.now(timezone.utc), cycle_count,
+                        "paused", consecutive_failures=0,
+                    )
                 if _heartbeat_ok:
                     try:
                         _bs_touch(
@@ -898,7 +930,8 @@ def _run_bot_loop(bot_id: str, module_name: str, fn_name: str):
                         )
                     except Exception as _hb_e:
                         logger.debug(f"[{bot_id}] paused heartbeat write failed (non-fatal): {_hb_e}")
-                _refresh_paused_portfolio(bot_id, profile)
+                if bot_id != "forex_ai":
+                    _refresh_paused_portfolio(bot_id, profile)
             else:
                 cycle_fn(profile=profile, db_id=db_id)
 

@@ -78,19 +78,29 @@ class WindowAlignedCycleTests(unittest.TestCase):
 class RunnerPortfolioCycleTests(unittest.TestCase):
     BOT_ID = "spy_qqq_trend"
 
-    def _run_cycles(self, profile, portfolio_writer, cycle_limit, runner_can_trade=True):
+    def _run_cycles(
+        self,
+        profile,
+        portfolio_writer,
+        cycle_limit,
+        runner_can_trade=True,
+        bot_id=None,
+        forex_monitor=None,
+    ):
+        bot_id = bot_id or self.BOT_ID
         shutdown_event = Event()
         strategy_calls = []
         order_calls = []
         status_updates = []
         liveness_writes = []
         portfolio_events = []
+        events = []
         logger = MagicMock()
         sleep_calls = 0
         clock = [0.0]
 
         def strategy_cycle(**_kwargs):
-            strategy_calls.append(self.BOT_ID)
+            strategy_calls.append(bot_id)
             order_calls.append("submit_order")
 
         def update_status(_bot_id, **fields):
@@ -98,6 +108,7 @@ class RunnerPortfolioCycleTests(unittest.TestCase):
 
         def record_cycle_liveness(*args, **kwargs):
             liveness_writes.append((args, kwargs))
+            events.append("liveness")
 
         def stop_after_cycles(_seconds):
             nonlocal sleep_calls
@@ -108,20 +119,29 @@ class RunnerPortfolioCycleTests(unittest.TestCase):
 
         def tracked_portfolio_writer(*args, **kwargs):
             portfolio_events.append("portfolio")
+            events.append("portfolio")
             return portfolio_writer(*args, **kwargs)
+
+        def forex_monitor_cycle(**_kwargs):
+            events.append("monitor")
+            if forex_monitor is not None:
+                return forex_monitor()
 
         profile = {
             **profile,
             "LOOP_SLEEP_SECONDS": 1,
             "db_id": "runner-test-db",
         }
-        strategy_module = SimpleNamespace(cycle=strategy_cycle)
+        strategy_module = SimpleNamespace(
+            cycle=strategy_cycle,
+            run_forex_cycle=forex_monitor_cycle,
+        )
         patches = [
             patch.multiple(
                 runner,
                 _runner_can_trade=runner_can_trade,
                 _pause_alignment_ok=True,
-                _owned_lock_bot_ids={self.BOT_ID},
+                _owned_lock_bot_ids={bot_id},
                 _shutdown_event=shutdown_event,
                 _heartbeat_ok=True,
             ),
@@ -145,7 +165,7 @@ class RunnerPortfolioCycleTests(unittest.TestCase):
         with ExitStack() as stack:
             for patcher in patches:
                 stack.enter_context(patcher)
-            runner._run_bot_loop(self.BOT_ID, "runner_test_strategy", "cycle")
+            runner._run_bot_loop(bot_id, "runner_test_strategy", "cycle")
 
         return {
             "strategy_calls": strategy_calls,
@@ -153,6 +173,7 @@ class RunnerPortfolioCycleTests(unittest.TestCase):
             "status_updates": status_updates,
             "liveness_writes": liveness_writes,
             "portfolio_events": portfolio_events,
+            "events": events,
             "logger": logger,
         }
 
@@ -257,6 +278,100 @@ class RunnerPortfolioCycleTests(unittest.TestCase):
         ]
         self.assertEqual(len(error_messages), 2)
         self.assertTrue(all("paused portfolio refresh" in message for message in error_messages))
+
+    def test_paused_forex_monitor_success_records_paused_cycle_as_success(self):
+        monitor_calls = []
+
+        def refresh_monitor():
+            monitor_calls.append("refresh")
+
+        result = self._run_cycles(
+            {"BOT_PAUSED": True},
+            MagicMock(return_value=True),
+            cycle_limit=1,
+            bot_id="forex_ai",
+            forex_monitor=refresh_monitor,
+        )
+
+        self.assertEqual(monitor_calls, ["refresh"])
+        self.assertEqual(result["events"], ["monitor", "liveness"])
+        self.assertEqual(result["strategy_calls"], [])
+        self.assertEqual(result["order_calls"], [])
+        args, kwargs = result["liveness_writes"][0]
+        self.assertEqual(args[4], "paused")
+        self.assertTrue(kwargs["success"])
+        self.assertEqual(kwargs["consecutive_failures"], 0)
+        self.assertIsNone(kwargs.get("last_error"))
+
+    def test_paused_forex_monitor_failure_records_failure_and_continues_loop(self):
+        monitor_calls = []
+
+        def fail_monitor():
+            monitor_calls.append("refresh")
+            raise RuntimeError("OANDA monitor unavailable")
+
+        result = self._run_cycles(
+            {"BOT_PAUSED": True},
+            MagicMock(return_value=True),
+            cycle_limit=2,
+            bot_id="forex_ai",
+            forex_monitor=fail_monitor,
+        )
+
+        self.assertEqual(monitor_calls, ["refresh", "refresh"])
+        self.assertEqual(
+            result["events"],
+            ["monitor", "liveness", "monitor", "liveness"],
+        )
+        self.assertEqual(result["strategy_calls"], [])
+        self.assertEqual(result["order_calls"], [])
+        self.assertEqual(
+            [args[4] for args, _kwargs in result["liveness_writes"]],
+            ["paused", "paused"],
+        )
+        self.assertEqual(
+            [kwargs["consecutive_failures"] for _args, kwargs in result["liveness_writes"]],
+            [1, 2],
+        )
+        self.assertTrue(
+            all(
+                kwargs["success"] is False
+                and kwargs["last_error"] == "OANDA monitor unavailable"
+                for _args, kwargs in result["liveness_writes"]
+            )
+        )
+        paused_updates = [
+            fields
+            for fields in result["status_updates"]
+            if fields.get("status") == "paused"
+        ]
+        self.assertEqual(len(paused_updates), 2)
+        self.assertEqual(
+            [fields["consecutive_errors"] for fields in paused_updates],
+            [1, 2],
+        )
+        self.assertEqual(
+            [fields["error"] for fields in paused_updates],
+            ["OANDA monitor unavailable", "OANDA monitor unavailable"],
+        )
+        self.assertNotIn(
+            "error",
+            [fields.get("status") for fields in result["status_updates"]],
+        )
+
+    def test_paused_momentum_cycle_keeps_existing_liveness_before_portfolio_refresh(self):
+        result = self._run_cycles(
+            {"BOT_PAUSED": True},
+            MagicMock(return_value=True),
+            cycle_limit=1,
+        )
+
+        self.assertEqual(result["events"], ["liveness", "portfolio"])
+        args, kwargs = result["liveness_writes"][0]
+        self.assertEqual(args[4], "paused")
+        self.assertFalse(kwargs.get("success", False))
+        self.assertEqual(kwargs["consecutive_failures"], 0)
+        self.assertNotIn("last_error", kwargs)
 
 
 if __name__ == "__main__":

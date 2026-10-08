@@ -349,6 +349,20 @@ async def lifespan(app: FastAPI):
     if scheduler is not None:
         logger.info("Hourly equity snapshot job registered (active bots, every 1 hour)")
 
+    from core.ddg_push import push_fleet_snapshot
+    _ddg_push_first_run = datetime.fromisoformat(_STARTED_AT) + timedelta(minutes=5)
+    _add_scheduler_job(
+        scheduler,
+        func=push_fleet_snapshot,
+        trigger=_ITrigger(hours=1),
+        id="ddg_fleet_snapshot_push",
+        name="Hourly DDG Fleet Snapshot Push",
+        replace_existing=True,
+        next_run_time=_ddg_push_first_run,
+    )
+    if scheduler is not None:
+        logger.info("DDG fleet push job registered (hourly, 5-minute startup delay)")
+
     _register_yahoo_refresh_jobs(scheduler)
 
     from apscheduler.triggers.cron import CronTrigger as _CronTrigger

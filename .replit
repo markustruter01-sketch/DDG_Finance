@@ -35,6 +35,14 @@ packages = ["glibcLocales", "libxcrypt", "postgresql_17"]
 [userenv.shared]
 PER_BOT_VAULT_ENABLED = "true"
 
+[userenv.development]
+DDG_FLEET_PUSH_URL = "https://ddg-control.replit.app/api/inbound/fleet"
+FLEET_PUSH_ENABLED = "false"
+
+[userenv.production]
+DDG_FLEET_PUSH_URL = "https://ddg-control.replit.app/api/inbound/fleet"
+FLEET_PUSH_ENABLED = "true"
+
 [[ports]]
 localPort = 23183
 externalPort = 80

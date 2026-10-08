@@ -37,12 +37,12 @@ def _as_iso_timestamp(value: Any, field: str, *, default_now: bool = False) -> s
     return parsed.isoformat()
 
 
-def _finite_number(value: Any, field: str, *, non_negative: bool = False) -> float:
+def _finite_number(value: Any, field: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{field} is not numeric")
     number = float(value)
-    if not math.isfinite(number) or (non_negative and number < 0):
-        raise ValueError(f"{field} is outside its allowed range")
+    if not math.isfinite(number):
+        raise ValueError(f"{field} is not finite")
     return number
 
 
@@ -123,17 +123,13 @@ def build_payload() -> dict[str, Any]:
         cash_usd = (
             None
             if row["cash"] is None
-            else _finite_number(row["cash"], "cash_usd", non_negative=True)
+            else _finite_number(row["cash"], "cash_usd")
         )
         bots.append(
             {
                 "bot_id": bot_id,
-                "equity_usd": _finite_number(
-                    row["equity"], "equity_usd", non_negative=True
-                ),
-                "starting_usd": _finite_number(
-                    row["starting"], "starting_usd", non_negative=True
-                ),
+                "equity_usd": _finite_number(row["equity"], "equity_usd"),
+                "starting_usd": _finite_number(row["starting"], "starting_usd"),
                 "cash_usd": cash_usd,
                 "pnl_usd": _finite_number(row["pnl"], "pnl_usd"),
                 "open_positions": open_positions,

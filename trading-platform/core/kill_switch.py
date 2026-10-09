@@ -70,6 +70,22 @@ def _is_protective(order: dict[str, Any]) -> bool:
     return order_type in {"stop", "stop_limit", "trailing_stop"} and side in {"sell", "buy"}
 
 
+def matching_protective_orders(
+    position: dict[str, Any], orders: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Return protective orders matching this position's symbol and exit side."""
+    if str(position.get("asset_class") or "").lower() == "forex":
+        return [order for order in orders if _covers(position, order)]
+    position_side = str(position.get("side", "long")).lower()
+    expected = "sell" if position_side != "short" else "buy"
+    return [
+        order for order in orders
+        if _is_protective(order)
+        and same_symbol(position.get("symbol"), order.get("symbol"))
+        and str(order.get("side", "")).lower() == expected
+    ]
+
+
 def _covers(position: dict[str, Any], order: dict[str, Any]) -> bool:
     if str(position.get("asset_class") or "").lower() == "forex":
         trade_id = str(position.get("trade_id") or "")
@@ -114,15 +130,11 @@ def _covers(position: dict[str, Any], order: dict[str, Any]) -> bool:
             and order_qty + DUST_QTY >= position_qty
         )
 
-    if not _is_protective(order) or not same_symbol(position.get("symbol"), order.get("symbol")):
+    if not matching_protective_orders(position, [order]):
         return False
     position_side = str(position.get("side", "long")).lower()
-    order_side = str(order.get("side", "")).lower()
-    expected = "sell" if position_side != "short" else "buy"
     asset_class = str(position.get("asset_class") or "").lower()
     tolerance = DUST_QTY if "crypto" in asset_class else EQUITY_STOP_SHORTFALL_TOLERANCE
-    if order_side != expected:
-        return False
     position_qty = abs(float(position.get("qty") or 0))
     order_qty = float(order.get("qty") or 0)
     if "crypto" in asset_class:

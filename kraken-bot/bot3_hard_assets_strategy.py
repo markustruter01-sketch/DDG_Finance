@@ -36,7 +36,7 @@ if _TRADING_PLATFORM in sys.path:
     sys.path.remove(_TRADING_PLATFORM)
 sys.path.insert(0, _TRADING_PLATFORM)
 from db.postgres import get_conn as _platform_get_conn
-from core.kill_switch import _covers
+from core.kill_switch import _covers, matching_protective_orders
 
 @contextmanager
 def get_conn():
@@ -920,7 +920,16 @@ def _maintain_protective_stops(
     open_orders = client.open_orders()
     for position in positions:
         symbol = position["symbol"]
-        if any(_covers(position, order) for order in open_orders):
+        matching_orders = matching_protective_orders(position, open_orders)
+        covered_qty = sum(
+            max(
+                0.0,
+                float(order.get("qty") or 0) - float(order.get("filled_qty") or 0),
+            )
+            for order in matching_orders
+        )
+        uncovered_qty = max(0.0, float(position["qty"]) - covered_qty)
+        if uncovered_qty == 0:
             continue
         raw_response = None
         try:
@@ -943,10 +952,17 @@ def _maintain_protective_stops(
             rearm_stop_price = (
                 math.ceil(recorded_stop_price * scale - 1e-9) / scale
             )
+            stop_qty = uncovered_qty if symbol in CRYPTO else math.floor(uncovered_qty)
+            if stop_qty <= 0:
+                logger.warning(
+                    "Bot 3 | uncovered protective-stop quantity rounds to zero | "
+                    f"symbol={symbol} leftover_qty={uncovered_qty}"
+                )
+                continue
             stop_order = _arm_stop(
                 client,
                 symbol,
-                position["qty"],
+                stop_qty,
                 position["entry_price"],
                 stop_price=rearm_stop_price,
             )
@@ -958,7 +974,7 @@ def _maintain_protective_stops(
             _remember_stop(
                 symbol,
                 stop_id,
-                qty=position["qty"],
+                qty=stop_qty,
                 stop_price=float(stop_order.get("stop_price") or rearm_stop_price),
             )
             _log_decision(

@@ -43,7 +43,9 @@ def test_missing_metals_stop_is_armed_when_equity_session_is_closed(monkeypatch)
     monkeypatch.setattr(
         bot3,
         "_remember_stop",
-        lambda symbol, stop_order_id: remembered.append((symbol, stop_order_id)),
+        lambda symbol, stop_order_id, **kwargs: remembered.append(
+            (symbol, stop_order_id, kwargs)
+        ),
     )
     monkeypatch.setattr(
         bot3,
@@ -53,14 +55,22 @@ def test_missing_metals_stop_is_armed_when_equity_session_is_closed(monkeypatch)
 
     bot3._maintain_protective_stops(
         client,
-        [{"symbol": "GLD", "qty": 61.0, "entry_price": 397.05}],
+        [{
+            "symbol": "GLD",
+            "qty": 61.0,
+            "entry_price": 397.05,
+            "stop_price": 357.35,
+            "current_price": 400.0,
+        }],
         "closed-session-cycle",
         equity_session_open=False,
     )
 
     assert len(client.submissions) == 1
     assert client.submissions[0][:4] == ("GLD", "sell", 61, "stop")
-    assert remembered == [("GLD", "gld-replacement")]
+    assert remembered == [
+        ("GLD", "gld-replacement", {"qty": 61, "stop_price": 357.35})
+    ]
     assert decisions == [
         (
             ("closed-session-cycle", "PROTECTIVE_STOP_REARMED"),
@@ -92,7 +102,13 @@ def test_broker_rejection_logs_and_records_arm_failure(monkeypatch, caplog) -> N
         with pytest.raises(RuntimeError, match="broker rejected protective stop"):
             bot3._maintain_protective_stops(
                 client,
-                [{"symbol": "SLV", "qty": 297.0, "entry_price": 58.24}],
+                [{
+                    "symbol": "SLV",
+                    "qty": 297.0,
+                    "entry_price": 58.24,
+                    "stop_price": 52.42,
+                    "current_price": 54.0,
+                }],
                 "rejection-cycle",
                 equity_session_open=False,
             )
@@ -103,10 +119,10 @@ def test_broker_rejection_logs_and_records_arm_failure(monkeypatch, caplog) -> N
             ("rejection-cycle", "PROTECTIVE_STOP_ARM_FAILED"),
             {
                 "context": {
-                    "error": "RuntimeError: broker rejected protective stop with status=rejected",
+                    "error": "RuntimeError: SLV: broker rejected protective stop with status=rejected",
                     "raw_broker_response": repr(broker_response),
                 },
-                "reason": "RuntimeError: broker rejected protective stop with status=rejected",
+                "reason": "RuntimeError: SLV: broker rejected protective stop with status=rejected",
                 "symbol": "SLV",
             },
         )

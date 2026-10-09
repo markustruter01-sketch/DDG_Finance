@@ -242,25 +242,99 @@ class _BackstopClient:
 
 def test_partial_quantity_stop_is_uncovered(monkeypatch) -> None:
     client = _BackstopClient(
-        [{"symbol": "GLD", "side": "sell", "type": "stop", "qty": "5"}]
+        [{
+            "symbol": "GLD",
+            "side": "sell",
+            "type": "stop",
+            "qty": "8",
+            "filled_qty": "3",
+        }]
     )
     armed = []
     monkeypatch.setattr(
         bot3,
         "_arm_stop",
-        lambda *args: armed.append(args) or {"id": "replacement", "status": "new"},
+        lambda *args, **kwargs: armed.append((args, kwargs))
+        or {"id": "replacement", "status": "new", "stop_price": 90.0},
     )
-    monkeypatch.setattr(bot3, "_remember_stop", lambda *args: None)
+    monkeypatch.setattr(bot3, "_remember_stop", lambda *args, **kwargs: None)
     monkeypatch.setattr(bot3, "_log_decision", lambda *args, **kwargs: None)
 
     bot3._maintain_protective_stops(
         client,
-        [{"symbol": "GLD", "qty": 10.0, "entry_price": 100.0}],
+        [{
+            "symbol": "GLD",
+            "qty": 10.0,
+            "entry_price": 100.0,
+            "stop_price": 90.0,
+            "current_price": 100.0,
+        }],
         "test-cycle",
         equity_session_open=True,
     )
 
     assert len(armed) == 1
+    assert armed[0][0][2] == 5
+    assert sum(
+        float(order.get("qty", 0)) - float(order.get("filled_qty", 0))
+        for order in client.open_orders()
+    ) + armed[0][0][2] == 10
+
+
+def test_uncovered_fraction_rounding_to_zero_logs_warning(monkeypatch, caplog) -> None:
+    client = _BackstopClient([
+        {"symbol": "GLD", "side": "sell", "type": "stop", "qty": "10"}
+    ])
+    monkeypatch.setattr(
+        bot3,
+        "_arm_stop",
+        lambda *args, **kwargs: pytest.fail("sub-share remainder must not arm a stop"),
+    )
+    monkeypatch.setattr(bot3, "_remember_stop", lambda *args, **kwargs: None)
+    monkeypatch.setattr(bot3, "_log_decision", lambda *args, **kwargs: None)
+
+    with caplog.at_level("WARNING", logger="bot3.hard_assets"):
+        bot3._maintain_protective_stops(
+            client,
+            [{
+                "symbol": "GLD",
+                "qty": 10.5,
+                "entry_price": 100.0,
+                "stop_price": 90.0,
+                "current_price": 100.0,
+            }],
+            "fractional-gap-cycle",
+            equity_session_open=True,
+        )
+
+    assert "symbol=GLD leftover_qty=0.5" in caplog.text
+
+
+def test_fully_covered_position_arms_nothing(monkeypatch) -> None:
+    client = _BackstopClient([
+        {"symbol": "GLD", "side": "sell", "type": "stop", "qty": "5"},
+        {"symbol": "GLD", "side": "sell", "type": "stop_limit", "qty": "5"},
+    ])
+    monkeypatch.setattr(
+        bot3,
+        "_arm_stop",
+        lambda *args, **kwargs: pytest.fail("fully covered position must not re-arm"),
+    )
+    monkeypatch.setattr(bot3, "_remember_stop", lambda *args, **kwargs: None)
+    monkeypatch.setattr(bot3, "_log_decision", lambda *args, **kwargs: None)
+
+    bot3._maintain_protective_stops(
+        client,
+        [{
+            "symbol": "GLD",
+            "qty": 10.0,
+            "entry_price": 100.0,
+            "stop_price": 90.0,
+            "current_price": 100.0,
+        }],
+        "fully-covered-cycle",
+        equity_session_open=True,
+    )
 
 
 def test_limit_sell_is_not_a_protective_stop_for_backstop(monkeypatch) -> None:
@@ -268,6 +342,15 @@ def test_limit_sell_is_not_a_protective_stop_for_backstop(monkeypatch) -> None:
         [{"symbol": "GLD", "side": "sell", "type": "limit", "qty": "10"}]
     )
     monkeypatch.setattr(bot3, "_log_decision", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        bot3,
+        "_wait_for_final_order",
+        lambda client, order_id: {
+            "id": order_id,
+            "status": "canceled",
+            "filled_qty": "0",
+        },
+    )
 
     bot3._software_backstop(
         client,

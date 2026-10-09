@@ -606,6 +606,42 @@ class AlpacaMomentumClient:
         return False
 
 
+def _wait_for_fill_and_cancel_remainder(
+    client: AlpacaMomentumClient, order_id: str
+) -> dict[str, Any]:
+    """Wait for a final order state, cancel any remainder, then verify that state."""
+    order_id = str(order_id)
+    final_statuses = {
+        "filled",
+        "canceled",
+        "cancelled",
+        "rejected",
+        "expired",
+        "done_for_day",
+    }
+    order = client.wait_for_fill(order_id)
+    status = str(order.get("status", "")).lower()
+    if status in final_statuses:
+        return order
+
+    client.cancel_confirm(order_id)
+    order = client.get_order(order_id)
+    if (
+        not isinstance(order, dict)
+        or str(order.get("id") or "") != order_id
+    ):
+        raise RuntimeError(
+            f"Bot 2 order remainder could not be verified id={order_id}"
+        )
+    status = str(order.get("status", "")).lower()
+    if status not in final_statuses:
+        raise RuntimeError(
+            f"Bot 2 order remainder cancellation unconfirmed "
+            f"id={order_id} status={status or 'unknown'}"
+        )
+    return order
+
+
 def ensure_schema() -> None:
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -1085,9 +1121,8 @@ def _cancel_symbol_orders_confirmed(
     client: AlpacaMomentumClient,
     symbol: str,
     recorded_stop_id: str | None = None,
-    preserve_order_ids: Sequence[str] = (),
 ) -> bool:
-    """Confirm symbol orders are final, except explicitly preserved in-flight orders."""
+    """Confirm all recorded and listed orders for one symbol are final."""
     symbol = canonical_symbol(symbol)
     final_statuses = {
         "canceled",
@@ -1097,7 +1132,7 @@ def _cancel_symbol_orders_confirmed(
         "rejected",
         "done_for_day",
     }
-    confirmed_order_ids = {str(order_id) for order_id in preserve_order_ids}
+    confirmed_order_ids: set[str] = set()
 
     def confirm_order_final(order_id: str) -> bool:
         try:
@@ -1361,6 +1396,8 @@ def _rebalance_spy_sleeve(
     trade_attempted = False
     fill: dict[str, Any] = {}
     fill_status = ""
+    filled_qty = 0
+    confirmed_partial_buy = False
     order_id: str | None = None
 
     if delta < 0:
@@ -1416,9 +1453,19 @@ def _rebalance_spy_sleeve(
                 order_id = str(order.get("id") or "")
                 if not order_id:
                     raise RuntimeError("SPY market order returned no order ID")
-                fill = client.wait_for_fill(order_id)
+                fill = _wait_for_fill_and_cancel_remainder(client, order_id)
                 fill_status = str(fill.get("status", "")).lower()
-                if fill_status not in {"filled", "partially_filled"}:
+                try:
+                    filled_qty = math.floor(float(fill.get("filled_qty") or 0))
+                except (TypeError, ValueError):
+                    filled_qty = 0
+                confirmed_partial_buy = (
+                    delta > 0
+                    and fill_status in {"canceled", "filled"}
+                    and 0 < filled_qty < order_qty
+                )
+                fully_filled = fill_status == "filled" and filled_qty == order_qty
+                if not fully_filled and not confirmed_partial_buy:
                     raise RuntimeError(
                         f"SPY market order ended with status={fill_status or 'unknown'}"
                     )
@@ -1430,16 +1477,8 @@ def _rebalance_spy_sleeve(
                     exc,
                 )
 
-    preserve_order_ids = (
-        [order_id]
-        if delta > 0 and fill_status == "partially_filled" and order_id
-        else []
-    )
     if not _cancel_symbol_orders_confirmed(
-        client,
-        SPY_SLEEVE_SYMBOL,
-        recorded_stop_id,
-        preserve_order_ids=preserve_order_ids,
+        client, SPY_SLEEVE_SYMBOL, recorded_stop_id
     ):
         raise RuntimeError("SPY rebalance ended with an unconfirmed open order")
 
@@ -1548,18 +1587,11 @@ def _rebalance_spy_sleeve(
             "reason": str(trade_error),
         }
     if settled_qty != target_qty:
-        try:
-            filled_qty = math.floor(float(fill.get("filled_qty") or 0))
-        except (TypeError, ValueError):
-            filled_qty = 0
-        confirmed_partial_buy = (
-            delta > 0
-            and fill_status == "partially_filled"
-            and 0 < filled_qty < delta
+        if (
+            confirmed_partial_buy
             and settled_qty < target_qty
             and settled_qty == initial_qty + filled_qty
-        )
-        if confirmed_partial_buy:
+        ):
             logger.critical(
                 "Bot 2 | SPY BUY partial fill protected; continuing "
                 "target_qty=%s settled_qty=%s filled_qty=%s",
@@ -1586,11 +1618,16 @@ def _place_confirmed_entry(
     client: AlpacaMomentumClient, symbol: str, qty: int, cycle_id: str
 ) -> bool:
     order = client.submit(symbol, "buy", qty, "market")
-    fill = client.wait_for_fill(str(order["id"]))
+    fill = _wait_for_fill_and_cancel_remainder(client, str(order["id"]))
     status = str(fill.get("status", "")).lower()
     filled_qty = math.floor(float(fill.get("filled_qty") or 0))
     entry_price = float(fill.get("filled_avg_price") or 0)
-    if status not in {"filled", "partially_filled"} or filled_qty < 1 or entry_price <= 0:
+    if (
+        status not in {"filled", "canceled"}
+        or filled_qty < 1
+        or filled_qty > int(qty)
+        or entry_price <= 0
+    ):
         logger.warning("Bot 2 | entry not confirmed symbol=%s cycle=%s status=%s", symbol, cycle_id, status)
         return False
     broker_qty = _broker_qty(client, symbol)
@@ -2053,7 +2090,7 @@ def _sell_sgov_to_fund_buys(
             "required_cash": required_cash,
             "cash_after": cash_before,
         }
-    fill = client.wait_for_fill(order_id)
+    fill = _wait_for_fill_and_cancel_remainder(client, order_id)
     try:
         filled_qty = math.floor(float(fill.get("filled_qty") or 0))
         fill_price = float(fill.get("filled_avg_price") or 0)
@@ -2207,6 +2244,7 @@ def run_bot2_cycle(
         for position in broker_positions
         if canonical_symbol(position["symbol"]) in desired
     }
+    planned_stock_buys: list[tuple[str, int, float]] = []
     for item in eligible_ranked:
         symbol = canonical_symbol(item["symbol"])
         if symbol in held_stock_symbols:
@@ -2215,7 +2253,10 @@ def run_bot2_cycle(
         target_notional = plan["target_allocations"][symbol]
         qty = math.floor(target_notional / close)
         if qty > 0:
-            planned_buy_notional += qty * close
+            planned_stock_buys.append((symbol, qty, close))
+    planned_buy_notional += sum(
+        qty * close for _symbol, qty, close in planned_stock_buys
+    )
     try:
         funding = _sell_sgov_to_fund_buys(client, planned_buy_notional)
     except Exception as exc:
@@ -2265,14 +2306,8 @@ def run_bot2_cycle(
         for p in broker_positions
         if canonical_symbol(p["symbol"]) in desired
     }
-    for item in eligible_ranked:
-        symbol = str(item["symbol"])
+    for symbol, qty, close in planned_stock_buys:
         if symbol in held:
-            continue
-        close = float(summaries[symbol].prior_close)
-        target_notional = plan["target_allocations"][symbol]
-        qty = math.floor(target_notional / close)
-        if qty < 1:
             continue
         # Fresh state is fetched inside the guard; sell work has already run.
         fresh_account = client.account()

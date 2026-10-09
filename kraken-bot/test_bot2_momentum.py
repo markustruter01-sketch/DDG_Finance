@@ -1022,6 +1022,47 @@ class _EntryClient:
         return True
 
 
+class _EntryRemainderClient(_EntryClient):
+    def __init__(self) -> None:
+        super().__init__()
+        self.events = []
+        self.buy_order = {
+            "id": "buy-1",
+            "symbol": "AAPL",
+            "side": "buy",
+            "type": "market",
+            "qty": "10",
+            "filled_qty": "3",
+            "filled_avg_price": "100.0",
+            "status": "partially_filled",
+        }
+
+    def submit(self, symbol, side, qty, order_type, **extra):
+        if side == "buy":
+            self.submissions.append((side, order_type, int(qty)))
+            self.qty = 3
+            self.events.append(("submit", side, order_type, int(qty)))
+            return {"id": self.buy_order["id"]}
+        result = super().submit(symbol, side, qty, order_type, **extra)
+        self.events.append(("submit", side, order_type, int(qty)))
+        return result
+
+    def wait_for_fill(self, order_id):
+        assert order_id == self.buy_order["id"]
+        return dict(self.buy_order)
+
+    def cancel_confirm(self, order_id):
+        assert order_id == self.buy_order["id"]
+        self.events.append(("cancel", order_id))
+        self.buy_order["status"] = "canceled"
+        return True
+
+    def get_order(self, order_id):
+        assert order_id == self.buy_order["id"]
+        self.events.append(("get", order_id))
+        return dict(self.buy_order)
+
+
 class _SellGuardClient:
     def __init__(
         self,
@@ -1369,7 +1410,7 @@ def test_spy_rebalances_whole_shares_with_one_35_percent_stop_and_one_ledger_row
         )
 
 
-def test_spy_partial_underfill_is_protected_recorded_and_not_cancelled(
+def test_spy_partial_underfill_is_cancelled_protected_and_recorded(
     monkeypatch, caplog
 ) -> None:
     monkeypatch.setattr(bot2.time, "sleep", lambda *_args: None)
@@ -1403,8 +1444,12 @@ def test_spy_partial_underfill_is_protected_recorded_and_not_cancelled(
     assert result["settled_qty"] == 1
     assert ledger == [(1, 100.0, 65.0, active_stops[0]["id"])]
     assert len(active_stops) == 1 and active_stops[0]["qty"] == "1"
-    assert buy_order["status"] == "partially_filled"
-    assert ("cancel", buy_order["id"]) not in client.events
+    assert buy_order["status"] == "canceled"
+    assert ("cancel", buy_order["id"]) in client.events
+    assert client.events.index(("cancel", buy_order["id"])) < next(
+        index for index, event in enumerate(client.events)
+        if event[0] == "submit" and event[4] == "stop"
+    )
     assert "target_qty=5 settled_qty=1" in caplog.text
 
 
@@ -1533,12 +1578,25 @@ def _configure_minimal_cycle(
 
 def test_cycle_continues_to_stock_buys_after_spy_underfill(monkeypatch) -> None:
     _client, entries = _configure_minimal_cycle(monkeypatch)
+    funding_calls = []
+    monkeypatch.setattr(
+        bot2,
+        "_sell_sgov_to_fund_buys",
+        lambda _client, notional: funding_calls.append(notional) or {
+            "confirmed": True,
+            "orders": 0,
+            "sell_qty": 0,
+            "required_cash": notional * 1.01,
+            "cash_after": 100_000.0,
+        },
+    )
 
     result = bot2.run_bot2_cycle(
         now=datetime(2026, 10, 6, 14, 0, tzinfo=timezone.utc)
     )
 
     assert result["reason"] == "initial_entry"
+    assert funding_calls == [2_000.0]
     assert entries == [("AAPL", 10)]
 
 
@@ -1674,6 +1732,44 @@ def test_confirmed_entry_records_only_after_fill_and_stop(monkeypatch) -> None:
     assert [item[:2] for item in client.submissions] == [
         ("buy", "market"), ("sell", "stop")
     ]
+
+
+def test_confirmed_entry_cancels_remainder_before_stopping_filled_shares(
+    monkeypatch,
+) -> None:
+    client = _EntryRemainderClient()
+    recorded = []
+    monkeypatch.setattr(
+        bot2,
+        "record_open",
+        lambda symbol, qty, entry, stop_price, stop_id: recorded.append(
+            (symbol, qty, entry, stop_price, stop_id)
+        ),
+    )
+
+    assert bot2._place_confirmed_entry(client, "AAPL", 10, "cycle") is True
+
+    assert client.buy_order["status"] == "canceled"
+    assert recorded == [("AAPL", 3, 100.0, 80.0, "stop-1")]
+    assert client.submissions == [
+        ("buy", "market", 10),
+        ("sell", "stop", 3),
+    ]
+    assert client.events.index(("cancel", "buy-1")) < client.events.index(
+        ("submit", "sell", "stop", 3)
+    )
+
+
+def test_remainder_cancellation_failure_raises() -> None:
+    client = _EntryRemainderClient()
+    client.cancel_confirm = lambda _order_id: False
+
+    try:
+        bot2._wait_for_fill_and_cancel_remainder(client, "buy-1")
+    except RuntimeError as exc:
+        assert "cancellation unconfirmed" in str(exc)
+    else:
+        raise AssertionError("unconfirmed order remainder cancellation must raise")
 
 
 def test_stop_failure_retries_then_flattens_without_recording(monkeypatch) -> None:

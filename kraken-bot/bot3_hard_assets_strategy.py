@@ -69,6 +69,9 @@ EQUITY_SESSION_OPEN = time(9, 30)
 EQUITY_SESSION_CLOSE = time(16, 0)
 ALPACA_BASE_URL = "https://paper-api.alpaca.markets"
 ALPACA_DATA_BASE_URL = "https://data.alpaca.markets"
+_FINAL_ORDER_STATUSES = {
+    "filled", "canceled", "cancelled", "rejected", "expired", "done_for_day",
+}
 PRICE_TABLES = {
     "BTC/USD": ("crypto_historical_prices", "BTC"),
     "ETH/USD": ("crypto_historical_prices", "ETH"),
@@ -504,10 +507,35 @@ class AlpacaBot3:
         import time as _time
         for _ in range(attempts):
             order = self._request("GET", f"/v2/orders/{order_id}")
-            if order.get("status") in {"filled", "partially_filled", "canceled", "rejected", "expired"}:
+            if str(order.get("status", "")).lower() in _FINAL_ORDER_STATUSES:
                 return order
             _time.sleep(1)
         return self._request("GET", f"/v2/orders/{order_id}")
+
+
+def _wait_for_final_order(
+    client: AlpacaBot3, order_id: str, cancel_attempts: int = 10
+) -> dict[str, Any]:
+    """Wait for a terminal order state, cancel any remainder, and confirm it."""
+    order = client.wait_for_fill(order_id)
+    status = str(order.get("status", "")).lower()
+    if status in _FINAL_ORDER_STATUSES:
+        return order
+
+    client._request("DELETE", f"/v2/orders/{order_id}")
+    import time as _time
+    last_status = status or "unknown"
+    for attempt in range(cancel_attempts):
+        order = client._request("GET", f"/v2/orders/{order_id}")
+        last_status = str(order.get("status", "")).lower()
+        if last_status in _FINAL_ORDER_STATUSES:
+            return order
+        if attempt < cancel_attempts - 1:
+            _time.sleep(1)
+    raise RuntimeError(
+        f"order remainder cancellation was not confirmed for {order_id}; "
+        f"status={last_status}"
+    )
 
 
 def _strategy_positions() -> list[dict[str, Any]]:
@@ -666,10 +694,12 @@ def _arm_stop(
         stop_price = entry_price * (
             1.0 - CRYPTO_STOP_PCT if symbol in CRYPTO else 1.0 - METAL_STOP_PCT
         )
+    scale = 10 ** (8 if symbol in CRYPTO else 2)
+    stop_price = math.ceil(float(stop_price) * scale - 1e-9) / scale
     if symbol in CRYPTO:
         return client.submit(
             symbol, "sell", qty, "stop_limit",
-            stop_price=round(stop_price, 8),
+            stop_price=stop_price,
             limit_price=round(stop_price * 0.99, 8),
         )
     whole_qty = math.floor(qty)
@@ -677,8 +707,23 @@ def _arm_stop(
         raise RuntimeError(f"{symbol}: no whole share available for GTC stop")
     return client.submit(
         symbol, "sell", whole_qty, "stop",
-        stop_price=round(stop_price, 2),
+        stop_price=stop_price,
     )
+
+
+def _require_accepted_stop_order(
+    order: dict[str, Any], symbol: str
+) -> str:
+    status = str(order.get("status", "")).lower()
+    if status in {"rejected", "failed", "error", "canceled", "cancelled"}:
+        raise RuntimeError(
+            f"{symbol}: broker rejected protective stop with status={status}"
+        )
+    order_id = order.get("id")
+    if not order_id:
+        raise RuntimeError(f"{symbol}: broker response did not include a stop order ID")
+    return str(order_id)
+
 
 def _broker_position_qty(client: AlpacaBot3, symbol: str) -> float:
     canonical = _canonical_symbol(symbol)
@@ -727,17 +772,142 @@ def _flatten_position(client: AlpacaBot3, symbol: str) -> None:
     raise RuntimeError(f"Bot 3 could not confirm flat for {symbol}")
 
 
-def _remember_stop(symbol: str, stop_order_id: str) -> None:
+def _remember_stop(
+    symbol: str,
+    stop_order_id: str,
+    qty: float | None = None,
+    stop_price: float | None = None,
+) -> None:
+    if (qty is None) != (stop_price is None):
+        raise ValueError("qty and stop_price must be supplied together")
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            if qty is None:
+                cur.execute(
+                    """
+                    UPDATE bot3_positions
+                    SET stop_order_id=%s
+                    WHERE bot_id=%s AND symbol=%s AND status='open'
+                    """,
+                    (stop_order_id, BOT_ID, symbol),
+                )
+            else:
+                cur.execute(
+                    """
+                    UPDATE bot3_positions
+                    SET qty=%s, stop_price=%s, stop_order_id=%s
+                    WHERE bot_id=%s AND symbol=%s AND status='open'
+                    """,
+                    (qty, stop_price, stop_order_id, BOT_ID, symbol),
+                )
+                if cur.rowcount != 1:
+                    raise RuntimeError(
+                        f"expected one open Bot 3 row after stop re-arm for {symbol}; "
+                        f"updated {cur.rowcount}"
+                    )
+
+
+def _close_stop_filled_position(symbol: str, filled_at: Any) -> None:
+    if isinstance(filled_at, str):
+        try:
+            filled_at = datetime.fromisoformat(filled_at.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise RuntimeError(
+                f"invalid broker filled_at timestamp for {symbol}: {filled_at!r}"
+            ) from exc
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
                 UPDATE bot3_positions
-                SET stop_order_id=%s
+                SET status='closed', closed_at=%s, exit_reason=%s
                 WHERE bot_id=%s AND symbol=%s AND status='open'
                 """,
-                (stop_order_id, BOT_ID, symbol),
+                (filled_at, "stop_filled", BOT_ID, symbol),
             )
+            if cur.rowcount != 1:
+                raise RuntimeError(
+                    f"expected exactly one open Bot 3 row to close for {symbol}; "
+                    f"updated {cur.rowcount}"
+                )
+
+
+def _stopped_out_symbols(now: datetime) -> set[str]:
+    current = (
+        now.replace(tzinfo=timezone.utc)
+        if now.tzinfo is None
+        else now.astimezone(timezone.utc)
+    )
+    quarter_month = ((current.month - 1) // 3) * 3 + 1
+    quarter_start = datetime(
+        current.year, quarter_month, 1, tzinfo=timezone.utc
+    )
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT symbol
+                FROM bot3_positions
+                WHERE bot_id=%s AND status='closed' AND exit_reason='stop_filled'
+                  AND closed_at >= %s AND closed_at <= %s
+                """,
+                (BOT_ID, quarter_start, current),
+            )
+            return {_canonical_symbol(row[0]) for row in cur.fetchall()}
+
+
+def _reconcile_missing_stop_fills(
+    client: AlpacaBot3,
+    open_positions: list[dict[str, Any]],
+    broker_positions: list[dict[str, Any]],
+) -> set[str]:
+    """Close ledger rows whose recorded stop filled and left the broker flat."""
+    held_symbols = {
+        _canonical_symbol(position.get("symbol"))
+        for position in broker_positions
+        if float(position.get("qty") or 0) > 0
+    }
+    closed_symbols: set[str] = set()
+    for position in open_positions:
+        symbol = _canonical_symbol(position["symbol"])
+        if symbol in held_symbols:
+            continue
+        stop_order_id = position.get("stop_order_id")
+        if not stop_order_id:
+            logger.critical(
+                "Bot 3 | broker position missing without a recorded stop ID | "
+                f"symbol={symbol}; leaving ledger row open"
+            )
+            continue
+        try:
+            stop_order = client._request(
+                "GET", f"/v2/orders/{stop_order_id}"
+            )
+        except Exception as exc:
+            logger.critical(
+                "Bot 3 | unable to read recorded stop for missing broker position | "
+                f"symbol={symbol} order_id={stop_order_id} error={exc}; "
+                "leaving ledger row open"
+            )
+            continue
+        status = str(stop_order.get("status", "")).lower()
+        if status != "filled":
+            logger.critical(
+                "Bot 3 | broker position missing but recorded stop is not filled | "
+                f"symbol={symbol} order_id={stop_order_id} status={status or 'unknown'}; "
+                "leaving ledger row open"
+            )
+            continue
+        filled_at = stop_order.get("filled_at")
+        if not filled_at:
+            logger.critical(
+                "Bot 3 | recorded stop is filled but has no filled_at timestamp | "
+                f"symbol={symbol} order_id={stop_order_id}; leaving ledger row open"
+            )
+            continue
+        _close_stop_filled_position(symbol, filled_at)
+        closed_symbols.add(symbol)
+    return closed_symbols
 
 
 def _maintain_protective_stops(
@@ -754,18 +924,43 @@ def _maintain_protective_stops(
             continue
         raw_response = None
         try:
-            stop_order = _arm_stop(
-                client, symbol, position["qty"], position["entry_price"]
-            )
-            stop_status = str(stop_order.get("status", "")).lower()
-            if stop_status in {"rejected", "failed", "error", "canceled", "cancelled"}:
-                raw_response = repr(stop_order)
-                raise RuntimeError(
-                    f"broker rejected protective stop with status={stop_status}"
+            recorded_stop_price = float(position["stop_price"])
+            if float(position["current_price"]) <= recorded_stop_price:
+                logger.critical(
+                    "Bot 3 | protective stop missing at or below recorded stop; "
+                    "deferring re-arm to software backstop | "
+                    f"symbol={symbol} current_price={position['current_price']} "
+                    f"stop_price={recorded_stop_price}"
                 )
-            stop_id = stop_order.get("id")
-            if stop_id:
-                _remember_stop(symbol, stop_id)
+                _log_decision(
+                    cycle_id,
+                    "PROTECTIVE_STOP_REARM_DEFERRED",
+                    symbol=symbol,
+                    reason="current price at or below recorded stop",
+                )
+                continue
+            scale = 10 ** (8 if symbol in CRYPTO else 2)
+            rearm_stop_price = (
+                math.ceil(recorded_stop_price * scale - 1e-9) / scale
+            )
+            stop_order = _arm_stop(
+                client,
+                symbol,
+                position["qty"],
+                position["entry_price"],
+                stop_price=rearm_stop_price,
+            )
+            try:
+                stop_id = _require_accepted_stop_order(stop_order, symbol)
+            except RuntimeError:
+                raw_response = repr(stop_order)
+                raise
+            _remember_stop(
+                symbol,
+                stop_id,
+                qty=position["qty"],
+                stop_price=float(stop_order.get("stop_price") or rearm_stop_price),
+            )
             _log_decision(
                 cycle_id, "PROTECTIVE_STOP_REARMED", symbol=symbol,
                 order_id=stop_id, outcome=stop_order.get("status", "submitted"),
@@ -796,9 +991,10 @@ def _software_backstop(
     positions: list[dict[str, Any]],
     cycle_id: str,
     equity_session_open: bool,
-) -> None:
+) -> set[str]:
     """Submit a market sell if a protective stop is breached but not filled."""
     open_orders = client.open_orders()
+    closed_symbols: set[str] = set()
     for position in positions:
         symbol = position["symbol"]
         if symbol in VAULT_SYMBOLS or any(
@@ -822,6 +1018,40 @@ def _software_backstop(
             reason="protective stop breached without active sell order",
             order_id=order.get("id"), outcome="SUBMITTED",
         )
+        order_id = order.get("id")
+        if not order_id:
+            raise RuntimeError(f"Bot 3 backstop sell for {symbol} returned no order ID")
+        fill = _wait_for_final_order(client, order_id)
+        fill_status = str(fill.get("status", "")).lower()
+        filled_qty = float(fill.get("filled_qty") or 0)
+        if (
+            fill_status == "filled"
+            and math.isclose(filled_qty, broker_qty, rel_tol=0.0, abs_tol=1e-9)
+        ):
+            filled_at = fill.get("filled_at")
+            if not filled_at:
+                logger.critical(
+                    "Bot 3 | software backstop fully filled without filled_at; "
+                    f"leaving ledger row open | symbol={symbol} order_id={order_id}"
+                )
+                continue
+            _close_stop_filled_position(symbol, filled_at)
+            closed_symbols.add(symbol)
+            _log_decision(
+                cycle_id,
+                "SOFTWARE_BACKSTOP_FILLED",
+                symbol=symbol,
+                order_id=order_id,
+                outcome="CLOSED",
+            )
+        else:
+            logger.critical(
+                "Bot 3 | software backstop sell was not confirmed as a full fill; "
+                f"leaving ledger row open | symbol={symbol} order_id={order_id} "
+                f"status={fill_status or 'unknown'} filled_qty={filled_qty} "
+                f"requested_qty={broker_qty}"
+            )
+    return closed_symbols
 
 
 def _place_confirmed_entry(
@@ -830,17 +1060,38 @@ def _place_confirmed_entry(
     qty: float,
     cycle_id: str,
 ) -> dict[str, Any]:
+    canonical = _canonical_symbol(symbol)
+    if any(
+        _canonical_symbol(position["symbol"]) == canonical
+        for position in _strategy_positions()
+    ):
+        logger.critical(
+            "Bot 3 | refusing duplicate entry because an open ledger row exists | "
+            f"symbol={canonical}"
+        )
+        _log_decision(
+            cycle_id,
+            "ENTRY_BLOCKED_OPEN_ROW",
+            symbol=canonical,
+            reason="open strategy position row already exists",
+        )
+        return {"status": "blocked_open_row", "order_submitted": False}
+
     order = client.submit(
         symbol,
         "buy",
         math.floor(qty) if symbol in METALS else qty,
         "market",
     )
-    fill = client.wait_for_fill(order["id"])
-    status = fill.get("status")
+    fill = _wait_for_final_order(client, order["id"])
+    status = str(fill.get("status", "")).lower()
     filled_qty = float(fill.get("filled_qty") or 0)
     filled_price = float(fill.get("filled_avg_price") or 0)
-    if status not in {"filled", "partially_filled"} or filled_qty <= 0 or filled_price <= 0:
+    if (
+        status not in _FINAL_ORDER_STATUSES
+        or filled_qty <= 0
+        or filled_price <= 0
+    ):
         _log_decision(
             cycle_id, "ENTRY_NOT_FILLED", symbol=symbol,
             order_id=order["id"], outcome=status,
@@ -859,6 +1110,7 @@ def _place_confirmed_entry(
     )
     try:
         stop_order = _arm_stop(client, symbol, broker_qty, filled_price)
+        _require_accepted_stop_order(stop_order, symbol)
     except Exception as first_exc:
         logger.critical(
             "Bot 3 | protective stop failed after fill; retrying once | "
@@ -866,6 +1118,7 @@ def _place_confirmed_entry(
         )
         try:
             stop_order = _arm_stop(client, symbol, broker_qty, filled_price)
+            _require_accepted_stop_order(stop_order, symbol)
         except Exception as second_exc:
             logger.critical(
                 "Bot 3 | protective stop retry failed; flattening immediately | "
@@ -880,7 +1133,8 @@ def _place_confirmed_entry(
                 f"Bot 3 aborted after stop failure for {symbol}: {second_exc}"
             ) from second_exc
     recorded_fill = {**fill, "symbol": _canonical_symbol(symbol)}
-    stop_order_id = stop_order.get("id")
+    stop_order_id = _require_accepted_stop_order(stop_order, symbol)
+    stop_price = float(stop_order.get("stop_price") or stop_price)
     _record_open(recorded_fill, broker_qty, stop_price, stop_order_id)
     if stop_order_id:
         # Keep the explicit write-back next to every accepted stop ID. The
@@ -1036,9 +1290,13 @@ def _rebalance_existing_holding(
         market_order_id = market_order.get("id")
         if not market_order_id:
             raise RuntimeError(f"market order for {symbol} returned no order ID")
-        fill = client.wait_for_fill(market_order_id)
+        fill = _wait_for_final_order(client, market_order_id)
         fill_status = str(fill.get("status", "")).lower()
-        if fill_status not in {"filled", "partially_filled"}:
+        fill_qty = float(fill.get("filled_qty") or 0)
+        partial_cancel = (
+            fill_status in {"canceled", "cancelled"} and fill_qty > 0
+        )
+        if fill_status != "filled" and not partial_cancel:
             trade_error = RuntimeError(
                 f"market order {market_order_id} ended with status={fill_status or 'unknown'}"
             )
@@ -1136,12 +1394,11 @@ def _rebalance_existing_holding(
                 close_open_row("rebalance_invalid_average_flatten")
             raise RuntimeError(f"Bot 3 aborted: invalid average entry for {symbol}")
 
-    stop_price = (
-        old_stop_price
-        if side == "sell"
-        else broker_entry_price * (
+    stop_price = old_stop_price if side == "sell" else max(
+        old_stop_price,
+        broker_entry_price * (
             1.0 - CRYPTO_STOP_PCT if symbol in CRYPTO else 1.0 - METAL_STOP_PCT
-        )
+        ),
     )
     stop_order: dict[str, Any] | None = None
     stop_error: Exception | None = None
@@ -1154,15 +1411,7 @@ def _rebalance_existing_holding(
                 broker_entry_price,
                 stop_price=stop_price,
             )
-            stop_status = str(candidate.get("status", "")).lower()
-            if stop_status in {
-                "rejected", "failed", "error", "canceled", "cancelled",
-            }:
-                raise RuntimeError(
-                    f"broker rejected protective stop with status={stop_status}"
-                )
-            if not candidate.get("id"):
-                raise RuntimeError("broker response did not include a stop order ID")
+            _require_accepted_stop_order(candidate, symbol)
             stop_order = candidate
             break
         except Exception as exc:
@@ -1191,7 +1440,8 @@ def _rebalance_existing_holding(
             f"remaining_qty={remaining_qty}"
         ) from stop_error
 
-    stop_order_id = str(stop_order["id"])
+    stop_order_id = _require_accepted_stop_order(stop_order, symbol)
+    stop_price = float(stop_order.get("stop_price") or stop_price)
     update_open_row(settled_qty, broker_entry_price, stop_price, stop_order_id)
     _log_decision(
         cycle_id,
@@ -1400,30 +1650,71 @@ def run_bot3_cycle(
         and _canonical_symbol(position["symbol"]) not in VAULT_SYMBOLS
     ]
     db_positions = {position["symbol"]: position for position in _strategy_positions()}
-    initial_entry = not live_positions and not db_positions
-    partial_entry = bool(live_positions) and {
-        _canonical_symbol(position["symbol"]) for position in live_positions
-    } != set(ASSETS)
-    positions = []
-    for live in live_positions:
-        stored = db_positions.get(live["symbol"], {})
-        entry_price = stored.get("entry_price", live["entry_price"])
-        positions.append({
-            **live,
-            "stop_price": stored.get(
-                "stop_price",
-                entry_price * (
-                    1.0 - CRYPTO_STOP_PCT
-                    if live["symbol"] in CRYPTO else 1.0 - METAL_STOP_PCT
+    reconciled_stopouts = _reconcile_missing_stop_fills(
+        client, list(db_positions.values()), raw_positions
+    )
+    for symbol in reconciled_stopouts:
+        db_positions.pop(symbol, None)
+    stopped_out_symbols = _stopped_out_symbols(now)
+    stopped_out_symbols.update(reconciled_stopouts)
+    quarterly_rebalance = _quarterly_rebalance_date(now)
+    if quarterly_rebalance:
+        stopped_out_symbols.clear()
+
+    def build_strategy_positions() -> list[dict[str, Any]]:
+        positions = []
+        for live in live_positions:
+            stored = db_positions.get(_canonical_symbol(live["symbol"]), {})
+            entry_price = stored.get("entry_price", live["entry_price"])
+            positions.append({
+                **live,
+                "stop_price": stored.get(
+                    "stop_price",
+                    entry_price * (
+                        1.0 - CRYPTO_STOP_PCT
+                        if live["symbol"] in CRYPTO else 1.0 - METAL_STOP_PCT
+                    ),
                 ),
-            ),
-            "stop_order_id": stored.get("stop_order_id"),
-        })
+                "stop_order_id": stored.get("stop_order_id"),
+            })
+        return positions
+
+    positions = build_strategy_positions()
     _log_decision(cycle_id, "CYCLE_START", context={"equity": account["equity"]})
     equity_session_open = _nyse_session_open(now)
     _maintain_protective_stops(client, positions, cycle_id, equity_session_open)
-    _software_backstop(client, positions, cycle_id, equity_session_open)
-    if not initial_entry and not partial_entry and not _quarterly_rebalance_date(now):
+    software_stopouts = _software_backstop(
+        client, positions, cycle_id, equity_session_open
+    ) or set()
+    if software_stopouts:
+        raw_positions = client.positions()
+        live_positions = [
+            position for position in raw_positions
+            if _canonical_symbol(position["symbol"]) in ASSETS
+            and _canonical_symbol(position["symbol"]) not in VAULT_SYMBOLS
+        ]
+        db_positions = {
+            position["symbol"]: position for position in _strategy_positions()
+        }
+        stopped_out_symbols.update(software_stopouts)
+        if not quarterly_rebalance:
+            stopped_out_symbols.update(_stopped_out_symbols(now))
+        else:
+            stopped_out_symbols.clear()
+        positions = build_strategy_positions()
+
+    eligible_assets = set(ASSETS) - stopped_out_symbols
+    held_symbols = {
+        _canonical_symbol(position["symbol"]) for position in live_positions
+    }
+    held_eligible_symbols = held_symbols & eligible_assets
+    initial_entry = (
+        not live_positions and not db_positions and bool(eligible_assets)
+    )
+    partial_entry = (
+        bool(live_positions) and held_eligible_symbols != eligible_assets
+    )
+    if not initial_entry and not partial_entry and not quarterly_rebalance:
         _log_decision(cycle_id, "NO_REBALANCE", reason="not first trading day of quarter")
         return {"status": "complete", "orders": 0, "reason": "not_quarterly_date"}
     if not _nyse_session_open(now):
@@ -1454,6 +1745,11 @@ def run_bot3_cycle(
         max_deployment=max_deployment,
         crypto_ceiling_usd=crypto_ceiling_usd,
     )
+    plan = [
+        item for item in plan
+        if item["side"] != "buy"
+        or _canonical_symbol(item["symbol"]) in eligible_assets
+    ]
     orders = 0
     broker_positions_by_symbol = {
         _canonical_symbol(position["symbol"]): position
@@ -1499,8 +1795,11 @@ def run_bot3_cycle(
                 client, item, stored_position, cycle_id
             )
         elif item["side"] == "buy":
-            _place_confirmed_entry(client, item["symbol"], item["qty"], cycle_id)
-            orders += 1
+            entry_result = _place_confirmed_entry(
+                client, item["symbol"], item["qty"], cycle_id
+            )
+            if (entry_result or {}).get("order_submitted") is not False:
+                orders += 1
         else:
             continue
     return {

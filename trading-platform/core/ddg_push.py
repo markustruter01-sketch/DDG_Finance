@@ -234,6 +234,34 @@ def _flag_text(flag: Any) -> str:
     return json.dumps(flag, sort_keys=True, default=str, separators=(",", ":"))[:300]
 
 
+def _detail_orders_with_stop_price(client: Any) -> list[dict[str, Any]]:
+    """Read open orders for detail while retaining Alpaca's broker stop price."""
+    from alpaca.trading.enums import QueryOrderStatus
+    from alpaca.trading.requests import GetOrdersRequest
+
+    result = []
+    request = GetOrdersRequest(
+        status=QueryOrderStatus.OPEN,
+        nested=True,
+        limit=500,
+    )
+    for order in client.get_orders(filter=request):
+        asset_class = getattr(order, "asset_class", None)
+        result.append(
+            {
+                "id": str(order.id),
+                "symbol": str(order.symbol),
+                "side": getattr(order.side, "value", order.side),
+                "type": getattr(order.type, "value", order.type),
+                "qty": float(order.qty or 0),
+                "status": getattr(order.status, "value", order.status),
+                "asset_class": getattr(asset_class, "value", asset_class),
+                "stop_price": getattr(order, "stop_price", None),
+            }
+        )
+    return result
+
+
 def build_detail() -> dict[str, Any]:
     """Build optional broker-backed detail using read-only DB and Alpaca reads."""
     from core.bot_registry import BOT_REGISTRY
@@ -243,7 +271,7 @@ def build_detail() -> dict[str, Any]:
     from core.runner_heartbeat import get_runner_status
     from core.symbols import canonical_symbol
     from execution.per_bot_vault import VAULT_BIL_SYMBOL, VAULT_VOO_SYMBOL
-    from execution.reconciliation import _orders, _positions
+    from execution.reconciliation import _positions
     from db.postgres import get_conn
 
     bot_ids = sorted(ACTIVE_BOT_IDS)
@@ -367,28 +395,46 @@ def build_detail() -> dict[str, Any]:
         client = _fresh_read_client(bot_id)
         _set_alpaca_read_timeout(client)
         broker_positions = _positions(client)
-        open_orders = _orders(client)
+        open_orders = _detail_orders_with_stop_price(client)
         for position in broker_positions:
             symbol = str(position["symbol"])
             symbol_key = canonical_symbol(symbol)
             ledger = ledgers[bot_id].get(symbol_key, {})
             if symbol_key in special_symbols:
                 has_broker_stop: bool | None = None
+                stop_price = None
             else:
-                has_broker_stop = any(
-                    str(order.get("side", "")).lower() == "sell"
+                covering_orders = [
+                    order
+                    for order in open_orders
+                    if str(order.get("side", "")).lower() == "sell"
                     and str(order.get("type", "")).lower().replace("-", "_")
                     in {"stop", "stop_limit"}
                     and _covers(position, order)
-                    for order in open_orders
-                )
+                ]
+                has_broker_stop = bool(covering_orders)
+                stop_price = None
+                if has_broker_stop:
+                    covering_prices = [
+                        _optional_ledger_number(
+                            order.get("stop_price"), "broker.stop_price"
+                        )
+                        for order in covering_orders
+                    ]
+                    if any(price is None for price in covering_prices):
+                        raise ValueError(
+                            "covering broker stop is missing stop_price"
+                        )
+                    stop_price = max(
+                        price for price in covering_prices if price is not None
+                    )
             positions.append(
                 {
                     "bot_id": bot_id,
                     "symbol": symbol,
                     "qty": _finite_number(position["qty"], "position.qty"),
                     "entry_price": ledger.get("entry_price"),
-                    "stop_price": ledger.get("stop_price"),
+                    "stop_price": stop_price,
                     "has_broker_stop": has_broker_stop,
                     "source": "broker",
                 }

@@ -23,26 +23,6 @@ const riskMetricsCss = `.obs-risk-section{margin:-10px 0 30px}.obs-risk-head{ali
 function value(v: number | null | undefined, format: (n:number)=>string = n => String(n)) { return v == null ? "NULL" : format(v); }
 function metricValue(v: number | null | undefined, format: (n:number)=>string = n => String(n)) { return v == null || !Number.isFinite(v) ? "—" : format(v); }
 function path(points: number[]) { if (!points.length) return ""; const min=Math.min(...points), max=Math.max(...points), range=max-min||1; return points.map((v,i)=>`${i?'L':'M'} ${(i/(points.length-1||1))*238+2} ${72-((v-min)/range)*64}`).join(" "); }
-function portfolioChartGeometry(points: number[]) {
-  if (points.length < 2) return null;
-  const maxPoints = 300;
-  const sampled = points.length > maxPoints
-    ? Array.from({ length: maxPoints }, (_, index) => points[Math.round(index * (points.length - 1) / (maxPoints - 1))])
-    : points;
-  const min = Math.min(...sampled);
-  const max = Math.max(...sampled);
-  const range = max - min || 1;
-  const coordinates = sampled.map((point, index) => ({
-    x: 4 + (index / (sampled.length - 1)) * 992,
-    y: 60 - ((point - min) / range) * 48,
-  }));
-  const line = coordinates.map((point, index) => `${index ? "L" : "M"} ${point.x} ${point.y}`).join(" ");
-  return {
-    line,
-    area: `${line} L 996 66 L 4 66 Z`,
-    last: coordinates[coordinates.length - 1],
-  };
-}
 function ratioTone(v: number | null | undefined) { return v == null ? "" : v >= 1 ? "positive" : v >= 0 ? "warning" : "negative"; }
 function percentTone(v: number | null | undefined) { return v == null ? "" : v >= 0 ? "positive" : "negative"; }
 function fmtRiskRatio(v: number | null | undefined) { return v == null ? "—" : v.toFixed(2); }
@@ -106,24 +86,6 @@ const botCardsLayoutCss = `
 @media(prefers-reduced-motion:reduce){.obs-bot-card,.obs-bot-card:hover{transition:none;transform:none}}
 `;
 
-const portfolioHistoryCss = `
-.obs-portfolio-chart-panel{display:grid;gap:4px;margin:0 0 14px;padding:10px 15px 8px;border:1px solid rgba(232,255,247,.28);border-radius:14px;background:rgba(255,255,255,.12);box-shadow:0 10px 28px rgba(2,17,22,.16),inset 0 1px rgba(255,255,255,.16);backdrop-filter:blur(13px) saturate(130%);-webkit-backdrop-filter:blur(13px) saturate(130%)}
-.obs-portfolio-chart-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;min-width:0}
-.obs-portfolio-chart-title{color:var(--muted);font:8px/1.2 monospace;letter-spacing:.12em;text-transform:uppercase}
-.obs-portfolio-chart-total{margin-top:3px;color:var(--ink);font:clamp(17px,1.8vw,23px)/1 monospace;letter-spacing:-.05em;font-variant-numeric:tabular-nums}
-.obs-portfolio-chart-meta{display:flex;align-items:center;justify-content:flex-end;gap:8px 14px;flex-wrap:wrap;color:var(--muted);font:8px/1.25 monospace;text-align:right}
-.obs-portfolio-chart-meta strong{margin-left:4px;color:var(--ink);font-size:10px;font-weight:600}
-.obs-portfolio-chart-plot{height:58px;min-width:0}
-.obs-portfolio-chart-plot svg{display:block;width:100%;height:100%;overflow:visible}
-.obs-portfolio-gridline{stroke:rgba(232,255,247,.14);stroke-dasharray:3 5;vector-effect:non-scaling-stroke}
-.obs-portfolio-area{fill:url(#portfolio-history-gradient)}
-.obs-portfolio-line{fill:none;stroke:var(--portfolio-accent);stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
-.obs-portfolio-endpoint{fill:var(--portfolio-accent);stroke:rgba(255,255,255,.9);stroke-width:1.5;vector-effect:non-scaling-stroke}
-.obs-portfolio-dates{display:flex;justify-content:space-between;gap:10px;color:var(--dim);font:7px/1.2 monospace;text-transform:uppercase}
-.obs-portfolio-empty{display:flex;align-items:center;min-height:48px;color:var(--muted);font:9px/1.35 monospace}
-@media(max-width:900px){.obs-portfolio-chart-panel{padding:10px 12px 8px}.obs-portfolio-chart-meta{gap:6px 10px}}
-`;
-
 export default function ObservatoryHome({
   runnerStatus,
   runnerStatusError,
@@ -145,18 +107,6 @@ export default function ObservatoryHome({
     } catch { /* existing report mutation surfaces its own error state */ }
   };
   const points = useMemo(()=> (history.data?.history ?? performance.data?.snapshots ?? []).map(p => Number("total_equity" in p ? p.total_equity : p.equity)).filter(Number.isFinite), [history.data,performance.data]);
-  const portfolioChart = useMemo(() => portfolioChartGeometry(points), [points]);
-  const portfolioHistory = history.data?.history ?? [];
-  const portfolioHistoryStart = fmtRiskDate(portfolioHistory[0]?.date);
-  const portfolioHistoryEnd = fmtRiskDate(portfolioHistory[portfolioHistory.length - 1]?.date);
-  const portfolioChartMessage = (history.isLoading && !history.data) || (performance.isLoading && !performance.data)
-    ? "Loading portfolio history…"
-    : history.isError && performance.isError
-      ? "Portfolio history unavailable from the current API"
-      : points.length === 1
-        ? "Waiting for a second snapshot to draw the trend"
-        : "No portfolio history returned";
-  const portfolioAccent = total?.pnl_pct == null ? "#8cf1d5" : total.pnl_pct >= 0 ? "#b7ef75" : "#ff9a91";
   const slices = { oracle, spy_qqq_trend: spy, jerome_macro: jerome };
   const bots = (registryQuery.data?.bots ?? [])
     .filter((bot) => bot.status !== "retired")
@@ -202,7 +152,7 @@ export default function ObservatoryHome({
     { label: "Annual volatility", value: fmtRiskPct(riskData?.volatility_annual_pct), detail: "Annualized standard deviation", tone: riskData?.volatility_annual_pct == null ? "" : riskData.volatility_annual_pct < 20 ? "positive" : riskData.volatility_annual_pct < 40 ? "warning" : "negative" },
     { label: "Annual return", value: fmtRiskPct(riskData?.annualised_return_pct, true), detail: riskData?.insufficient_data ? "Insufficient history to annualize" : "Annualized portfolio return", tone: percentTone(riskData?.annualised_return_pct) },
   ];
-    return <main className="observatory"><style>{css + riskMetricsCss + mobileVisualTreatment + mobileGlassBoxTreatment + dashboardOverviewCss + botCardsLayoutCss + portfolioHistoryCss}</style><div className="obs-shell">
+    return <main className="observatory"><style>{css + riskMetricsCss + mobileVisualTreatment + mobileGlassBoxTreatment + dashboardOverviewCss + botCardsLayoutCss}</style><div className="obs-shell">
      <div className="obs-topline"><div className="obs-brand" aria-label="Fleet Observatory"><span className="obs-mark"><Crosshair size={15}/></span>FLEET / OBSERVATORY</div><div className="obs-session"><span style={{ color: killTripped == null || killSwitchArmed == null ? "#fbbf24" : undefined }}><i className="obs-dot" style={{ background: killTripped == null || killSwitchArmed == null ? "#f59e0b" : undefined, boxShadow: killTripped == null || killSwitchArmed == null ? "0 0 9px #f59e0b" : undefined }}/> {killTripped == null || killSwitchArmed == null ? "KILL SWITCH UNKNOWN" : killTripped ? "KILL SWITCH" : killSwitchArmed ? "SYSTEM ARMED" : "SYSTEM DISARMED"}</span><span><i className="obs-dot"/> SYNCED {lastCycle ? new Date(lastCycle).toISOString().slice(11,19)+" UTC" : "NULL"}</span><button className="obs-button" onClick={()=>setExportOpen(v=>!v)} aria-label="Open export options" aria-expanded={exportOpen}><Download size={13} aria-hidden="true"/></button>{exportOpen&&<><button className="obs-button" onClick={downloadReport} disabled={report.isPending}>Export full report</button><button className="obs-button" onClick={()=>navigate("/stream")}>Full report</button></>}</div></div>
        <section className="obs-summary obs-summary-compact" aria-label="Fleet quick information">
          <div className="obs-summary-cell obs-quick-primary" title="Total fleet equity and lifetime profit or loss">
@@ -284,54 +234,6 @@ export default function ObservatoryHome({
           <h2 className="obs-section-title" id="engines">▰ Strategy engines</h2>
           <div className="obs-meta">equity curves / risk evidence / UTC</div>
         </div>
-        <section
-          className="obs-portfolio-chart-panel"
-          aria-labelledby="portfolio-history-title"
-          data-testid="portfolio-history-chart"
-          style={{ "--portfolio-accent": portfolioAccent } as CSSProperties}
-        >
-          <div className="obs-portfolio-chart-heading">
-            <div>
-              <div className="obs-portfolio-chart-title" id="portfolio-history-title">Total portfolio value</div>
-              <div className="obs-portfolio-chart-total">{metricValue(total?.equity, fmtEq)}</div>
-            </div>
-            <div className="obs-portfolio-chart-meta">
-              <span>Lifetime P&amp;L<strong className={percentTone(total?.pnl)}>{metricValue(total?.pnl, fmtDollar)}</strong></span>
-              <span>Lifetime return<strong className={percentTone(total?.pnl_pct)}>{metricValue(total?.pnl_pct, fmtPct)}</strong></span>
-            </div>
-          </div>
-          {portfolioChart ? (
-            <>
-              <div className="obs-portfolio-chart-plot">
-                <svg
-                  viewBox="0 0 1000 72"
-                  preserveAspectRatio="none"
-                  role="img"
-                  aria-label={`Total portfolio value history${portfolioHistoryStart && portfolioHistoryEnd ? ` from ${portfolioHistoryStart} to ${portfolioHistoryEnd}` : ""}`}
-                >
-                  <defs>
-                    <linearGradient id="portfolio-history-gradient" x1="0" x2="0" y1="0" y2="1">
-                      <stop offset="0%" stopColor={portfolioAccent} stopOpacity=".30" />
-                      <stop offset="100%" stopColor={portfolioAccent} stopOpacity=".02" />
-                    </linearGradient>
-                  </defs>
-                  <line className="obs-portfolio-gridline" x1="0" x2="1000" y1="12" y2="12" />
-                  <line className="obs-portfolio-gridline" x1="0" x2="1000" y1="36" y2="36" />
-                  <line className="obs-portfolio-gridline" x1="0" x2="1000" y1="60" y2="60" />
-                  <path className="obs-portfolio-area" d={portfolioChart.area} />
-                  <path className="obs-portfolio-line" d={portfolioChart.line} />
-                  <circle className="obs-portfolio-endpoint" cx={portfolioChart.last.x} cy={portfolioChart.last.y} r="4" />
-                </svg>
-              </div>
-              <div className="obs-portfolio-dates">
-                <span>{portfolioHistoryStart ?? "Earliest snapshot"}</span>
-                <span>{portfolioHistoryEnd ?? "Latest snapshot"}</span>
-              </div>
-            </>
-          ) : (
-            <div className="obs-portfolio-empty" role="status">{portfolioChartMessage}</div>
-          )}
-        </section>
         {registryQuery.isLoading && !registryQuery.data && (
           <div className="obs-note" data-testid="status-strategy-engines-loading">
             Loading bot registry…

@@ -52,6 +52,39 @@ const dashboardOverviewCss = `
 @media(max-width:900px){.obs-summary.obs-summary-compact{grid-template-columns:repeat(6,minmax(0,1fr))}}
 `;
 
+const botCardsLayoutCss = `
+.obs-bot-row{grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.obs-bot-card{display:flex;min-width:0;flex-direction:column;padding:12px;background:rgba(255,255,255,.14);border-color:rgba(232,255,247,.3);box-shadow:0 14px 34px rgba(2,17,22,.2),inset 0 1px rgba(255,255,255,.2);backdrop-filter:blur(17px) saturate(135%);-webkit-backdrop-filter:blur(17px) saturate(135%);transition:transform 160ms ease,border-color 160ms ease,background-color 160ms ease}
+.obs-bot-card:hover{transform:translateY(-2px);border-color:rgba(232,255,247,.5);background-color:rgba(255,255,255,.19)}
+.obs-card-head{align-items:flex-start;gap:8px}
+.obs-bot-eyebrow{color:var(--accent);font-size:8px}
+.obs-bot-name{margin:4px 0 0;font-size:clamp(14px,1.35vw,18px);line-height:1.2}
+.obs-bot-code{flex-shrink:0;padding:4px 6px;border:1px solid rgba(232,255,247,.24);border-radius:999px;color:var(--ink);background:rgba(9,33,42,.34);font-size:8px;white-space:nowrap}
+.obs-equity-line{align-items:end;gap:7px;margin-top:12px}
+.obs-equity{font-size:clamp(17px,1.8vw,22px);white-space:nowrap;font-variant-numeric:tabular-nums}
+.obs-return{font-size:10px;white-space:nowrap}
+.obs-return span{font-size:8px}
+.obs-chart{height:58px;margin-top:8px;padding:4px 0 2px}
+.obs-chart .obs-note{overflow:hidden;font-size:8px;line-height:1.2;text-overflow:ellipsis;white-space:nowrap}
+.obs-metrics{gap:3px;margin-top:9px}
+.obs-metric{min-width:0;padding-right:4px}
+.obs-metric label{font-size:7px;letter-spacing:0}
+.obs-metric strong{margin-top:4px;font-size:10px;white-space:nowrap}
+.obs-detail{margin-top:10px;padding-top:7px;font-size:8px}
+.obs-chips{gap:4px;margin-top:5px}
+.obs-chip{padding:3px 5px;font-size:8px;line-height:1.15}
+.obs-more{margin-top:7px;border-top:1px solid var(--line);color:var(--muted);font:8px/1.35 monospace}
+.obs-more summary{padding:6px 0 2px;color:var(--muted);cursor:pointer;list-style-position:inside}
+.obs-more-content{display:grid;gap:7px;padding:3px 0 5px}
+.obs-extra-label{display:block;margin-bottom:2px;color:var(--dim);font:7px/1.25 monospace;text-transform:uppercase}
+.obs-cycle{align-items:flex-start;gap:4px;margin-top:auto;padding-top:8px;border-top:1px solid var(--line);font-size:7px;line-height:1.35}
+.obs-cycle span{display:flex;flex-shrink:0;align-items:center;gap:4px}
+.obs-cycle strong{overflow:hidden;font-size:7px;font-variant-numeric:tabular-nums;text-align:right;text-overflow:ellipsis}
+@media(max-width:900px){.obs-bot-row{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){.obs-bot-row{grid-template-columns:minmax(0,1fr)}}
+@media(prefers-reduced-motion:reduce){.obs-bot-card,.obs-bot-card:hover{transition:none;transform:none}}
+`;
+
 export default function ObservatoryHome({
   runnerStatus,
   runnerStatusError,

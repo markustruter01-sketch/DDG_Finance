@@ -29,6 +29,7 @@ _TRADES_DEFAULT_ACCOUNT = "oracle"
 _MATERIAL_NOTIONAL = 0.01
 _AUTHORITATIVE_POSITION_TABLES = {
     "oracle": "alpaca_etf_positions",
+    "spy_qqq_trend": "bot2_momentum_positions",
     "jerome_macro": "bot3_positions",
 }
 _TERMINAL_ORDER_STATUSES = {"canceled", "filled", "expired", "rejected"}
@@ -145,8 +146,6 @@ def _authoritative_ledger_positions(bot_id: str) -> list[dict[str, Any]]:
     bot_id = resolve_bot_id(bot_id)
     table = _AUTHORITATIVE_POSITION_TABLES.get(bot_id)
     if table is None:
-        # Bot 2 is paused and intentionally has no authoritative strategy path
-        # until it is reactivated.
         return []
     quantity_column = (
         "current_qty" if table == "alpaca_etf_positions" else "qty"
@@ -221,6 +220,17 @@ def _active_ledger_rows() -> list[dict[str, Any]]:
                         status,
                         opened_at
                     FROM alpaca_etf_positions
+                    WHERE lower(status) = 'open'
+                    UNION ALL
+                    SELECT
+                        'bot2_momentum_positions',
+                        bot_id,
+                        symbol,
+                        qty::double precision,
+                        notional_usd::double precision,
+                        status,
+                        opened_at
+                    FROM bot2_momentum_positions
                     WHERE lower(status) = 'open'
                     UNION ALL
                     SELECT
@@ -519,6 +529,7 @@ def _stop_ledger_rows(bot_id: str) -> list[dict[str, Any]]:
     """
     bot_id = resolve_bot_id(bot_id)
     rows: list[dict[str, Any]] = []
+    table = _AUTHORITATIVE_POSITION_TABLES.get(bot_id)
     try:
         from db.postgres import get_conn
         with get_conn() as conn:
@@ -538,10 +549,9 @@ def _stop_ledger_rows(bot_id: str) -> list[dict[str, Any]]:
                         }
                         for row in cur.fetchall()
                     )
-                if bot_id == "oracle":
+                if table is not None:
                     cur.execute(
-                        "SELECT bot_id, symbol, stop_order_id "
-                        "FROM alpaca_etf_positions "
+                        f"SELECT bot_id, symbol, stop_order_id FROM {table} "
                         "WHERE bot_id = %s AND status = 'open' "
                         "AND stop_order_id IS NOT NULL",
                         (bot_id,),
@@ -551,25 +561,7 @@ def _stop_ledger_rows(bot_id: str) -> list[dict[str, Any]]:
                             "bot_id": row[0],
                             "symbol": row[1],
                             "stop_order_id": str(row[2]),
-                            "table": "alpaca_etf_positions",
-                            "reverse_check": True,
-                        }
-                        for row in cur.fetchall()
-                    )
-                elif bot_id == "jerome_macro":
-                    cur.execute(
-                        "SELECT bot_id, symbol, stop_order_id "
-                        "FROM bot3_positions "
-                        "WHERE bot_id = %s AND status = 'open' "
-                        "AND stop_order_id IS NOT NULL",
-                        (bot_id,),
-                    )
-                    rows.extend(
-                        {
-                            "bot_id": row[0],
-                            "symbol": row[1],
-                            "stop_order_id": str(row[2]),
-                            "table": "bot3_positions",
+                            "table": table,
                             "reverse_check": True,
                         }
                         for row in cur.fetchall()

@@ -252,6 +252,7 @@ def test_reconcile_dry_run_returns_would_alert_without_persisting(monkeypatch):
     ("bot_id", "table"),
     [
         ("oracle", "alpaca_etf_positions"),
+        ("spy_qqq_trend", "bot2_momentum_positions"),
         ("jerome_macro", "bot3_positions"),
     ],
 )
@@ -377,7 +378,16 @@ def test_active_ledger_read_uses_etf_current_qty_and_keeps_bot3_qty(
                 1000.0,
                 "open",
                 "2026-08-24",
-            )
+            ),
+            (
+                "bot2_momentum_positions",
+                "spy_qqq_trend",
+                "SPY",
+                10.0,
+                5000.0,
+                "open",
+                "2026-10-06",
+            ),
         ]
     )
 
@@ -390,9 +400,20 @@ def test_active_ledger_read_uses_etf_current_qty_and_keeps_bot3_qty(
     rows = reconciliation._active_ledger_rows()
 
     assert rows[0]["qty"] is None
+    assert rows[1] == {
+        "table": "bot2_momentum_positions",
+        "bot_id": "spy_qqq_trend",
+        "symbol": "SPY",
+        "qty": 10.0,
+        "notional_usd": 5000.0,
+        "status": "open",
+        "opened_at": "2026-10-06",
+    }
     query, params = connection.cursor_instance.calls[0]
     assert "current_qty::double precision AS qty" in query
     assert "'bot3_positions'" in query
+    assert "'bot2_momentum_positions'" in query
+    assert "FROM bot2_momentum_positions" in query
     assert "qty::double precision" in query
     assert params == ()
 
@@ -432,20 +453,219 @@ def test_ledger_orphan_findings_report_unmapped_etf_null_quantity(monkeypatch):
     ]
 
 
-def test_authoritative_quantity_check_has_no_bot2_path(monkeypatch):
-    def fail_if_read(_bot_id):
-        raise AssertionError("Bot 2 must not use an authoritative strategy path")
+def test_authoritative_momentum_ledger_reads_bot2_qty(monkeypatch):
+    connection = _Connection(rows=[("SPY", 10.0)])
 
+    @contextmanager
+    def fake_get_conn():
+        yield connection
+
+    monkeypatch.setattr("db.postgres.get_conn", fake_get_conn)
+
+    rows = reconciliation._authoritative_ledger_positions("spy_qqq_trend")
+
+    assert rows == [
+        {
+            "table": "bot2_momentum_positions",
+            "bot_id": "spy_qqq_trend",
+            "symbol": "SPY",
+            "qty": 10.0,
+        }
+    ]
+    query, params = connection.cursor_instance.calls[0]
+    assert "FROM bot2_momentum_positions" in query
+    assert "qty::double precision AS qty" in query
+    assert params == ("spy_qqq_trend",)
+
+
+@pytest.mark.parametrize(
+    ("bot_id", "read_tables", "expected_rows"),
+    [
+        (
+            "oracle",
+            ("ratchet_stops", "alpaca_etf_positions"),
+            [
+                {
+                    "bot_id": "oracle",
+                    "symbol": "SPY",
+                    "stop_order_id": "legacy-oracle-stop",
+                    "table": "ratchet_stops",
+                    "reverse_check": False,
+                },
+                {
+                    "bot_id": "oracle",
+                    "symbol": "SPY",
+                    "stop_order_id": "oracle-stop",
+                    "table": "alpaca_etf_positions",
+                    "reverse_check": True,
+                },
+            ],
+        ),
+        (
+            "jerome_macro",
+            ("bot3_positions",),
+            [
+                {
+                    "bot_id": "jerome_macro",
+                    "symbol": "SLV",
+                    "stop_order_id": "bullion-stop",
+                    "table": "bot3_positions",
+                    "reverse_check": True,
+                }
+            ],
+        ),
+        (
+            "spy_qqq_trend",
+            ("bot2_momentum_positions",),
+            [
+                {
+                    "bot_id": "spy_qqq_trend",
+                    "symbol": "SPY",
+                    "stop_order_id": "momentum-stop",
+                    "table": "bot2_momentum_positions",
+                    "reverse_check": True,
+                }
+            ],
+        ),
+    ],
+)
+def test_stop_ledger_rows_use_authoritative_table_and_preserve_oracle_legacy(
+    monkeypatch, bot_id, read_tables, expected_rows
+):
+    class _MappedCursor:
+        def __init__(self):
+            self.calls = []
+            self.rows = []
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def execute(self, query, params=None):
+            params = () if params is None else params
+            assert query.count("%s") == len(params)
+            self.calls.append((query, params))
+            if "FROM ratchet_stops" in query:
+                self.rows = [("SPY", "legacy-oracle-stop")]
+            elif "FROM alpaca_etf_positions" in query:
+                self.rows = [("oracle", "SPY", "oracle-stop")]
+            elif "FROM bot3_positions" in query:
+                self.rows = [("jerome_macro", "SLV", "bullion-stop")]
+            elif "FROM bot2_momentum_positions" in query:
+                self.rows = [("spy_qqq_trend", "SPY", "momentum-stop")]
+            else:
+                raise AssertionError(f"unexpected ledger query: {query}")
+
+        def fetchall(self):
+            return self.rows
+
+    class _MappedConnection:
+        def __init__(self):
+            self.cursor_instance = _MappedCursor()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def cursor(self):
+            return self.cursor_instance
+
+    connection = _MappedConnection()
+
+    @contextmanager
+    def fake_get_conn():
+        yield connection
+
+    monkeypatch.setattr("db.postgres.get_conn", fake_get_conn)
+
+    assert reconciliation._stop_ledger_rows(bot_id) == expected_rows
+    queries = [query for query, _params in connection.cursor_instance.calls]
+    assert len(queries) == len(read_tables)
+    for table in read_tables:
+        assert any(f"FROM {table}" in query for query in queries)
+
+
+def test_momentum_stop_matching_its_record_has_no_finding(monkeypatch):
     monkeypatch.setattr(
         reconciliation,
-        "_authoritative_ledger_positions",
-        fail_if_read,
+        "_stop_ledger_rows",
+        lambda _bot_id: [
+            {
+                "bot_id": "spy_qqq_trend",
+                "symbol": "SPY",
+                "stop_order_id": "momentum-stop",
+                "table": "bot2_momentum_positions",
+                "reverse_check": True,
+            }
+        ],
     )
 
-    assert reconciliation._authoritative_quantity_mismatches(
+    assert reconciliation._order_mismatches(
         "spy_qqq_trend",
-        [{"symbol": "BIL", "qty": 10}],
+        [
+            {
+                "id": "momentum-stop",
+                "symbol": "SPY",
+                "side": "sell",
+                "type": "stop",
+                "status": "new",
+            }
+        ],
     ) == []
+
+
+def test_momentum_stop_without_record_is_flagged(monkeypatch):
+    monkeypatch.setattr(reconciliation, "_stop_ledger_rows", lambda _bot_id: [])
+
+    assert reconciliation._order_mismatches(
+        "spy_qqq_trend",
+        [
+            {
+                "id": "unrecorded-momentum-stop",
+                "symbol": "SPY",
+                "side": "sell",
+                "type": "stop",
+                "status": "new",
+            }
+        ],
+    ) == [
+        {
+            "bot_id": "spy_qqq_trend",
+            "order_id": "unrecorded-momentum-stop",
+            "symbol": "SPY",
+            "kind": "broker_open_order_without_ledger",
+        }
+    ]
+
+
+def test_momentum_recorded_stop_missing_at_broker_is_flagged(monkeypatch):
+    monkeypatch.setattr(
+        reconciliation,
+        "_stop_ledger_rows",
+        lambda _bot_id: [
+            {
+                "bot_id": "spy_qqq_trend",
+                "symbol": "SPY",
+                "stop_order_id": "missing-momentum-stop",
+                "table": "bot2_momentum_positions",
+                "reverse_check": True,
+            }
+        ],
+    )
+
+    assert reconciliation._order_mismatches("spy_qqq_trend", []) == [
+        {
+            "bot_id": "spy_qqq_trend",
+            "table": "bot2_momentum_positions",
+            "symbol": "SPY",
+            "stop_order_id": "missing-momentum-stop",
+            "kind": "ledger_stop_without_broker",
+        }
+    ]
 
 
 def test_order_mismatches_matches_per_bot_and_symbol_and_keeps_pending_cancel_live(

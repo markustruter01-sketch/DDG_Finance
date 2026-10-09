@@ -55,6 +55,7 @@ const dashboardOverviewCss = `
 const botCardsLayoutCss = `
 .obs-bot-row{grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
 .obs-bot-card{display:flex;min-width:0;flex-direction:column;padding:12px;background:rgba(255,255,255,.14);border-color:rgba(232,255,247,.3);box-shadow:0 14px 34px rgba(2,17,22,.2),inset 0 1px rgba(255,255,255,.2);backdrop-filter:blur(17px) saturate(135%);-webkit-backdrop-filter:blur(17px) saturate(135%);transition:transform 160ms ease,border-color 160ms ease,background-color 160ms ease}
+.observatory .obs-bot-card{border-top:2px solid var(--accent)}
 .obs-bot-card:hover{transform:translateY(-2px);border-color:rgba(232,255,247,.5);background-color:rgba(255,255,255,.19)}
 .obs-card-head{align-items:flex-start;gap:8px}
 .obs-bot-eyebrow{color:var(--accent);font-size:8px}
@@ -151,7 +152,7 @@ export default function ObservatoryHome({
     { label: "Annual volatility", value: fmtRiskPct(riskData?.volatility_annual_pct), detail: "Annualized standard deviation", tone: riskData?.volatility_annual_pct == null ? "" : riskData.volatility_annual_pct < 20 ? "positive" : riskData.volatility_annual_pct < 40 ? "warning" : "negative" },
     { label: "Annual return", value: fmtRiskPct(riskData?.annualised_return_pct, true), detail: riskData?.insufficient_data ? "Insufficient history to annualize" : "Annualized portfolio return", tone: percentTone(riskData?.annualised_return_pct) },
   ];
-    return <main className="observatory"><style>{css + riskMetricsCss + mobileVisualTreatment + mobileGlassBoxTreatment + dashboardOverviewCss}</style><div className="obs-shell">
+    return <main className="observatory"><style>{css + riskMetricsCss + mobileVisualTreatment + mobileGlassBoxTreatment + dashboardOverviewCss + botCardsLayoutCss}</style><div className="obs-shell">
      <div className="obs-topline"><div className="obs-brand" aria-label="Fleet Observatory"><span className="obs-mark"><Crosshair size={15}/></span>FLEET / OBSERVATORY</div><div className="obs-session"><span style={{ color: killTripped == null || killSwitchArmed == null ? "#fbbf24" : undefined }}><i className="obs-dot" style={{ background: killTripped == null || killSwitchArmed == null ? "#f59e0b" : undefined, boxShadow: killTripped == null || killSwitchArmed == null ? "0 0 9px #f59e0b" : undefined }}/> {killTripped == null || killSwitchArmed == null ? "KILL SWITCH UNKNOWN" : killTripped ? "KILL SWITCH" : killSwitchArmed ? "SYSTEM ARMED" : "SYSTEM DISARMED"}</span><span><i className="obs-dot"/> SYNCED {lastCycle ? new Date(lastCycle).toISOString().slice(11,19)+" UTC" : "NULL"}</span><button className="obs-button" onClick={()=>setExportOpen(v=>!v)} aria-label="Open export options" aria-expanded={exportOpen}><Download size={13} aria-hidden="true"/></button>{exportOpen&&<><button className="obs-button" onClick={downloadReport} disabled={report.isPending}>Export full report</button><button className="obs-button" onClick={()=>navigate("/stream")}>Full report</button></>}</div></div>
        <section className="obs-summary obs-summary-compact" aria-label="Fleet quick information">
          <div className="obs-summary-cell obs-quick-primary" title="Total fleet equity and lifetime profit or loss">
@@ -318,16 +319,25 @@ export default function ObservatoryHome({
                     ))
                     : <span className="obs-note">{slice ? "None reported" : `NULL · ${unavailable}`}</span>}
                 </div>
-                <div className="obs-detail">Return attribution</div>
-                <div className="obs-note">
-                  {attribution.data
-                    ? "Fleet-level attribution only; bot scope NULL"
-                    : `NULL · ${unavailable}`}
-                </div>
-                <div className="obs-detail">Biggest win / loss</div>
-                <div className="obs-note">
-                  NULL · per-bot trade distribution unavailable from current API
-                </div>
+                <details className="obs-more">
+                  <summary>More audit detail</summary>
+                  <div className="obs-more-content">
+                    <div>
+                      <span className="obs-extra-label">Return attribution</span>
+                      <span className="obs-note">
+                        {attribution.data
+                          ? "Fleet-level attribution only; bot scope NULL"
+                          : `NULL · ${unavailable}`}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="obs-extra-label">Biggest win / loss</span>
+                      <span className="obs-note">
+                        NULL · per-bot trade distribution unavailable from current API
+                      </span>
+                    </div>
+                  </div>
+                </details>
                 <div className="obs-cycle">
                   <span><CalendarClock size={11} /> last cycle</span>
                   <strong>{lastCycle ? new Date(lastCycle).toISOString() : "NULL"}</strong>

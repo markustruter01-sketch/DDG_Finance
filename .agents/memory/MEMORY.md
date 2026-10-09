@@ -70,3 +70,4 @@
 - [CSSOM inline-style selectors](cssom-inline-style-selectors.md) — React/browser style serialization can differ from source literals; verify substring selectors against rendered attributes.
 - [Fleet chat prompt interpolation](fleet-chat-prompt-interpolation.md) — preserve literal prompt braces; use a sentinel replacement for registry labels instead of converting the full prompt to an f-string.
 - [Private deployment API audits](private-deployment-api-audit.md) — direct requests to the private published app redirect to ReplShield; don't bypass the gateway or claim live API data is verified.
+- [Mockup patch persistence](mockup-patch-persistence.md) — after an interrupted patch, verify each preview component file and its generated registry entry before trusting the iframe.

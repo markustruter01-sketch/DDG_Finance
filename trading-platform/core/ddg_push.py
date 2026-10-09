@@ -24,10 +24,10 @@ _DETAIL_INSTRUMENTS = {
         "SPY", "QQQ", "EWY", "EWT", "INDA", "EWJ", "EWM", "VNM",
         "EWZ", "EWW", "ECH", "EEM", "EZA", "EPOL", "GREK", "TUR",
     ],
-    # Bot 2's runner screens a dynamic equity universe; these are its fixed
-    # sleeve and cash-park instruments plus a description of that screen.
+    # Bot 2's runner screens a dynamic equity universe; this token identifies
+    # that screen while the fixed sleeve and cash-park instruments stay explicit.
     "spy_qqq_trend": [
-        "dynamic screened equity universe (up to 500)",
+        "SCREENED_EQUITIES",
         "SPY",
         "SGOV",
     ],
@@ -426,8 +426,52 @@ def build_detail() -> dict[str, Any]:
     }
 
 
+def _fit_detail_limits(detail: dict[str, Any]) -> dict[str, Any]:
+    """Copy and truncate optional detail to the receiver's field and list limits."""
+    if not isinstance(detail, dict):
+        raise ValueError("detail payload must be an object")
+
+    string_limits = {
+        "instruments": 20,
+        "strategy": 100,
+        "registry_status": 20,
+        "component": 60,
+        "severity": 20,
+        "message": 300,
+        "flags": 300,
+        "status": 30,
+        "bot_id": 64,
+        "symbol": 20,
+    }
+    list_limits = {
+        "bots_meta": 20,
+        "instruments": 60,
+        "positions": 200,
+        "incidents": 50,
+        "flags": 50,
+        "triggers": 50,
+    }
+
+    def fit_value(value: Any, field: str | None = None) -> Any:
+        if isinstance(value, str):
+            return value[: string_limits.get(field, 300)]
+        if isinstance(value, list):
+            limit = list_limits.get(field)
+            items = value if limit is None else value[:limit]
+            return [fit_value(item, field) for item in items]
+        if isinstance(value, dict):
+            return {
+                key: fit_value(item, key if isinstance(key, str) else None)
+                for key, item in value.items()
+            }
+        return value
+
+    return fit_value(detail)
+
+
 def push_fleet_snapshot() -> None:
     """Send one snapshot when enabled; never let a push failure escape."""
+    key = ""
     try:
         if os.environ.get("FLEET_PUSH_ENABLED") != "true":
             return
@@ -439,18 +483,91 @@ def push_fleet_snapshot() -> None:
 
         payload = build_payload()
         try:
-            payload["detail"] = build_detail()
+            payload["detail"] = _fit_detail_limits(build_detail())
         except Exception as exc:
             logger.warning(f"ddg-push detail-skipped {type(exc).__name__}")
+        detail_included = "detail" in payload
         response = httpx.post(
             url,
             json=payload,
             headers={"Authorization": f"Bearer {key}"},
             timeout=10.0,
         )
-        response.raise_for_status()
-        logger.info(f"ddg-push ok {response.status_code}")
+        status = response.status_code
+        if 400 <= status < 500 and detail_included:
+            error_text = ""
+            try:
+                body = response.json()
+                if isinstance(body, dict) and body.get("error") is not None:
+                    error_text = str(body["error"])
+            except Exception:
+                pass
+            if key and key in error_text:
+                error_text = error_text.replace(key, "[REDACTED]")
+            error_text = error_text[:200]
+            reason = f" {error_text}" if error_text else ""
+            logger.warning(f"ddg-push detail-rejected {status}{reason}")
+
+            payload_without_detail = dict(payload)
+            payload_without_detail.pop("detail", None)
+            response = httpx.post(
+                url,
+                json=payload_without_detail,
+                headers={"Authorization": f"Bearer {key}"},
+                timeout=10.0,
+            )
+            status = response.status_code
+            if 200 <= status < 300:
+                logger.info(f"ddg-push ok {status} (without detail)")
+            else:
+                error_text = ""
+                try:
+                    body = response.json()
+                    if isinstance(body, dict) and body.get("error") is not None:
+                        error_text = str(body["error"])
+                except Exception:
+                    pass
+                if key and key in error_text:
+                    error_text = error_text.replace(key, "[REDACTED]")
+                error_text = error_text[:200]
+                reason = f" {error_text}" if error_text else ""
+                logger.error(f"ddg-push failed {status}{reason}")
+            return
+
+        if not 200 <= status < 300:
+            error_text = ""
+            try:
+                body = response.json()
+                if isinstance(body, dict) and body.get("error") is not None:
+                    error_text = str(body["error"])
+            except Exception:
+                pass
+            if key and key in error_text:
+                error_text = error_text.replace(key, "[REDACTED]")
+            error_text = error_text[:200]
+            reason = f" {error_text}" if error_text else ""
+            logger.error(f"ddg-push failed {status}{reason}")
+            return
+
+        logger.info(f"ddg-push ok {status}")
     except _ModeUnavailable:
-        logger.error("ddg-push failed mode-unavailable")
+        logger.error("ddg-push failed _ModeUnavailable mode-unavailable")
     except Exception as exc:
-        logger.error(f"ddg-push failed {type(exc).__name__}")
+        response = getattr(exc, "response", None)
+        status = getattr(response, "status_code", None)
+        error_text = ""
+        if response is not None:
+            try:
+                body = response.json()
+                if isinstance(body, dict) and body.get("error") is not None:
+                    error_text = str(body["error"])
+            except Exception:
+                pass
+        if not error_text:
+            error_text = str(exc)
+        if key and key in error_text:
+            error_text = error_text.replace(key, "[REDACTED]")
+        error_text = error_text[:200]
+        reason = f" {error_text}" if error_text else ""
+        failure = status if status is not None else type(exc).__name__
+        logger.error(f"ddg-push failed {failure}{reason}")

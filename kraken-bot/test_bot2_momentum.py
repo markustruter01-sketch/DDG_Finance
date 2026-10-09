@@ -10,6 +10,7 @@ import re
 import statistics
 import sys
 from datetime import date, datetime, timezone
+from types import SimpleNamespace
 
 
 _MODULE_PATH = pathlib.Path(__file__).with_name("bot2_momentum_strategy.py")
@@ -204,6 +205,30 @@ def test_latest_price_does_not_fall_back_for_non_403_errors() -> None:
         raise AssertionError("non-403 quote errors must be raised")
 
     assert requests_seen == ["sip"]
+
+
+def test_wait_for_fill_keeps_polling_after_a_partial_fill(monkeypatch) -> None:
+    client = object.__new__(bot2.AlpacaMomentumClient)
+    statuses = iter(
+        [
+            {"status": "new"},
+            {"status": "partially_filled", "filled_qty": "1"},
+            {"status": "filled", "filled_qty": "2"},
+        ]
+    )
+    requests_seen = []
+
+    def request(method, path):
+        requests_seen.append((method, path))
+        return next(statuses)
+
+    monkeypatch.setattr(client, "_request", request)
+    monkeypatch.setattr(bot2.time, "sleep", lambda *_args: None)
+
+    result = client.wait_for_fill("order-1", attempts=3)
+
+    assert result["status"] == "filled"
+    assert len(requests_seen) == 3
 
 
 def test_screen_requires_tradable_us_equity_and_mechanical_liquidity_gates() -> None:
@@ -645,6 +670,61 @@ class _ParkingClient:
         return {"id": "dry-test-order"}
 
 
+class _SgovFundingClient(_ParkingClient):
+    def __init__(
+        self,
+        held_qty: float,
+        cash: float,
+        price: float = 100.0,
+        fill_status: str = "filled",
+    ) -> None:
+        super().__init__(held_qty, cash, price)
+        self.fill_status = fill_status
+        self.requested_qty = 0
+
+    def submit(self, symbol, side, qty, order_type):
+        self.submissions.append((symbol, side, qty, order_type))
+        self.requested_qty = int(qty)
+        if self.fill_status == "filled":
+            self.held_qty -= self.requested_qty
+            self.cash += self.requested_qty * self.price
+        return {"id": "sgov-sale-1"}
+
+    def wait_for_fill(self, order_id):
+        assert order_id == "sgov-sale-1"
+        return {
+            "status": self.fill_status,
+            "filled_qty": str(self.requested_qty),
+            "filled_avg_price": str(self.price),
+        }
+
+
+def test_sgov_sale_covers_planned_buys_and_buffer() -> None:
+    client = _SgovFundingClient(held_qty=20, cash=500)
+
+    result = bot2._sell_sgov_to_fund_buys(client, planned_buy_notional=1_000)
+
+    assert client.submissions == [("SGOV", "sell", 6, "market")]
+    assert client.held_qty == 14
+    assert result == {
+        "confirmed": True,
+        "orders": 1,
+        "sell_qty": 6,
+        "required_cash": 1_010.0,
+        "cash_after": 1_100.0,
+    }
+
+
+def test_sgov_sale_is_skipped_when_cash_covers_planned_buys_and_buffer() -> None:
+    client = _SgovFundingClient(held_qty=20, cash=1_010)
+
+    result = bot2._sell_sgov_to_fund_buys(client, planned_buy_notional=1_000)
+
+    assert result["confirmed"] is True
+    assert result["sell_qty"] == 0
+    assert client.submissions == []
+
+
 def test_sgov_parking_tops_up_existing_position_to_cover_idle_cash() -> None:
     client = _ParkingClient(held_qty=100.0, cash=10_099.0)
 
@@ -1020,12 +1100,14 @@ class _SpyRebalanceClient:
         qty: int = 0,
         entry_price: float = 100.0,
         cancel_allowed: bool = True,
+        partial_buy_qty: int | None = None,
     ) -> None:
         self.qty = qty
         self.entry_price = entry_price if qty else 0.0
         self.price = 100.0
         self.cash = 100_000.0 - qty * self.price
         self.cancel_allowed = cancel_allowed
+        self.partial_buy_qty = partial_buy_qty
         self.orders = {}
         self.submissions = []
         self.events = []
@@ -1108,14 +1190,23 @@ class _SpyRebalanceClient:
         self.events.append(("submit", symbol, side, int(qty), order_type, order_id))
         if order_type == "market":
             if side == "buy":
-                new_qty = self.qty + int(qty)
+                filled_qty = (
+                    min(self.partial_buy_qty, int(qty))
+                    if self.partial_buy_qty is not None
+                    else int(qty)
+                )
+                if self.partial_buy_qty is not None:
+                    order["status"] = "partially_filled"
+                order["filled_qty"] = str(filled_qty)
+                self.partial_buy_qty = None
+                new_qty = self.qty + filled_qty
                 self.entry_price = (
-                    (self.qty * self.entry_price + int(qty) * self.price) / new_qty
+                    (self.qty * self.entry_price + filled_qty * self.price) / new_qty
                     if new_qty
                     else 0.0
                 )
                 self.qty = new_qty
-                self.cash -= int(qty) * self.price
+                self.cash -= filled_qty * self.price
             else:
                 if int(qty) > self.qty:
                     raise AssertionError("test client cannot sell more shares than held")
@@ -1130,7 +1221,7 @@ class _SpyRebalanceClient:
         return {
             "id": order_id,
             "status": order["status"],
-            "filled_qty": order["qty"],
+            "filled_qty": order.get("filled_qty", order["qty"]),
             "filled_avg_price": str(self.price),
         }
 
@@ -1276,6 +1367,225 @@ def test_spy_rebalances_whole_shares_with_one_35_percent_stop_and_one_ledger_row
             index for index, event in enumerate(client.events)
             if event[0] == "submit" and event[-1] == market_id
         )
+
+
+def test_spy_partial_underfill_is_protected_recorded_and_not_cancelled(
+    monkeypatch, caplog
+) -> None:
+    monkeypatch.setattr(bot2.time, "sleep", lambda *_args: None)
+    caplog.set_level(logging.CRITICAL, logger="bot2.momentum")
+    client = _SpyRebalanceClient(partial_buy_qty=1)
+    ledger = []
+    monkeypatch.setattr(
+        bot2,
+        "record_spy_open",
+        lambda qty, entry, stop_price, stop_id: ledger.append(
+            (qty, entry, stop_price, stop_id)
+        ),
+    )
+
+    result = bot2._rebalance_spy_sleeve(client, 5, None, set(), 100.0)
+
+    buy_order = next(
+        order
+        for order in client.orders.values()
+        if order["symbol"] == "SPY" and order["side"] == "buy"
+    )
+    active_stops = [
+        order
+        for order in client.orders.values()
+        if order["symbol"] == "SPY"
+        and order["side"] == "sell"
+        and order["type"] == "stop"
+        and order["status"] == "new"
+    ]
+    assert result["target_qty"] == 5
+    assert result["settled_qty"] == 1
+    assert ledger == [(1, 100.0, 65.0, active_stops[0]["id"])]
+    assert len(active_stops) == 1 and active_stops[0]["qty"] == "1"
+    assert buy_order["status"] == "partially_filled"
+    assert ("cancel", buy_order["id"]) not in client.events
+    assert "target_qty=5 settled_qty=1" in caplog.text
+
+
+def test_spy_nonpartial_quantity_mismatch_keeps_existing_error(monkeypatch) -> None:
+    monkeypatch.setattr(bot2.time, "sleep", lambda *_args: None)
+    client = _SpyRebalanceClient()
+    settled_reads = iter(
+        [
+            None,
+            {"qty": 1, "entry_price": 100.0, "avg_entry_price": 100.0},
+        ]
+    )
+    monkeypatch.setattr(
+        bot2, "_settled_broker_position", lambda *_args: next(settled_reads)
+    )
+    monkeypatch.setattr(bot2, "record_spy_open", lambda *_args: None)
+
+    try:
+        bot2._rebalance_spy_sleeve(client, 5, None, set(), 100.0)
+    except RuntimeError as exc:
+        assert str(exc) == "SPY rebalance quantity mismatch target=5 settled=1"
+    else:
+        raise AssertionError("non-partial quantity mismatches must still raise")
+
+
+class _CycleClient:
+    def __init__(self, positions=()) -> None:
+        self._positions = [dict(position) for position in positions]
+
+    def account(self):
+        return {
+            "equity": 100_000.0,
+            "cash": 100_000.0,
+            "long_market_value": sum(
+                float(position.get("market_value", 0) or 0)
+                for position in self._positions
+            ),
+        }
+
+    def positions(self):
+        return [dict(position) for position in self._positions]
+
+    def latest_price(self, symbol):
+        assert symbol in {"SPY", "SGOV"}
+        return 100.0
+
+
+def _configure_minimal_cycle(
+    monkeypatch,
+    *,
+    db_positions=(),
+    broker_positions=(),
+    funding=None,
+    spy_rebalance=None,
+):
+    client = _CycleClient(broker_positions)
+    ranked = [{"symbol": "AAPL"}]
+    monkeypatch.setattr(bot2, "BOT_PAUSED", False)
+    monkeypatch.setattr(bot2, "universe_gate_is_passed", lambda: True)
+    monkeypatch.setattr(bot2, "ensure_schema", lambda: None)
+    monkeypatch.setattr(bot2, "AlpacaMomentumClient", lambda *_args, **_kwargs: client)
+    monkeypatch.setattr(bot2, "load_vault_symbols", lambda: set())
+    monkeypatch.setattr(bot2, "load_open_positions", lambda: list(db_positions))
+    monkeypatch.setattr(
+        bot2, "_reconcile_protective_stops", lambda _client, rows: rows
+    )
+    monkeypatch.setattr(
+        bot2,
+        "_build_book_batched",
+        lambda *_args: (ranked, {"AAPL"}, {"AAPL": SimpleNamespace(prior_close=100.0)}),
+    )
+    monkeypatch.setattr(bot2, "load_closed_position_history", lambda: ([], True))
+    monkeypatch.setattr(bot2, "build_stop_cooldowns", lambda *_args: {})
+    monkeypatch.setattr(
+        bot2,
+        "load_bot2_volatility",
+        lambda *_args: {
+            "multiplier": 1.0,
+            "annualized_volatility": 0.1,
+            "return_count": 126,
+            "reason": "test",
+        },
+    )
+    monkeypatch.setattr(
+        bot2,
+        "build_target_allocation_plan",
+        lambda *_args, **_kwargs: {
+            "spy_target": 1_000.0,
+            "target_allocations": {"AAPL": 1_000.0},
+        },
+    )
+    monkeypatch.setattr(
+        bot2,
+        "_sell_sgov_to_fund_buys",
+        lambda *_args: funding or {
+            "confirmed": True,
+            "orders": 0,
+            "sell_qty": 0,
+            "required_cash": 0.0,
+            "cash_after": 100_000.0,
+        },
+    )
+    monkeypatch.setattr(
+        bot2,
+        "_rebalance_spy_sleeve",
+        spy_rebalance
+        or (
+            lambda *_args: {
+                "status": "partial",
+                "orders": 1,
+                "target_qty": 10,
+                "settled_qty": 1,
+            }
+        ),
+    )
+    entries = []
+    monkeypatch.setattr(
+        bot2,
+        "_place_confirmed_entry",
+        lambda _client, symbol, qty, _cycle_id: entries.append((symbol, qty)) or True,
+    )
+    monkeypatch.setattr(bot2, "_park_idle_cash", lambda *_args: {})
+    monkeypatch.setattr(bot2, "_sell_confirmed", lambda *_args: False)
+    return client, entries
+
+
+def test_cycle_continues_to_stock_buys_after_spy_underfill(monkeypatch) -> None:
+    _client, entries = _configure_minimal_cycle(monkeypatch)
+
+    result = bot2.run_bot2_cycle(
+        now=datetime(2026, 10, 6, 14, 0, tzinfo=timezone.utc)
+    )
+
+    assert result["reason"] == "initial_entry"
+    assert entries == [("AAPL", 10)]
+
+
+def test_cycle_does_not_buy_when_sgov_sale_is_not_confirmed(monkeypatch, caplog) -> None:
+    _client, entries = _configure_minimal_cycle(
+        monkeypatch,
+        funding={
+            "confirmed": False,
+            "orders": 1,
+            "sell_qty": 6,
+            "required_cash": 1_010.0,
+            "cash_after": 900.0,
+        },
+        spy_rebalance=lambda *_args: (_ for _ in ()).throw(
+            AssertionError("SPY buy must be blocked")
+        ),
+    )
+    caplog.set_level(logging.CRITICAL, logger="bot2.momentum")
+
+    result = bot2.run_bot2_cycle(
+        now=datetime(2026, 10, 6, 14, 0, tzinfo=timezone.utc)
+    )
+
+    assert result["status"] == "blocked"
+    assert result["reason"] == "sgov_sale_not_confirmed"
+    assert entries == []
+    assert "cycle buys blocked" in caplog.text
+
+
+def test_spy_only_ledger_row_still_counts_as_initial_entry(monkeypatch) -> None:
+    spy_row = {"symbol": "SPY", "qty": 1, "entry_price": 100.0}
+    spy_position = {
+        "symbol": "SPY",
+        "qty": 1,
+        "market_value": 100.0,
+    }
+    _client, _entries = _configure_minimal_cycle(
+        monkeypatch,
+        db_positions=[spy_row],
+        broker_positions=[spy_position],
+    )
+
+    result = bot2.run_bot2_cycle(
+        now=datetime(2026, 10, 6, 14, 0, tzinfo=timezone.utc)
+    )
+
+    assert result["reason"] == "initial_entry"
 
 
 def test_spy_does_not_trade_when_an_open_order_cannot_be_confirmed_cancelled(

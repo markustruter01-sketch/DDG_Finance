@@ -90,6 +90,7 @@ STOP_LOSS_PCT = 0.20
 SPY_SLEEVE_SYMBOL = "SPY"
 SPY_SLEEVE_WEIGHT = float(BOT2_PROFILE["SPY_SLEEVE_WEIGHT"])
 SPY_SLEEVE_STOP_PCT = float(BOT2_PROFILE["SPY_SLEEVE_STOP_PCT"])
+CASH_BUFFER_PCT = 0.01
 MOMENTUM_ARTEFACT_THRESHOLD = float(
     os.environ.get("BOT2_MOMENTUM_ARTEFACT_THRESHOLD", "3.0")
 )
@@ -575,7 +576,7 @@ class AlpacaMomentumClient:
         return self._request("GET", f"/v2/orders/{order_id}") or {}
 
     def wait_for_fill(self, order_id: str, attempts: int = 30) -> dict[str, Any]:
-        terminal = {"filled", "partially_filled", "canceled", "rejected", "expired", "done_for_day"}
+        terminal = {"filled", "canceled", "rejected", "expired", "done_for_day"}
         latest: dict[str, Any] = {}
         for attempt in range(attempts):
             latest = self._request("GET", f"/v2/orders/{order_id}") or {}
@@ -1084,8 +1085,9 @@ def _cancel_symbol_orders_confirmed(
     client: AlpacaMomentumClient,
     symbol: str,
     recorded_stop_id: str | None = None,
+    preserve_order_ids: Sequence[str] = (),
 ) -> bool:
-    """Confirm all recorded and listed orders for one symbol are final."""
+    """Confirm symbol orders are final, except explicitly preserved in-flight orders."""
     symbol = canonical_symbol(symbol)
     final_statuses = {
         "canceled",
@@ -1095,7 +1097,7 @@ def _cancel_symbol_orders_confirmed(
         "rejected",
         "done_for_day",
     }
-    confirmed_order_ids: set[str] = set()
+    confirmed_order_ids = {str(order_id) for order_id in preserve_order_ids}
 
     def confirm_order_final(order_id: str) -> bool:
         try:
@@ -1358,6 +1360,8 @@ def _rebalance_spy_sleeve(
     trade_error: Exception | None = None
     trade_attempted = False
     fill: dict[str, Any] = {}
+    fill_status = ""
+    order_id: str | None = None
 
     if delta < 0:
         if not _prepare_symbol_for_sell(
@@ -1426,8 +1430,16 @@ def _rebalance_spy_sleeve(
                     exc,
                 )
 
+    preserve_order_ids = (
+        [order_id]
+        if delta > 0 and fill_status == "partially_filled" and order_id
+        else []
+    )
     if not _cancel_symbol_orders_confirmed(
-        client, SPY_SLEEVE_SYMBOL, recorded_stop_id
+        client,
+        SPY_SLEEVE_SYMBOL,
+        recorded_stop_id,
+        preserve_order_ids=preserve_order_ids,
     ):
         raise RuntimeError("SPY rebalance ended with an unconfirmed open order")
 
@@ -1536,9 +1548,29 @@ def _rebalance_spy_sleeve(
             "reason": str(trade_error),
         }
     if settled_qty != target_qty:
-        raise RuntimeError(
-            f"SPY rebalance quantity mismatch target={target_qty} settled={settled_qty}"
+        try:
+            filled_qty = math.floor(float(fill.get("filled_qty") or 0))
+        except (TypeError, ValueError):
+            filled_qty = 0
+        confirmed_partial_buy = (
+            delta > 0
+            and fill_status == "partially_filled"
+            and 0 < filled_qty < delta
+            and settled_qty < target_qty
+            and settled_qty == initial_qty + filled_qty
         )
+        if confirmed_partial_buy:
+            logger.critical(
+                "Bot 2 | SPY BUY partial fill protected; continuing "
+                "target_qty=%s settled_qty=%s filled_qty=%s",
+                target_qty,
+                settled_qty,
+                filled_qty,
+            )
+        else:
+            raise RuntimeError(
+                f"SPY rebalance quantity mismatch target={target_qty} settled={settled_qty}"
+            )
     return {
         "status": "complete",
         "orders": 1 if trade_attempted else 0,
@@ -1973,6 +2005,92 @@ def _park_idle_cash(
     }
 
 
+def _sell_sgov_to_fund_buys(
+    client: AlpacaMomentumClient, planned_buy_notional: float
+) -> dict[str, Any]:
+    """Sell only the SGOV shares needed to fund planned buys plus the cash buffer."""
+    planned_buy_notional = float(planned_buy_notional)
+    if not math.isfinite(planned_buy_notional) or planned_buy_notional < 0:
+        raise ValueError("Bot 2 planned buy notional must be finite and nonnegative")
+
+    account = client.account()
+    cash_before = float(account.get("cash") or 0)
+    required_cash = planned_buy_notional * (1.0 + CASH_BUFFER_PCT)
+    if not math.isfinite(cash_before) or cash_before < 0:
+        raise RuntimeError("Bot 2 cannot fund buys from an invalid cash balance")
+    if cash_before + 1e-6 >= required_cash:
+        return {
+            "confirmed": True,
+            "orders": 0,
+            "sell_qty": 0,
+            "required_cash": required_cash,
+            "cash_after": cash_before,
+        }
+
+    price = float(client.latest_price(PARK_SYMBOL))
+    if not math.isfinite(price) or price <= 0:
+        raise RuntimeError("Bot 2 cannot fund buys without a valid SGOV price")
+    held_position = _settled_broker_position(client, PARK_SYMBOL)
+    held_qty = math.floor(float(held_position["qty"])) if held_position else 0
+    shortfall = required_cash - cash_before
+    sell_qty = min(held_qty, math.ceil(shortfall / price))
+    if sell_qty < 1:
+        return {
+            "confirmed": False,
+            "orders": 0,
+            "sell_qty": 0,
+            "required_cash": required_cash,
+            "cash_after": cash_before,
+        }
+
+    order = client.submit(PARK_SYMBOL, "sell", sell_qty, "market")
+    order_id = str(order.get("id") or "")
+    if not order_id:
+        return {
+            "confirmed": False,
+            "orders": 1,
+            "sell_qty": sell_qty,
+            "required_cash": required_cash,
+            "cash_after": cash_before,
+        }
+    fill = client.wait_for_fill(order_id)
+    try:
+        filled_qty = math.floor(float(fill.get("filled_qty") or 0))
+        fill_price = float(fill.get("filled_avg_price") or 0)
+    except (TypeError, ValueError):
+        filled_qty = 0
+        fill_price = 0.0
+    if (
+        str(fill.get("status", "")).lower() != "filled"
+        or filled_qty != sell_qty
+        or not math.isfinite(fill_price)
+        or fill_price <= 0
+    ):
+        return {
+            "confirmed": False,
+            "orders": 1,
+            "sell_qty": sell_qty,
+            "required_cash": required_cash,
+            "cash_after": cash_before,
+        }
+
+    settled_position = _settled_broker_position(client, PARK_SYMBOL)
+    settled_qty = math.floor(float(settled_position["qty"])) if settled_position else 0
+    cash_after = float(client.account().get("cash") or 0)
+    confirmed = (
+        math.isfinite(cash_after)
+        and held_qty - settled_qty == sell_qty
+        and cash_after + 1e-6 >= required_cash
+    )
+    return {
+        "confirmed": confirmed,
+        "orders": 1,
+        "sell_qty": sell_qty,
+        "required_cash": required_cash,
+        "cash_after": cash_after,
+    }
+
+
 def run_bot2_cycle(
     profile: dict[str, Any] | None = None,
     db_id: int | None = None,
@@ -2003,12 +2121,18 @@ def run_bot2_cycle(
     broker_positions = client.positions()
     db_positions = load_open_positions()
     db_positions = _reconcile_protective_stops(client, db_positions)
-    strategy_symbols = {row["symbol"] for row in db_positions}
-    live_strategy = [
-        position for position in broker_positions
-        if position["symbol"] in strategy_symbols and position["symbol"] not in vault_symbols
+    open_stock_rows = [
+        row
+        for row in db_positions
+        if canonical_symbol(row["symbol"]) != SPY_SLEEVE_SYMBOL
     ]
-    initial_entry = not db_positions and not live_strategy
+    live_stock_positions = [
+        position
+        for position in broker_positions
+        if canonical_symbol(position["symbol"])
+        not in {SPY_SLEEVE_SYMBOL, PARK_SYMBOL, *vault_symbols}
+    ]
+    initial_entry = not open_stock_rows and not live_stock_positions
     if not initial_entry and not is_first_trading_day(now):
         _park_idle_cash(client, vault_symbols)
         return {"status": "complete", "orders": 0, "reason": "not_first_trading_day"}
@@ -2072,6 +2196,54 @@ def run_bot2_cycle(
     if not math.isfinite(spy_price) or spy_price <= 0:
         raise RuntimeError("Bot 2 cannot rebalance SPY without a valid live price")
     spy_target_qty = math.floor(plan["spy_target"] / spy_price)
+    current_spy_qty = math.floor(sum(
+        float(position.get("qty", 0) or 0)
+        for position in broker_positions
+        if canonical_symbol(position.get("symbol")) == SPY_SLEEVE_SYMBOL
+    ))
+    planned_buy_notional = max(0, spy_target_qty - current_spy_qty) * spy_price
+    held_stock_symbols = {
+        canonical_symbol(position["symbol"])
+        for position in broker_positions
+        if canonical_symbol(position["symbol"]) in desired
+    }
+    for item in eligible_ranked:
+        symbol = canonical_symbol(item["symbol"])
+        if symbol in held_stock_symbols:
+            continue
+        close = float(summaries[symbol].prior_close)
+        target_notional = plan["target_allocations"][symbol]
+        qty = math.floor(target_notional / close)
+        if qty > 0:
+            planned_buy_notional += qty * close
+    try:
+        funding = _sell_sgov_to_fund_buys(client, planned_buy_notional)
+    except Exception as exc:
+        logger.critical(
+            "Bot 2 | SGOV sale not fill-confirmed; cycle buys blocked error=%s",
+            exc,
+        )
+        return {
+            "status": "blocked",
+            "orders": orders,
+            "reason": "sgov_sale_not_confirmed",
+            "planned_buy_notional": planned_buy_notional,
+        }
+    orders += int(funding["orders"])
+    if not funding["confirmed"]:
+        logger.critical(
+            "Bot 2 | SGOV sale not fill-confirmed; cycle buys blocked "
+            "required_cash=%.2f cash_after=%.2f sell_qty=%s",
+            funding["required_cash"],
+            funding["cash_after"],
+            funding["sell_qty"],
+        )
+        return {
+            "status": "blocked",
+            "orders": orders,
+            "reason": "sgov_sale_not_confirmed",
+            "planned_buy_notional": planned_buy_notional,
+        }
     spy_ledger_position = next(
         (
             position for position in db_positions

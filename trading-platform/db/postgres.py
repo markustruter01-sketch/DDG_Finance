@@ -879,48 +879,6 @@ def ensure_schema() -> None:
     except Exception as exc:
         logger.warning(f"DB | ARC4 is_recon_tracking backfill failed (non-fatal): {exc}")
 
-    # One-time backfill: seed ratchet_stops for all 6 live Oracle equity positions.
-    # ARM and MU had no broker GTC stops; placed manually 2026-06-15 (order_ids below).
-    # CSCO/DELL/MS/PANW already had broker stops; this links their order_ids to the DB.
-    # MRVL skipped (sub-1-share, cannot place broker stop).
-    # ATR=0.0 for positions where ATR was unavailable at entry time (known Jun 9-10 issue).
-    # Idempotent: ON CONFLICT (symbol) DO UPDATE keeps the record fresh on re-runs.
-    try:
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    INSERT INTO ratchet_stops
-                        (symbol, stop_price, fill_price, atr, atr_multiplier, side, last_updated, stop_order_id)
-                    VALUES
-                        ('ARM',  242.44,  319.784916, 38.6728, 2.0, 'long', CURRENT_DATE, 'b5c5020c-0110-45cf-af2b-cfa0077d6c28'),
-                        ('MU',   761.67,  922.116585, 80.2227, 2.0, 'long', CURRENT_DATE, 'e2ea75e3-63e9-42bf-8dc7-a5b00c900905'),
-                        ('CSCO', 117.01,  119.396432, 0.0,     2.0, 'long', CURRENT_DATE, '9605dae2-d4e5-4751-a939-d74a75515390'),
-                        ('DELL', 326.72,  379.434447, 0.0,     2.0, 'long', CURRENT_DATE, '5899798a-5079-4472-984b-58c119dfab56'),
-                        ('MS',   203.61,  207.77,     0.0,     2.0, 'long', CURRENT_DATE, 'd9df546c-fa03-478e-a16a-4f3d8e257928'),
-                        ('PANW', 257.40,  262.65,     0.0,     2.0, 'long', CURRENT_DATE, 'b289f55a-1af3-49ac-9d7b-5c4699f7e9e6')
-                    ON CONFLICT (symbol) DO UPDATE
-                        SET stop_price     = EXCLUDED.stop_price,
-                            fill_price     = EXCLUDED.fill_price,
-                            atr            = EXCLUDED.atr,
-                            atr_multiplier = EXCLUDED.atr_multiplier,
-                            side           = EXCLUDED.side,
-                            last_updated   = EXCLUDED.last_updated,
-                            stop_order_id  = EXCLUDED.stop_order_id
-                    """
-                )
-                logger.info(f"DB | ratchet_stops backfill applied ({cur.rowcount} rows upserted)")
-    except Exception as exc:
-        logger.error(f"DB | ratchet_stops backfill FAILED: {exc}")
-        try:
-            from core.degradation_tracker import record_degradation as _rd
-            _rd(component="oracle", severity="high",
-                error_type="startup_repair_failed",
-                message=f"ratchet_stops backfill failed — 6 live positions may have no DB stop record",
-                detail=str(exc)[:2000])
-        except Exception:
-            pass
-
     # One-time repair: close the RECON-SNOW-20260615 phantom row inserted by the
     # reconciler race on 2026-06-15.  The exit manager submitted a day-order sell
     # for SNOW at 13:31:26 UTC; the sell didn't fill until 13:40:12 UTC, so the
@@ -1279,76 +1237,6 @@ def ensure_schema() -> None:
         logger.info("DB | Phase I: bot_evaluation_history table ensured")
     except Exception as _i_exc:
         logger.error(f"DB | Phase I bot_evaluation_history failed: {_i_exc}")
-
-    # Phase J — ratchet_stops orphan cleanup (2026-06-26, one-time, idempotent).
-    #
-    # Autopsy of the Jun-9 reconciler mass-exit revealed two problems:
-    #   1. Four active positions (ARM/MS/MU/PANW) have live GTC stop orders at
-    #      Alpaca but ratchet_stops.stop_order_id = NULL (backfill linkage gap).
-    #      maybe_ratchet skips cancel_order when old_id is None → would place a
-    #      second stop on next ratchet trigger → duplicate GTC orders.
-    #      Fix: write the live Alpaca order IDs into the DB.
-    #   2. Thirteen stale ratchet_stops rows remain for closed/reconciled positions
-    #      (INTC/NUE/QCOM/TXN/UNH/AMD closed Jun-10 via orphan_db_reconciler;
-    #       DDOG/FTNT/HPE closed Jun-9 via deleted EOD reconciler;
-    #       APD/CCL/USO from Kraken era).  These cause nightly compute_atr
-    #      "possibly delisted" log noise.  All five orphan GTC orders confirmed
-    #      already gone from Alpaca PA33G6QCIHDS as of 2026-06-26.
-    #   3. MRVL has a stale d96941eb stop_order_id — order gone from broker
-    #      (sub-share 0.285 can't take a whole-share stop).  Clear the ref.
-    #
-    # Idempotency:
-    #   Part A UPDATEs: setting same UUID twice is harmless.
-    #   Part B DELETEs: deleting absent rows is a no-op (returns 0 rows).
-    #   Part C UPDATE:  setting NULL twice is harmless.
-    try:
-        with get_conn() as _j_conn:
-            with _j_conn.cursor() as _j_cur:
-
-                # Part A — link live broker stop_order_ids into ratchet_stops
-                _j_live_stops = [
-                    ("ARM",  "b5c5020c-0110-45cf-af2b-cfa0077d6c28"),
-                    ("MS",   "d9df546c-fa03-478e-a16a-4f3d8e257928"),
-                    ("MU",   "e2ea75e3-63e9-42bf-8dc7-a5b00c900905"),
-                    ("PANW", "b289f55a-1af3-49ac-9d7b-5c4699f7e9e6"),
-                ]
-                _j_a_updated: list[str] = []
-                for _j_sym, _j_oid in _j_live_stops:
-                    _j_cur.execute(
-                        "UPDATE ratchet_stops SET stop_order_id = %s WHERE symbol = %s"
-                        " AND (stop_order_id IS NULL OR stop_order_id != %s)"
-                        " RETURNING symbol",
-                        (_j_oid, _j_sym, _j_oid),
-                    )
-                    if _j_cur.fetchone():
-                        _j_a_updated.append(_j_sym)
-
-                # Part B — delete stale rows for closed positions
-                _j_stale = [
-                    "INTC", "NUE", "QCOM", "TXN", "UNH", "AMD",  # orphan_db_reconciler Jun-10
-                    "DDOG", "FTNT", "HPE",                          # reconciler_market_exit Jun-9
-                    "APD",  "CCL",  "USO",                          # Kraken-era, all closed
-                ]
-                _j_cur.execute(
-                    "DELETE FROM ratchet_stops WHERE symbol = ANY(%s) RETURNING symbol",
-                    (_j_stale,),
-                )
-                _j_b_deleted = [r[0] for r in _j_cur.fetchall()]
-
-                # Part C — clear stale stop_order_id on MRVL (sub-share, order gone)
-                _j_cur.execute(
-                    "UPDATE ratchet_stops SET stop_order_id = NULL WHERE symbol = 'MRVL'"
-                    " AND stop_order_id IS NOT NULL RETURNING symbol",
-                )
-                _j_c_cleared = bool(_j_cur.fetchone())
-
-        logger.info(
-            f"DB | Phase J: A-linked={_j_a_updated}, "
-            f"B-deleted={_j_b_deleted}, "
-            f"C-MRVL-cleared={_j_c_cleared}"
-        )
-    except Exception as _j_exc:
-        logger.error(f"DB | Phase J ratchet_stops cleanup failed: {_j_exc}")
 
     # ── Phase K — oos_envelope table + seed ───────────────────────────────────
     # Stores the pre-registered OOS envelope for each bot (pooled Sharpe,

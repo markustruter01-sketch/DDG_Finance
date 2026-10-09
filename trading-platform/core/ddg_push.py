@@ -199,6 +199,23 @@ def _set_alpaca_read_timeout(client: Any) -> None:
         client._retry = 0
 
 
+def _fresh_read_client(bot_id: str) -> Any:
+    """Create a dedicated paper client for this snapshot's read-only calls."""
+    from alpaca.trading.client import TradingClient
+    from core.bot_registry import resolve_bot_id
+    from core.kill_switch import ACCOUNT_ENV
+
+    canonical_bot_id = resolve_bot_id(bot_id)
+    credentials = ACCOUNT_ENV.get(canonical_bot_id)
+    if credentials is None:
+        raise RuntimeError(f"missing credentials for {canonical_bot_id}")
+    key_name, secret_name = credentials
+    key, secret = os.environ.get(key_name, ""), os.environ.get(secret_name, "")
+    if not key or not secret:
+        raise RuntimeError(f"missing credentials for {canonical_bot_id}")
+    return TradingClient(key, secret, paper=True)
+
+
 def _optional_ledger_number(value: Any, field: str) -> float | None:
     if value is None:
         return None
@@ -226,7 +243,7 @@ def build_detail() -> dict[str, Any]:
     from core.runner_heartbeat import get_runner_status
     from core.symbols import canonical_symbol
     from execution.per_bot_vault import VAULT_BIL_SYMBOL, VAULT_VOO_SYMBOL
-    from execution.reconciliation import _client_for, _orders, _positions
+    from execution.reconciliation import _orders, _positions
     from db.postgres import get_conn
 
     bot_ids = sorted(ACTIVE_BOT_IDS)
@@ -347,7 +364,7 @@ def build_detail() -> dict[str, Any]:
         )
     }
     for bot_id in _DETAIL_ALPACA_BOT_IDS:
-        client = _client_for(bot_id)
+        client = _fresh_read_client(bot_id)
         _set_alpaca_read_timeout(client)
         broker_positions = _positions(client)
         open_orders = _orders(client)

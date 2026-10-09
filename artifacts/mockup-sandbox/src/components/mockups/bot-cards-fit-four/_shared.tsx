@@ -80,6 +80,59 @@ function chartPath(points: number[]) {
   }).join(" ");
 }
 
+const portfolioPreviewValues = [354_000, 359_000, 356_500, 366_000, 363_500, 371_000, 368_000, 379_500, 376_500, 388_797];
+
+function portfolioPreviewGeometry(values: number[]) {
+  const min = Math.min(...values);
+  const range = Math.max(...values) - min || 1;
+  const coordinates = values.map((value, index) => ({
+    x: 4 + (index / (values.length - 1)) * 992,
+    y: 60 - ((value - min) / range) * 48,
+  }));
+  const line = coordinates.map((point, index) => `${index ? "L" : "M"} ${point.x} ${point.y}`).join(" ");
+  return {
+    line,
+    area: `${line} L 996 66 L 4 66 Z`,
+    last: coordinates[coordinates.length - 1],
+  };
+}
+
+function PortfolioChartPreview() {
+  const chart = portfolioPreviewGeometry(portfolioPreviewValues);
+
+  return (
+    <section className="portfolio-history-preview" aria-labelledby="portfolio-history-preview-title">
+      <div className="portfolio-history-preview-head">
+        <div>
+          <div className="portfolio-history-preview-label" id="portfolio-history-preview-title">Total portfolio value</div>
+          <strong className="portfolio-history-preview-total">$388,797</strong>
+        </div>
+        <span className="portfolio-history-preview-note">Sample history · static preview</span>
+      </div>
+      <div className="portfolio-history-preview-plot">
+        <svg viewBox="0 0 1000 72" preserveAspectRatio="none" role="img" aria-label="Sample portfolio value trend increasing over time">
+          <defs>
+            <linearGradient id="portfolio-preview-gradient" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stopColor="#8cf1d5" stopOpacity=".30" />
+              <stop offset="100%" stopColor="#8cf1d5" stopOpacity=".02" />
+            </linearGradient>
+          </defs>
+          <line className="portfolio-history-gridline" x1="0" x2="1000" y1="12" y2="12" />
+          <line className="portfolio-history-gridline" x1="0" x2="1000" y1="36" y2="36" />
+          <line className="portfolio-history-gridline" x1="0" x2="1000" y1="60" y2="60" />
+          <path className="portfolio-history-area" d={chart.area} />
+          <path className="portfolio-history-line" d={chart.line} />
+          <circle className="portfolio-history-endpoint" cx={chart.last.x} cy={chart.last.y} r="4" />
+        </svg>
+      </div>
+      <div className="portfolio-history-preview-dates">
+        <span>Earliest snapshot</span>
+        <span>Latest snapshot</span>
+      </div>
+    </section>
+  );
+}
+
 function BotCard({ bot, compact }: { bot: BotPreview; compact: boolean }) {
   const accentStyle = {
     "--accent": bot.accent,
@@ -190,6 +243,7 @@ export function PreviewPage({ compact }: { compact: boolean }) {
             <h2 className="obs-section-title" id="preview-strategy-engines">Strategy engines</h2>
             <div className="obs-meta">equity curves / risk evidence / UTC</div>
           </div>
+          <PortfolioChartPreview />
           <div className="obs-bot-row">
             {bots.map((bot) => <BotCard bot={bot} compact={compact} key={bot.id} />)}
           </div>

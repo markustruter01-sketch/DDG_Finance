@@ -230,6 +230,7 @@ def test_forex_cycle_only_reads_account_and_open_positions_and_writes_usd_state(
         for call in client.calls
     )
     sheet = result.pop("signal_sheet")
+    assert result.pop("council") == "disabled"
     assert result == {
         "bot_id": "forex_ai",
         "currency": "USD",

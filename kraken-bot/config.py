@@ -133,9 +133,10 @@ BOT_PROFILES = {
         "STARTING_CAPITAL":  100_000,
         # APPROVED: aggregate gross-exposure ceiling (registered plan item 4).
         "FOREX_MAX_GROSS":   FOREX_MAX_GROSS,
-        # Phase 4 shadow council + ledger. Off until Markus OKs the ledger table
-        # and the OpenRouter model/hosts are recorded in the registered plan.
-        "FOREX_COUNCIL_ENABLED": False,
+        # Phase 4 shadow council + ledger: ON (ledger table OK'd 10 Oct 17:50;
+        # line-up recorded in the registered plan; dry run passed 11 Oct). Shadow only:
+        # no order code exists. Set False to stop all AI calls.
+        "FOREX_COUNCIL_ENABLED": True,
         "BOT_PAUSED":        True,
     },
 }

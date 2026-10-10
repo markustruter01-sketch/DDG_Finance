@@ -158,6 +158,29 @@ class OandaClient:
         complete = [candle for candle in candles if candle.get("complete") is True]
         return complete[-count:]
 
+    def daily_candles_bid_ask(
+        self,
+        instrument: str,
+        *,
+        count: int = 5,
+    ) -> list[dict[str, Any]]:
+        """Complete daily candles with bid and ask OHLC (read-only)."""
+        if not instrument or not isinstance(instrument, str):
+            raise ValueError("instrument must be a non-empty string")
+        if isinstance(count, bool) or not isinstance(count, int) or not 1 <= count <= 4999:
+            raise ValueError("count must be an integer between 1 and 4999")
+        payload = self._get(
+            f"/instruments/{quote(instrument, safe='')}/candles",
+            params={"granularity": "D", "price": "BA", "count": count + 1},
+        )
+        candles = payload.get("candles")
+        if not isinstance(candles, list) or any(
+            not isinstance(candle, dict) for candle in candles
+        ):
+            raise OandaClientError("OANDA response is missing daily candles")
+        complete = [candle for candle in candles if candle.get("complete") is True]
+        return complete[-count:]
+
     def current_bid_ask(self, instrument: str) -> dict[str, Any]:
         if not instrument or not isinstance(instrument, str):
             raise ValueError("instrument must be a non-empty string")

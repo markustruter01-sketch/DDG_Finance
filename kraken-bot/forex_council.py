@@ -67,7 +67,9 @@ PROVIDERS: dict[str, dict[str, Any]] = {
         "url": "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
         "model": "gemini-3-flash-preview",
         "key_env": "GOOGLE_GEMINI_API_KEY",
-        "max_tokens": 1500,
+        # Gemini 3 counts hidden thinking against this cap; 1500 truncated the
+        # JSON in the 11 Oct dry run.
+        "max_tokens": 8192,
     },
 }
 
@@ -278,7 +280,15 @@ def _json_object(raw: str) -> dict[str, Any]:
     try:
         data = json.loads(text)
     except ValueError:
-        raise CouncilError("reply is not valid JSON") from None
+        # Tolerate prose around a single JSON object; the schema check that
+        # follows still rejects anything that is not exactly the right shape.
+        start, end = text.find("{"), text.rfind("}")
+        try:
+            data = json.loads(text[start:end + 1]) if 0 <= start < end else None
+        except ValueError:
+            data = None
+        if data is None:
+            raise CouncilError(f"reply is not valid JSON (length {len(text)})") from None
     if not isinstance(data, dict):
         raise CouncilError("reply must be a JSON object")
     return data
@@ -417,6 +427,20 @@ def call_model(
 
 # ── One shadow cycle ────────────────────────────────────────────────────────
 
+def _call_and_parse(role, system, user, parse, labels, record, transport):
+    """Call a model and parse its reply; on a malformed reply, ask once more
+    (one format-repair attempt). Every attempt is kept in the record."""
+    for attempt in (1, 2):
+        call = call_model(role, system, user, transport=transport)
+        call["attempt"] = attempt
+        record["calls"].append(call)
+        try:
+            return parse(call["raw"], labels)
+        except CouncilError as exc:
+            if attempt == 2:
+                raise
+            record["errors"].append(f"{role}: attempt 1 {exc}; retrying once")
+
 def run_council(
     sheet_rows: list[dict[str, Any]],
     open_positions: dict[str, str] | None = None,
@@ -444,9 +468,9 @@ def run_council(
     views: dict[str, list[dict[str, Any]]] = {}
     for role in ("member_1", "member_2"):
         try:
-            call = call_model(role, COUNCIL_SYSTEM, user, transport=transport)
-            record["calls"].append(call)
-            views[role] = parse_council_reply(call["raw"], labels)
+            views[role] = _call_and_parse(
+                role, COUNCIL_SYSTEM, user, parse_council_reply, labels, record, transport,
+            )
         except CouncilError as exc:
             record["errors"].append(f"{role}: {exc}")
     if not views:
@@ -459,9 +483,10 @@ def run_council(
         separators=(",", ":"),
     )
     try:
-        call = call_model("decision_maker", DECISION_SYSTEM, council_input, transport=transport)
-        record["calls"].append(call)
-        decisions = parse_decision_reply(call["raw"], labels)
+        decisions = _call_and_parse(
+            "decision_maker", DECISION_SYSTEM, council_input, parse_decision_reply,
+            labels, record, transport,
+        )
     except CouncilError as exc:
         record["errors"].append(f"decision_maker: {exc}; no new trades")
         return record

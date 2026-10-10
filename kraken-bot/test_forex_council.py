@@ -186,3 +186,24 @@ def test_one_retry_then_success_and_empty_reply_is_explained(keys):
 
     with pytest.raises(fc.CouncilError, match="finish=length"):
         fc.call_model("member_1", "s", "{}", transport=always_empty)
+
+
+def test_malformed_reply_gets_one_repair_attempt_and_prose_is_tolerated(keys):
+    attempts = {"gemini": 0}
+    base = FakeTransport()
+
+    def transport(url, headers, body):
+        if "generativelanguage" in url:
+            attempts["gemini"] += 1
+            if attempts["gemini"] == 1:
+                return {"candidates": [{"content": {"parts": [{"text": '{"decisions": [ {"label"'}]}}]}
+            good = base(url, headers, body)
+            text = good["candidates"][0]["content"]["parts"][0]["text"]
+            good["candidates"][0]["content"]["parts"][0]["text"] = "Here you go:\n" + text + "\nDone."
+            return good
+        return base(url, headers, body)
+
+    record = fc.run_council(_sheet(), transport=transport, rng=random.Random(4))
+    assert record["status"] == "shadow" and attempts["gemini"] == 2
+    assert any("retrying once" in e for e in record["errors"])
+    assert [c["attempt"] for c in record["calls"] if c["role"] == "decision_maker"] == [1, 2]

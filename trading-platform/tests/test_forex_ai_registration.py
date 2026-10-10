@@ -27,7 +27,9 @@ def _load_module(name: str, path: Path):
 
 
 @pytest.fixture
-def forex_strategy():
+def forex_strategy(monkeypatch):
+    # The runner puts kraken-bot/ on sys.path; do the same for sibling imports.
+    monkeypatch.syspath_prepend(str(WORKSPACE / "kraken-bot"))
     return _load_module(
         "test_forex_ai_strategy",
         WORKSPACE / "kraken-bot" / "forex_ai_strategy.py",
@@ -186,6 +188,20 @@ class _ReadOnlyOanda:
         self.calls.append("open_positions")
         return self.positions
 
+    # Quant desk reads (Phase 3). No data here, so every pair reports an error
+    # and a flat baseline; the account monitor result must be unaffected.
+    def tradeable_instruments(self):
+        self.calls.append("tradeable_instruments")
+        return []
+
+    def daily_candles(self, instrument, *, count):
+        self.calls.append(f"daily_candles:{instrument}")
+        return []
+
+    def current_bid_ask(self, instrument):
+        self.calls.append(f"current_bid_ask:{instrument}")
+        return {"spread": Decimal("0.0001")}
+
 
 def test_forex_cycle_only_reads_account_and_open_positions_and_writes_usd_state(
     monkeypatch,
@@ -206,7 +222,14 @@ def test_forex_cycle_only_reads_account_and_open_positions_and_writes_usd_state(
 
     result = forex_strategy.run_forex_cycle(client_factory=lambda: client)
 
-    assert client.calls == ["account_summary", "open_positions"]
+    read_only_calls = {"account_summary", "open_positions", "tradeable_instruments"}
+    assert client.calls[:3] == ["account_summary", "open_positions", "tradeable_instruments"]
+    assert all(
+        call in read_only_calls
+        or call.startswith(("daily_candles:", "current_bid_ask:"))
+        for call in client.calls
+    )
+    sheet = result.pop("signal_sheet")
     assert result == {
         "bot_id": "forex_ai",
         "currency": "USD",
@@ -214,6 +237,8 @@ def test_forex_cycle_only_reads_account_and_open_positions_and_writes_usd_state(
         "cash_usd": 120000.0,
         "open_positions": 2,
     }
+    assert len(sheet["rows"]) == 7
+    assert all(row["baseline"]["direction"] == "flat" for row in sheet["rows"])
     assert writes[0] == (
         "heartbeat",
         ("forex_ai",),

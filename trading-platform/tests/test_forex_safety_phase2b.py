@@ -82,26 +82,16 @@ def test_registry_and_profile_include_paused_forex_safety_metadata():
     assert "forex_ai" in ks.ACTIVE_BOTS
 
     profile = ks._BOT_PROFILES["forex_ai"]
-    tiers = profile["LEVERAGE_TIERS"]
-    assert tiers == {
-        "standard": {"nav_fraction": 0.85, "max_leverage": 2.0},
-        "high": {"nav_fraction": 0.10, "max_leverage": 5.0},
-        "top": {"nav_fraction": 0.05, "max_leverage": 10.0},
-    }
-    weighted_gross = sum(
-        values["nav_fraction"] * values["max_leverage"]
-        for values in tiers.values()
-    )
-    assert weighted_gross == pytest.approx(2.7)
-    assert profile["FOREX_MAX_GROSS"] == pytest.approx(2.7)
+    assert "LEVERAGE_TIERS" not in profile
+    assert profile["FOREX_MAX_GROSS"] == pytest.approx(2.0)
     assert profile["BOT_PAUSED"] is True
 
 
 @pytest.mark.parametrize(
     ("gross_multiple", "trips"),
-    [(2.6, False), (2.7, False), (2.71, True)],
+    [(1.9, False), (2.0, False), (2.01, True)],
 )
-def test_forex_gross_cap_trips_only_above_2_7x_nav(gross_multiple, trips):
+def test_forex_gross_cap_trips_only_above_2x_nav(gross_multiple, trips):
     account = {
         "bot_id": "forex_ai",
         "nav": 100.0,

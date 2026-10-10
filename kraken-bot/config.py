@@ -19,14 +19,9 @@ PAPER_FEE_PCT = 0.0026
 
 GLOBAL_EMERGENCY_STOP = False
 
-# PROPOSED: descriptive per-trade allocation tiers; no sizing engine consumes these yet.
-LEVERAGE_TIERS = {
-    "standard": {"nav_fraction": 0.85, "max_leverage": 2.0},
-    "high": {"nav_fraction": 0.10, "max_leverage": 5.0},
-    "top": {"nav_fraction": 0.05, "max_leverage": 10.0},
-}
-# PROPOSED: aggregate cap derived from the tier mix (0.85*2 + 0.10*5 + 0.05*10).
-FOREX_MAX_GROSS = 2.7
+# APPROVED 10 Oct 2026 (registered Forex plan, item 4): gross exposure cap
+# 2.0x Forex equity for MVP. No 5x/10x tiers.
+FOREX_MAX_GROSS = 2.0
 
 BOT_PROFILES = {
     "oracle": {
@@ -136,9 +131,7 @@ BOT_PROFILES = {
         "strategy_label":    "AI Currency Trading",
         "LOOP_SLEEP_SECONDS": 3600,
         "STARTING_CAPITAL":  100_000,
-        # PROPOSED: advisory tier mix only; per-trade sizing is a later phase.
-        "LEVERAGE_TIERS":    LEVERAGE_TIERS,
-        # PROPOSED: aggregate gross-exposure safety ceiling.
+        # APPROVED: aggregate gross-exposure ceiling (registered plan item 4).
         "FOREX_MAX_GROSS":   FOREX_MAX_GROSS,
         "BOT_PAUSED":        True,
     },

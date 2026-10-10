@@ -32,7 +32,9 @@ from forex_quant_desk import FOREX_PAIRS
 ALLOWED_HOSTS = frozenset(
     {"api.groq.com", "openrouter.ai", "generativelanguage.googleapis.com"}
 )
-TIMEOUT_SECONDS = 60.0
+TIMEOUT_SECONDS = 90.0
+# Explicit client name: some provider firewalls reject default library agents.
+USER_AGENT = "ddg-forex-council/1.0"
 MAX_RESPONSE_CHARS = 20_000
 REASON_MAX_CHARS = 200
 DIRECTIONS = ("long", "short", "flat")
@@ -50,13 +52,13 @@ PROVIDERS: dict[str, dict[str, Any]] = {
     "member_2": {
         "provider": "openrouter",
         "url": "https://openrouter.ai/api/v1/chat/completions",
-        # Chosen from the live free list before the first logged decision and
-        # recorded in the registered plan. Empty = member 2 not configured.
-        "model": "",
-        # Pinned non-DeepSeek-operated hosts; empty = refuse to call.
-        "provider_only": [],
+        # Registered plan item 1 (amended 10 Oct 2026, Markus option A).
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        # Pinned host (OpenRouter provider tag); fallbacks off. Empty = refuse.
+        "provider_only": ["nvidia"],
         "key_env": "OPENROUTER_API_KEY",
-        "max_tokens": 1200,
+        # Reasoning model: room for its answer after any hidden reasoning.
+        "max_tokens": 4000,
     },
     "decision_maker": {
         "provider": "gemini",
@@ -313,7 +315,11 @@ def _request(role: str, system: str, user: str) -> tuple[str, dict[str, str], di
         raise CouncilError(f"{role} key not configured")
     if cfg["provider"] == "gemini":
         url = cfg["url"].format(model=cfg["model"])
-        headers = {"x-goog-api-key": key, "Content-Type": "application/json"}
+        headers = {
+            "x-goog-api-key": key,
+            "Content-Type": "application/json",
+            "User-Agent": USER_AGENT,
+        }
         body = {
             "systemInstruction": {"parts": [{"text": system}]},
             "contents": [{"role": "user", "parts": [{"text": user}]}],
@@ -329,13 +335,22 @@ def _request(role: str, system: str, user: str) -> tuple[str, dict[str, str], di
         "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
         "temperature": 0.2,
         "max_tokens": cfg["max_tokens"],
-        "response_format": {"type": "json_object"},
     }
     if cfg["provider"] == "openrouter":
         if not cfg["provider_only"]:
             raise CouncilError("member_2 hosts not pinned; refusing to route")
+        # The pinned endpoint does not list response_format; the strict parser
+        # still rejects anything that is not the exact JSON schema.
         body["provider"] = {"only": list(cfg["provider_only"]), "allow_fallbacks": False}
-    return cfg["url"], {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}, body
+        body["include_reasoning"] = False
+    else:
+        body["response_format"] = {"type": "json_object"}
+    headers = {
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+        "User-Agent": USER_AGENT,
+    }
+    return cfg["url"], headers, body
 
 
 def _reply_text(provider: str, payload: dict[str, Any]) -> tuple[str, dict[str, int | None]]:

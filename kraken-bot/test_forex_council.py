@@ -113,6 +113,9 @@ def test_full_shadow_cycle_maps_decisions_back_and_cleans_reasons(keys):
     assert transport.sent[2][1]["x-goog-api-key"] == "test-gemini"
     # OpenRouter is pinned with fallbacks off.
     assert transport.sent[1][2]["provider"] == {"only": ["test-host"], "allow_fallbacks": False}
+    assert "response_format" not in transport.sent[1][2]
+    assert transport.sent[0][2]["response_format"] == {"type": "json_object"}
+    assert all(h["User-Agent"] == fc.USER_AGENT for _, h, _ in transport.sent)
     # Decision-maker sees only structured council fields.
     dm_input = json.loads(transport.sent[2][2]["contents"][0]["parts"][0]["text"])
     assert set(dm_input["council"]["member_1"][0]) == {"label", "direction", "conviction", "reason"}

@@ -45,9 +45,11 @@ PROVIDERS: dict[str, dict[str, Any]] = {
     "member_1": {
         "provider": "groq",
         "url": "https://api.groq.com/openai/v1/chat/completions",
-        "model": "llama-3.3-70b-versatile",
+        # llama-3.3-70b-versatile no longer offered on this Groq account (404,
+        # 10 Oct 2026). Pending Markus's confirmation: OpenAI open-weight model.
+        "model": "openai/gpt-oss-120b",
         "key_env": "GROQ_API_KEY",
-        "max_tokens": 1200,
+        "max_tokens": 4000,
     },
     "member_2": {
         "provider": "openrouter",
@@ -364,10 +366,28 @@ def _reply_text(provider: str, payload: dict[str, Any]) -> tuple[str, dict[str, 
             meta = payload.get("usage") or {}
             usage = {"in": meta.get("prompt_tokens"), "out": meta.get("completion_tokens")}
     except (KeyError, IndexError, TypeError):
-        raise CouncilError("provider reply missing message text") from None
-    if not isinstance(text, str):
-        raise CouncilError("provider reply text is not a string")
+        raise CouncilError(f"provider reply missing message text ({_reply_hint(payload)})") from None
+    if not isinstance(text, str) or not text.strip():
+        raise CouncilError(f"provider reply text is empty ({_reply_hint(payload)})")
     return text[:MAX_RESPONSE_CHARS], usage
+
+
+def _reply_hint(payload: dict[str, Any]) -> str:
+    """Safe, short reason for an empty reply: finish reason and provider error
+    code only (never content)."""
+    hint = []
+    try:
+        hint.append(f"finish={payload['choices'][0].get('finish_reason')}")
+    except (KeyError, IndexError, TypeError, AttributeError):
+        pass
+    try:
+        hint.append(f"finish={payload['candidates'][0].get('finishReason')}")
+    except (KeyError, IndexError, TypeError, AttributeError):
+        pass
+    error = payload.get("error") if isinstance(payload, dict) else None
+    if isinstance(error, dict):
+        hint.append(f"error_code={str(error.get('code'))[:40]}")
+    return ", ".join(hint) or "no detail"
 
 
 def call_model(
@@ -376,8 +396,15 @@ def call_model(
     """One provider call. Returns a ledger-ready record; raises CouncilError."""
     url, headers, body = _request(role, system, user)
     scan_outbound(user)
-    payload = (transport or _http_post)(url, headers, body)
-    text, usage = _reply_text(PROVIDERS[role]["provider"], payload)
+    # At most one retry (framework token-discipline rule 7).
+    for attempt in (1, 2):
+        try:
+            payload = (transport or _http_post)(url, headers, body)
+            text, usage = _reply_text(PROVIDERS[role]["provider"], payload)
+            break
+        except CouncilError:
+            if attempt == 2:
+                raise
     return {
         "role": role,
         "provider": PROVIDERS[role]["provider"],

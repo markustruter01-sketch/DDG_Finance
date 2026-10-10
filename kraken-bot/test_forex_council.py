@@ -167,3 +167,22 @@ def test_real_transport_refuses_hosts_off_the_allowlist():
         fc._http_post("https://evil.example/v1", {}, {})
     with pytest.raises(fc.CouncilError, match="allowlist"):
         fc._http_post("http://api.groq.com/x", {}, {})
+
+
+def test_one_retry_then_success_and_empty_reply_is_explained(keys):
+    calls = []
+
+    def flaky(url, headers, body):
+        calls.append(url)
+        if len(calls) == 1:
+            return {"choices": [{"finish_reason": "length", "message": {"content": None}}]}
+        return _openai_reply({"calls": [{"label": "A", "direction": "flat", "conviction": 1, "reason": ""}]})
+
+    record = fc.call_model("member_1", "s", "{}", transport=flaky)
+    assert len(calls) == 2 and "flat" in record["raw"]
+
+    def always_empty(url, headers, body):
+        return {"choices": [{"finish_reason": "length", "message": {"content": ""}}]}
+
+    with pytest.raises(fc.CouncilError, match="finish=length"):
+        fc.call_model("member_1", "s", "{}", transport=always_empty)

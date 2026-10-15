@@ -1,5 +1,5 @@
 import { useLocation } from "wouter";
-import { FlaskConical, LayoutDashboard, Radio } from "lucide-react";
+import { FlaskConical, LayoutDashboard, Radio, ShieldAlert } from "lucide-react";
 
 const NAV_ITEMS = [
   {
@@ -26,16 +26,23 @@ const NAV_ITEMS = [
     color: "#e9ae57",
     pulse: false,
   },
+  {
+    id:    "controls",
+    label: "Controls",
+    path:  "/controls",
+    icon:  ShieldAlert,
+    color: "#ef4444",
+    pulse: false,
+  },
 ];
 
 export function GlobalNav() {
   const [location, navigate] = useLocation();
   const isHomeRoute = location === "/" || location === "" || location === "/home";
-  const isDesignRoute = location.startsWith("/design/");
 
   return (
     <nav
-      className={`fixed bottom-5 left-1/2 z-[9999] pointer-events-none ${isHomeRoute ? "home-global-nav" : isDesignRoute ? "" : "production-global-nav"}`}
+      className={`fixed bottom-5 left-1/2 z-[9999] pointer-events-none ${isHomeRoute ? "home-global-nav" : "production-global-nav"}`}
       style={{ transform: "translateX(-50%)" }}
     >
       <div
@@ -61,8 +68,8 @@ export function GlobalNav() {
                 paddingBottom: 10,
                 paddingLeft: 14,
                 paddingRight: 14,
-                  backdropFilter: isHomeRoute ? "blur(24px)" : isDesignRoute ? undefined : "blur(18px)",
-                  WebkitBackdropFilter: isHomeRoute ? "blur(24px)" : isDesignRoute ? undefined : "blur(18px)",
+                  backdropFilter: isHomeRoute ? "blur(24px)" : "blur(18px)",
+                  WebkitBackdropFilter: isHomeRoute ? "blur(24px)" : "blur(18px)",
                 ...(isActive
                   ? {
                       background: `linear-gradient(135deg, ${item.color}26, ${item.color}12)`,
@@ -73,18 +80,12 @@ export function GlobalNav() {
                   : {
                       background: isHomeRoute
                         ? "rgba(255,255,255,0.12)"
-                        : isDesignRoute
-                          ? "rgba(15, 23, 42, 0.80)"
                           : "rgba(255,255,255,0.26)",
                       border: isHomeRoute
                         ? "1px solid rgba(100,116,139,0.20)"
-                        : isDesignRoute
-                          ? "1px solid rgba(255,255,255,0.075)"
                           : "1px solid rgba(100,116,139,0.24)",
                       boxShadow: isHomeRoute
                         ? "0 8px 24px rgba(15,23,42,0.16)"
-                        : isDesignRoute
-                          ? "0 4px 16px rgba(0,0,0,0.50), 0 1px 0 rgba(255,255,255,0.04) inset"
                           : "0 8px 24px rgba(15,23,42,0.14), 0 1px 0 rgba(255,255,255,0.22) inset",
                     }),
               }}
@@ -92,7 +93,7 @@ export function GlobalNav() {
               <span className="relative">
                 <Icon
                   className="h-5 w-5"
-                  style={{ color: isHomeRoute ? (isActive ? "#16a34a" : "#000000") : isDesignRoute ? (isActive ? item.color : "rgba(148,163,184,0.65)") : isActive ? item.color : "rgba(30,41,59,0.78)" }}
+                  style={{ color: isHomeRoute ? (isActive ? "#16a34a" : "#000000") : isActive ? item.color : "rgba(30,41,59,0.78)" }}
                 />
                 {item.pulse && (
                   <span
@@ -108,7 +109,7 @@ export function GlobalNav() {
               <span
                 className="text-[9px] font-black tracking-widest uppercase mt-1"
                 style={{
-                  color: isHomeRoute ? (isActive ? "#16a34a" : "#000000") : isDesignRoute ? (isActive ? item.color : "rgba(100,116,139,0.85)") : isActive ? item.color : "rgba(30,41,59,0.82)",
+                  color: isHomeRoute ? (isActive ? "#16a34a" : "#000000") : isActive ? item.color : "rgba(30,41,59,0.82)",
                 }}
               >
                 {item.label}

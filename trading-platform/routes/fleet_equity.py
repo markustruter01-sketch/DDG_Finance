@@ -244,11 +244,13 @@ def _fetch_fleet_equity() -> dict:
             from core.bot_state import get_all_states
             states = {s["bot_id"]: s for s in get_all_states()}
             for bid, data in result.items():
-                data["paused"] = bool(states.get(bid, {}).get("paused", False))
+                state = states.get(bid)
+                # Unknown is shown as unknown (None), never as "running".
+                data["paused"] = None if state is None or state.get("paused") is None else bool(state["paused"])
         except Exception as _exc:
-            logger.debug(f"fleet_equity | paused merge failed: {_exc}")
+            logger.warning(f"fleet_equity | paused merge failed: {_exc}")
             for data in result.values():
-                data.setdefault("paused", False)
+                data["paused"] = None
 
         # Fleet totals
         _meta_keys = {"fleet_total", "generated_at", "errors"}

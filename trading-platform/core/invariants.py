@@ -266,7 +266,7 @@ def _position_presence_maps(
         by_symbol: dict[str, float | None] = {}
         for row in rows:
             symbol = canonical_symbol(row.get("symbol"))
-            if not symbol or symbol in vault:
+            if not symbol or symbol in vault or is_cash_park(row.get("symbol")):
                 continue
             if (
                 row.get("table") == "alpaca_etf_positions"
@@ -869,7 +869,7 @@ def check_ledger_broker_presence(inputs: InvariantInputs) -> dict[str, Any]:
     expected = {
         "ledger_without_broker": 0,
         "broker_without_ledger": 0,
-        "excluded": ["vault holdings", f"dust qty < {DUST_QTY}"],
+        "excluded": ["vault holdings", "cash-park holdings", f"dust qty < {DUST_QTY}"],
     }
     problem = _source_problem(
         inputs,

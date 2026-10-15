@@ -1,9 +1,0 @@
-{
-  "source": "development database export",
-  "captured_at": "2026-08-21",
-  "table": "bot_portfolio_archive",
-  "development_row_count": 0,
-  "production_row_count": 1,
-  "columns": [],
-  "rows": []
-}

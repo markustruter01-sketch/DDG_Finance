@@ -215,3 +215,17 @@ def test_client_has_no_order_or_trade_mutation_methods(credentials) -> None:
     )
 
     assert all(not hasattr(client, name) for name in mutating_methods)
+
+def test_daily_candles_bid_ask_passes_optional_end_time(credentials) -> None:
+    candle = {"complete": True, "time": "2026-10-08T21:00:00Z",
+              "bid": {"o": "1", "h": "1", "l": "1", "c": "1"},
+              "ask": {"o": "1", "h": "1", "l": "1", "c": "1"}}
+    http = FakeHTTPClient([FakeResponse({"candles": [candle]}), FakeResponse({"candles": [candle]})])
+    client = OandaClient(http_client=http)
+
+    client.daily_candles_bid_ask("EUR_USD", count=3)
+    client.daily_candles_bid_ask("EUR_USD", count=3, to="2026-10-10T00:00:00Z")
+
+    assert "to" not in http.calls[0]["params"]
+    assert http.calls[1]["params"]["to"] == "2026-10-10T00:00:00Z"
+    assert http.calls[1]["params"]["count"] == 4

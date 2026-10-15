@@ -11,7 +11,6 @@ Datasets are immutable: a new pull gets a new dataset name.
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 from datetime import date, timedelta
 from pathlib import Path
@@ -69,23 +68,34 @@ def fetch_etf(store: BarStore, dataset: str, symbols: list[str], start: str, end
     )
 
 
+def parse_fred_csv(text: str) -> list[dict]:
+    """FRED's keyless CSV: header row, then 'date,value'; '.' or '' = missing."""
+    lines = [ln.strip() for ln in text.strip().splitlines() if ln.strip()]
+    if len(lines) < 2 or "," not in lines[0]:
+        raise RuntimeError(f"unexpected FRED CSV header: {lines[:1]}")
+    rows = []
+    for ln in lines[1:]:
+        day, value = ln.split(",")[:2]
+        if value in (".", ""):
+            continue
+        rows.append({"day": date.fromisoformat(day), "rate": float(value) / 100})
+    if not rows:
+        raise RuntimeError("FRED CSV contained no observations")
+    return rows
+
+
 def fetch_tbill(store: BarStore, dataset: str, start: str, end: str) -> dict:
+    """DTB3 from FRED's public CSV endpoint (no API key needed)."""
     import httpx
 
-    key = os.environ["FRED_API_KEY"]
-    resp = httpx.get(
-        "https://api.stlouisfed.org/fred/series/observations",
-        params={"series_id": "DTB3", "api_key": key, "file_type": "json",
-                "observation_start": start, "observation_end": end},
-        timeout=30,
-    )
+    url = "https://fred.stlouisfed.org/graph/fredgraph.csv"
+    resp = httpx.get(url, params={"id": "DTB3", "cosd": start, "coed": end},
+                     timeout=60, follow_redirects=True)
     resp.raise_for_status()
-    rows = [
-        {"day": date.fromisoformat(o["date"]), "rate": float(o["value"]) / 100}
-        for o in resp.json()["observations"] if o["value"] not in (".", "")
-    ]
+    rows = [r for r in parse_fred_csv(resp.text)
+            if date.fromisoformat(start) <= r["day"] <= date.fromisoformat(end)]
     return store.write_dataset(
-        dataset, source=f"FRED DTB3 (3-month T-bill, secondary market, discount basis) {start}..{end}",
+        dataset, source=f"FRED DTB3 public CSV (3-month T-bill, secondary market, discount basis) {start}..{end}",
         bars_by_symbol={"DTB3": rows}, fields=("day", "rate"), positive_fields=(),
         notes="rate is annual, decimal (0.05 = 5%)",
     )

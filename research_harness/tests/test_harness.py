@@ -343,3 +343,14 @@ def test_stop_resets_at_each_rebalance():
                    start=D0, end=EXPLORE_END, stop_pct=0.10)
     # second rebalance at open 120 moves the stop to 108; day 5 low 106 hits it
     assert res.stops_hit == 1 and res.trades[0]["exit"] == "stop"
+
+
+def test_parse_fred_csv_handles_both_headers_and_missing_values():
+    from research_harness.fetch import parse_fred_csv
+
+    for header in ("DATE,DTB3", "observation_date,DTB3"):
+        rows = parse_fred_csv(f"{header}\n2020-01-02,1.52\n2020-01-03,.\n2020-01-06,\n2020-01-07,0.00\n")
+        assert rows == [{"day": date(2020, 1, 2), "rate": pytest.approx(0.0152)},
+                        {"day": date(2020, 1, 7), "rate": 0.0}]
+    with pytest.raises(RuntimeError):
+        parse_fred_csv("<html>blocked</html>")

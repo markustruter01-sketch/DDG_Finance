@@ -60,3 +60,21 @@ the simpler rule (A, then B, then C). Exploration results go to
 Reported every time: return, CAGR, volatility, Sharpe (rf 0 and excess
 T-bills), max drawdown, round trips, fills, win rate, turnover, leverage, and
 SPY buy-and-hold over the same window for reference.
+
+## Amendment 1 — live parity (16 Oct 2026 ~04:45 Brisbane)
+Made BEFORE any exploration result was seen (at this time the ETF data pull
+had failed and no exploration had run).
+
+Standing platform rule: every live position has a protective stop, and live
+stops must cover whole shares. A backtest without them would test a
+different strategy from the one that runs live. So, for all three
+candidates (fixed design values, not explored):
+- Trade whole shares only (rounded down).
+- Protective stop 20% below the rebalance-day open on every held ETF,
+  re-set at each monthly rebalance. A stop-out stays flat until the next
+  monthly rebalance.
+
+20% is a deliberately wide "disaster" stop chosen by Claude so it rarely
+fires outside crashes; it is a design choice, not a measured value. If any
+exploration run without these rules is logged, it counts as earlier
+variants in the tally and is not used for selection.

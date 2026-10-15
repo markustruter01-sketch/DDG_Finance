@@ -7,6 +7,14 @@ symbol with no bar on t+1 keeps its order pending until its next bar.
 Cash earns the T-bill rate; borrowed cash pays T-bill + financing spread;
 shorts pay borrow. Trade costs come from the CostModel. Weights are fractions
 of equity; sum of |weights| is capped by max_gross.
+
+Live parity options (the live sleeve runs the same rules):
+- whole_shares: trade whole shares only (rounded toward zero), as live
+  protective stops must cover whole shares.
+- stop_pct: every held position carries a protective stop, re-set at each
+  rebalance to stop_pct away from that day's open. If a bar trades through
+  it, the position exits at the stop (or the open, if it gapped through) and
+  stays flat until the strategy's next rebalance.
 """
 
 from __future__ import annotations
@@ -19,6 +27,7 @@ from typing import Any, Callable
 from research_harness.harness.costs import CostModel
 from research_harness.harness.holdout import check_window
 from research_harness.harness.metrics import TRADING_DAYS, CurvePoint, rf_daily_for
+from research_harness.harness.sizing import stop_price, target_shares
 
 EPS = 1e-9
 
@@ -64,6 +73,7 @@ class SimResult:
     financing_paid: float = 0.0
     borrow_paid: float = 0.0
     cash_interest: float = 0.0
+    stops_hit: int = 0
     cost_label: str = ""
 
 
@@ -79,8 +89,12 @@ def simulate(
     max_gross: float = 1.0,
     allow_short: bool = False,
     registration_id: str | None = None,
+    whole_shares: bool = False,
+    stop_pct: float | None = None,
 ) -> SimResult:
     check_window(end, registration_id)
+    if stop_pct is not None and not 0 < stop_pct < 1:
+        raise ValueError("stop_pct must be between 0 and 1")
     bars = {s: [b for b in bs if b["day"] <= end] for s, bs in bars.items()}
     by_day = {s: {b["day"]: b for b in bs} for s, bs in bars.items()}
     days = sorted({b["day"] for bs in bars.values() for b in bs if b["day"] >= start})
@@ -93,8 +107,9 @@ def simulate(
     last: dict[str, float] = {}
     episodes: dict[str, dict[str, Any]] = {}
     pending: dict[str, float] | None = None
+    stops: dict[str, float] = {}
 
-    def trade(sym: str, qty: float, price: float, day: date) -> None:
+    def trade(sym: str, qty: float, price: float, day: date, reason: str = "rebalance") -> None:
         nonlocal cash
         notional = qty * price
         cost = costs.trade_cost(notional)
@@ -109,8 +124,10 @@ def simulate(
         episodes[sym]["flow"] -= notional + cost
         if abs(after) < EPS:
             ep = episodes.pop(sym)
-            res.trades.append({"symbol": sym, "open": ep["open"], "close": day, "pnl": ep["flow"]})
+            res.trades.append({"symbol": sym, "open": ep["open"], "close": day,
+                               "pnl": ep["flow"], "exit": reason})
             shares.pop(sym, None)
+            stops.pop(sym, None)
         else:
             shares[sym] = after
 
@@ -130,14 +147,28 @@ def simulate(
                     continue
                 px = bar["open"]
                 cur = shares.get(sym, 0.0)
-                target = w * equity_open / px
-                if abs(target - cur) * px < 0.01:
-                    continue
-                if cur and target and (cur > 0) != (target > 0):  # flip: close first
-                    trade(sym, -cur, px, day)
-                    cur = 0.0
-                trade(sym, target - cur, px, day)
+                target = target_shares(w, equity_open, px, whole_shares=whole_shares)
+                if abs(target - cur) * px >= 0.01:
+                    if cur and target and (cur > 0) != (target > 0):  # flip: close first
+                        trade(sym, -cur, px, day)
+                        cur = 0.0
+                    trade(sym, target - cur, px, day)
+                if stop_pct is not None and sym in shares:  # re-set at every rebalance
+                    stops[sym] = stop_price(px, long=shares[sym] > 0, stop_pct=stop_pct)
             pending = carry or None
+        # 1b. Protective stops during today's bar.
+        if stop_pct is not None:
+            for sym in sorted(stops):
+                bar = by_day[sym].get(day)
+                if bar is None or sym not in shares:
+                    continue
+                q, stop = shares[sym], stops[sym]
+                if q > 0 and bar["low"] <= stop:
+                    trade(sym, -q, min(stop, bar["open"]), day, reason="stop")
+                    res.stops_hit += 1
+                elif q < 0 and bar["high"] >= stop:
+                    trade(sym, -q, max(stop, bar["open"]), day, reason="stop")
+                    res.stops_hit += 1
         # 2. Overnight carry: cash interest, financing, short borrow.
         for s, b in ((s, by_day[s].get(day)) for s in bars):
             if b is not None:

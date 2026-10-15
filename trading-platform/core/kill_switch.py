@@ -657,10 +657,18 @@ def _write_event(trigger: str, snapshot: dict[str, Any], action: str) -> None:
         logger.critical(f"Kill switch | event persistence failed: {exc}")
 
 
-def _set_all_paused(reason: str) -> None:
+def _set_all_paused(reason: str) -> list[str]:
+    """Pause every bot. Returns the bots that could NOT be paused; a failure
+    never stops the other bots being paused or the orders being cancelled."""
     from core.bot_state import set_paused
+    failed = []
     for bot_id in ACTIVE_BOTS:
-        set_paused(bot_id, True, reason=reason)
+        try:
+            set_paused(bot_id, True, reason=reason)
+        except Exception as exc:
+            failed.append(bot_id)
+            logger.critical(f"Kill switch | FAILED to pause {bot_id}: {exc}")
+    return failed
 
 
 def _cancel_non_protective(snapshot: dict[str, Any]) -> int:
@@ -684,9 +692,11 @@ def trip(triggers: list[dict[str, Any]], snapshot: dict[str, Any]) -> dict[str, 
     """Latch the switch, pause all bots, and cancel only non-stop orders."""
     _state["tripped"] = True
     reason = "; ".join(str(t.get("trigger")) for t in triggers)
-    _set_all_paused(reason)
+    pause_failed = _set_all_paused(reason)
     cancelled = _cancel_non_protective(snapshot)
     action = f"paused_all_bots;cancelled_non_protective={cancelled};protective_stops_preserved"
+    if pause_failed:
+        action += f";PAUSE_FAILED={','.join(pause_failed)}"
     for trigger in triggers:
         logger.critical(f"KILL SWITCH TRIGGERED | {trigger}")
         _write_event(str(trigger.get("trigger")), snapshot, action)

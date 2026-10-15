@@ -11,7 +11,7 @@ This module owns: Alpaca execution, position tracking (alpaca_etf_positions tabl
 ATR stops, trailing stop updates, tiered profit-taking, and heartbeat writes.
 
 ACTIVATION NOTE (important — do this at each staggered launch):
-When activating a new bot, run this SQL BEFORE flipping BOT_PAUSED=False:
+When activating a new bot, run this SQL BEFORE resuming it (bots_state.paused = false):
   UPDATE kraken_heartbeat
   SET bot_id = '<new_bot_id>', bot_display_name = '<new_display_name>'
   WHERE id = <db_id>;

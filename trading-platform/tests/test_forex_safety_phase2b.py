@@ -84,7 +84,7 @@ def test_registry_and_profile_include_paused_forex_safety_metadata():
     profile = ks._BOT_PROFILES["forex_ai"]
     assert "LEVERAGE_TIERS" not in profile
     assert profile["FOREX_MAX_GROSS"] == pytest.approx(2.0)
-    assert profile["BOT_PAUSED"] is True
+    assert "BOT_PAUSED" not in profile  # bots_state.paused is the only switch
 
 
 @pytest.mark.parametrize(

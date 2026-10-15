@@ -96,7 +96,11 @@ def touch_heartbeat(bot_id: str, status: str = "running", error: str = "") -> No
 
 
 def is_paused(bot_id: str) -> bool:
-    """Check if a bot is paused. Falls back to False if row missing or DB unavailable."""
+    """The single pause switch: bots_state.paused.
+
+    Fails CLOSED: a missing row or an unreadable database counts as paused,
+    so a bot never trades because its pause state could not be read.
+    """
     bot_id = _canonical(bot_id)
     try:
         with _get_conn() as conn:
@@ -106,30 +110,33 @@ def is_paused(bot_id: str) -> bool:
                     (bot_id,),
                 )
                 row = cur.fetchone()
-                return bool(row[0]) if row else False
     except Exception as exc:
-        logger.debug(f"BotState | is_paused({bot_id}) failed (non-fatal): {exc}")
-        return False
+        logger.error(f"BotState | is_paused({bot_id}) unreadable, treating as PAUSED: {exc}")
+        return True
+    if row is None:
+        logger.error(f"BotState | is_paused({bot_id}) has no bots_state row, treating as PAUSED")
+        return True
+    return bool(row[0])
 
 
 def set_paused(bot_id: str, paused: bool, reason: str = "") -> None:
-    """Pause or unpause a bot in bots_state."""
+    """Pause or resume a bot. Raises if the change was not written."""
     bot_id = _canonical(bot_id)
-    try:
-        with _get_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    UPDATE bots_state
-                       SET paused       = %s,
-                           pause_reason = %s,
-                           paused_at    = CASE WHEN %s THEN NOW() ELSE paused_at END
-                     WHERE bot_id = %s
-                    """,
-                    (paused, reason, paused, bot_id),
-                )
-    except Exception as exc:
-        logger.debug(f"BotState | set_paused({bot_id}) failed (non-fatal): {exc}")
+    with _get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE bots_state
+                   SET paused       = %s,
+                       pause_reason = %s,
+                       paused_at    = CASE WHEN %s THEN NOW() ELSE paused_at END
+                 WHERE bot_id = %s
+                """,
+                (paused, reason, paused, bot_id),
+            )
+            if cur.rowcount != 1:
+                raise RuntimeError(f"set_paused({bot_id}): no bots_state row updated")
+    logger.warning(f"BotState | {bot_id} {'PAUSED' if paused else 'RESUMED'} reason={reason!r}")
 
 
 def get_bot_state(bot_id: str) -> dict:

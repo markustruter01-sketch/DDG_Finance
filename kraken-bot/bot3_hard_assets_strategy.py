@@ -1,8 +1,7 @@
 """Bot 3 hard-assets sleeve.
 
-This module is deliberately built paused.  It is registered by runner.py but
-does not start a workflow.  ``run_bot3_cycle`` returns before constructing an
-Alpaca client while BOT_PAUSED is true.  The ``--dry-run`` path uses only the
+Registered in runner.py as jerome_macro. Pausing is bots_state.paused only,
+enforced by the runner before this module is called.  The ``--dry-run`` path uses only the
 already validated development price tables and an explicitly supplied empty
 account snapshot.
 
@@ -47,7 +46,6 @@ def get_conn():
 logger = logging.getLogger("bot3.hard_assets")
 
 BOT_ID = "jerome_macro"
-BOT_PAUSED = False
 ASSETS = ("BTC/USD", "ETH/USD", "GLD", "SLV")
 CRYPTO = frozenset({"BTC/USD", "ETH/USD"})
 METALS = frozenset({"GLD", "SLV"})
@@ -1629,11 +1627,7 @@ def run_bot3_cycle(
     now: datetime | None = None,
     db_id: int | None = None,
 ) -> dict[str, Any]:
-    """Live cycle. The first executable branch is the permanent build pause."""
-    if BOT_PAUSED:
-        logger.info("Bot 3 | BOT_PAUSED=True — no client, account read, or order activity")
-        return {"status": "paused", "orders": 0}
-
+    """Live cycle. Only called by the runner, which enforces bots_state.paused."""
     profile = profile or {}
     try:
         max_deployment = _max_deployment(profile)
@@ -1891,7 +1885,7 @@ def dry_run_cycle() -> dict[str, Any]:
 def print_module() -> None:
     print("BOT3_MODULE=bot3_hard_assets_strategy.py")
     print(f"BOT_ID={BOT_ID}")
-    print(f"BOT_PAUSED={BOT_PAUSED}")
+    print("PAUSE=bots_state.paused only (enforced by runner.py)")
     print("UNIVERSE=BTC/USD, ETH/USD, GLD, SLV")
     print("WEIGHTING=inverse volatility, trailing 60 observations, floor 10%, cap 40%")
     print("REBALANCE=first trading day of Jan/Apr/Jul/Oct, 5pp drift band")
@@ -1903,7 +1897,6 @@ def print_module() -> None:
     print("FILL_POLICY=record_open only after confirmed fill; stop armed after fill")
     print("STOP_ID_POLICY=unique UUID suffix on every stop submit")
     print("SOFTWARE_BACKSTOP=market sell if breached stop has no active sell order")
-    print("UNPAUSE=only after migration confirms Bot 3 account flat/reconciled and EPOL/GREK/TUR untouched; then explicitly edit BOT_PAUSED=False")
     print("RUNNER=registered as jerome_macro -> bot3_hard_assets_strategy.run_bot3_cycle; runner not started")
 
 

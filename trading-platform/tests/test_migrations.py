@@ -33,6 +33,11 @@ class FakeCursor:
             self.rowcount = len(gone)
             for x in gone:
                 self.db.pending_ratchet_deletes.add(x)
+        elif s.startswith("SELECT paused FROM bots_state"):
+            self._fetch = [] if self.db.forex_paused == "missing" else [(self.db.forex_paused,)]
+        elif s.startswith("UPDATE bots_state"):
+            self.rowcount = 0 if self.db.forex_paused == "missing" else 1
+            self.db.pending_forex_paused = True
         elif s.startswith("UPDATE system_degradations"):
             self.rowcount = self.db.update_rowcounts.pop(0) if self.db.update_rowcounts else 0
         else:
@@ -46,7 +51,9 @@ class FakeCursor:
 
 
 class FakeDB:
-    def __init__(self, ratchet=None, applied=(), update_rowcounts=None):
+    def __init__(self, ratchet=None, applied=(), update_rowcounts=None, forex_paused=True):
+        self.forex_paused = forex_paused
+        self.pending_forex_paused = None
         self.ratchet = dict(ratchet if ratchet is not None else m._DEAD_RATCHET_ROWS)
         self.applied = set(applied)
         self.update_rowcounts = list(update_rowcounts or [])
@@ -69,8 +76,12 @@ class FakeDB:
             self.rollbacks += 1
             self.pending_applied.clear()
             self.pending_ratchet_deletes.clear()
+            self.pending_forex_paused = None
             raise
         else:
+            if self.pending_forex_paused is not None:
+                self.forex_paused = self.pending_forex_paused
+                self.pending_forex_paused = None
             self.applied |= self.pending_applied
             for sym in self.pending_ratchet_deletes:
                 self.ratchet.pop(sym, None)
@@ -90,7 +101,7 @@ def test_skips_everything_outside_production():
     assert not db.applied
 
 
-def test_applies_both_once_in_production():
+def test_applies_all_once_in_production():
     db = FakeDB(update_rowcounts=[330, 13, 14, 68, 33, 1, 1])
     out = _run(db)
     assert set(out.values()) == {"applied"}
@@ -153,3 +164,29 @@ def test_scheduler_job_status_tolerates_missing_next_run_time(monkeypatch):
     assert scheduler.get_job_status() == [
         {"id": "j1", "name": "pending", "next_fire_utc": "paused"}
     ]
+
+
+M003 = "2026-10-16-003-preserve-forex-pause"
+
+
+def _m003(db):
+    only = tuple(x for x in m.MIGRATIONS if x.id == M003)
+    return m.apply_pending_migrations(db.get_conn, migrations=only, is_production=lambda: True)
+
+
+def test_m003_pauses_forex_when_db_said_running():
+    db = FakeDB(forex_paused=False)
+    assert _m003(db)[M003] == "applied"
+    assert db.forex_paused is True
+
+
+def test_m003_no_change_when_already_paused():
+    db = FakeDB(forex_paused=True)
+    assert _m003(db)[M003] == "applied"
+    assert not any(s.startswith("UPDATE bots_state") for s, _ in db.log)
+
+
+def test_m003_guard_fails_without_forex_row():
+    db = FakeDB(forex_paused="missing")
+    assert _m003(db)[M003] == "guard-failed"
+    assert M003 not in db.applied

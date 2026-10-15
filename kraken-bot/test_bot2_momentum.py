@@ -909,23 +909,6 @@ def test_buy_guard_excludes_cash_park_using_canonical_symbol() -> None:
     assert projection["projected_deployment"] == 0.2
 
 
-def test_pause_is_first_branch_and_does_not_construct_client(monkeypatch) -> None:
-    monkeypatch.setattr(bot2, "BOT_PAUSED", True)
-
-    class ExplodingClient:
-        def __init__(self, *args, **kwargs):
-            raise AssertionError("paused Bot 2 must not create an Alpaca client")
-
-    monkeypatch.setattr(bot2, "AlpacaMomentumClient", ExplodingClient)
-
-    result = bot2.run_bot2_cycle(
-        profile={"ALPACA_API_KEY": "not-used", "ALPACA_SECRET_KEY": "not-used"},
-        now=datetime(2026, 1, 2, 15, 0, tzinfo=timezone.utc),
-    )
-
-    assert result == {"status": "paused", "orders": 0}
-
-
 def test_universe_gate_requires_full_provenance_and_pass(monkeypatch, tmp_path, caplog):
     gate_file = tmp_path / "bot2_universe_gate.json"
     assert bot2.BOT2_UNIVERSE_GATE_FILE == BOT2_UNIVERSE_GATE_FILE
@@ -963,16 +946,16 @@ def test_universe_gate_requires_full_provenance_and_pass(monkeypatch, tmp_path, 
     assert "universe gate age=" in caplog.text
 
 
-def test_paused_cycle_logs_gate_age_every_cycle(monkeypatch, tmp_path, caplog):
+def test_closed_market_cycle_logs_gate_age_every_cycle(monkeypatch, tmp_path, caplog):
+    """The gate age is logged on every cycle, before any early return.
+    (Pausing is enforced by the runner via bots_state, not by this module.)"""
     monkeypatch.setattr(bot2, "BOT2_UNIVERSE_GATE_FILE", tmp_path / "missing.json")
-    monkeypatch.setattr(bot2, "BOT_PAUSED", True)
+    monkeypatch.setattr(bot2, "us_equity_session_open", lambda _now: False)
     caplog.set_level(logging.INFO, logger="bot2.momentum")
 
-    first = bot2.run_bot2_cycle()
-    second = bot2.run_bot2_cycle()
-
-    assert first == {"status": "paused", "orders": 0}
-    assert second == {"status": "paused", "orders": 0}
+    deferred = {"status": "deferred", "orders": 0, "reason": "US_equity_market_closed"}
+    assert bot2.run_bot2_cycle() == deferred
+    assert bot2.run_bot2_cycle() == deferred
     assert caplog.text.count("universe gate age=") == 2
 
 
@@ -1507,7 +1490,6 @@ def _configure_minimal_cycle(
 ):
     client = _CycleClient(broker_positions)
     ranked = [{"symbol": "AAPL"}]
-    monkeypatch.setattr(bot2, "BOT_PAUSED", False)
     monkeypatch.setattr(bot2, "universe_gate_is_passed", lambda: True)
     monkeypatch.setattr(bot2, "ensure_schema", lambda: None)
     monkeypatch.setattr(bot2, "AlpacaMomentumClient", lambda *_args, **_kwargs: client)

@@ -1,0 +1,20 @@
+{
+  "id": "TREND-V1-B",
+  "registered_at": "2026-10-16 ~05:00 Brisbane, after exploration, BEFORE any held-out data was read",
+  "source_document": "research_harness/explore/TREND-V1-PLAN.md (incl. amendment 1)",
+  "hypothesis": "A long/flat cross-asset ETF trend sleeve (close above its 210-day average) with inverse-vol weights beats T-bills after costs on unseen data.",
+  "candidate": "TREND-V1 candidate B: rule sma_210, vol look-back 63, weight cap 0.30, long only, gross <= 1.0, monthly rebalance at the first close of each month, trades at next open, whole shares, 20% protective stop re-set each rebalance. Code: research_harness/sleeves/trend.py + research_harness/heldout/trend_v1_b.py",
+  "candidates_declared": 3,
+  "prior_variants_tried": "At least 7 earlier ETF-trend runs (5 Oct roadmap: fleet runs 127-130, Atlas runs 131-132, Experiment 21) plus the 3 TREND-V1 exploration candidates = at least 10 attempts on this idea.",
+  "selection": "Highest Sharpe in excess of T-bills over 2006-01-01..2020-12-31 exploration (B: 0.81 vs A 0.61, C 0.71), per the plan's pre-declared rule. Exploration log entry: research_harness/exploration_log.jsonl (code 96e8b6f).",
+  "universe": ["SPY", "IWM", "EFA", "EEM", "VNQ", "TLT", "IEF", "LQD", "TIP", "GLD", "DBC"],
+  "window": "Held-out 2021-01-01 .. 2026-10-15 (last bar of the pinned ETF dataset); earlier bars are warm-up only",
+  "data": {
+    "etf_daily_yf_2026-10-16": "119c8e0ff7781b560c4049ac4c965445bfbd3e97c24747e3b4cfb718a8168221",
+    "fred_dtb3_2026-10-16": "008c90e42510326b9ed9098e4e634c5fd1a1949e3dfcd7651edf1ec85fb216df"
+  },
+  "sizing": "inverse-volatility over all eligible ETFs; share of ETFs that are off stays in T-bills",
+  "leverage": "none (gross <= 1.0); no shorts",
+  "costs": "assumed: 0 commission, 2 bps half-spread, 3 bps slippage per trade; no financing or borrow (none used)",
+  "pass_bar": "1) Beats T-bills after costs over the held-out window (excess_return_vs_tbill_pct > 0). 2) Correlation < 0.5 to the equity momentum sleeve and raises fleet Sharpe: NOT YET TESTABLE until that sleeve has a reproducible backtest; the sleeve is not 'passed' until 2 is tested. Run once; a fail is reported as a fail."
+}

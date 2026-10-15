@@ -747,8 +747,26 @@ def is_tripped() -> bool:
 
 
 def manual_trip(reason: str = "manual_emergency") -> dict[str, Any]:
-    """Trip without a broker snapshot; retained for the manual control route."""
-    return trip([{"trigger": "manual", "detail": reason}], {"reason": reason})
+    """Emergency stop from the dashboard/API.
+
+    Pauses every bot FIRST (fastest protection), then reads the brokers so
+    pending non-protective orders can be cancelled. Without that read the
+    trip would pause bots but leave pending entry orders live. Protective
+    stops are never cancelled. If the broker read fails, bots stay paused and
+    the failure is logged critically.
+    """
+    _set_all_paused(reason)
+    snapshot: dict[str, Any] = {"reason": reason}
+    try:
+        from execution.reconciliation import collect_live_snapshot
+
+        snapshot = {**collect_live_snapshot(), "reason": reason}
+    except Exception as exc:
+        logger.critical(
+            f"Kill switch | manual trip could not read brokers; bots paused but "
+            f"pending orders NOT cancelled: {exc}"
+        )
+    return trip([{"trigger": "manual", "detail": reason}], snapshot)
 
 
 def get_state() -> dict[str, Any]:

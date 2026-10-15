@@ -85,3 +85,37 @@ def test_kill_switch_pauses_the_rest_and_still_cancels_when_one_pause_fails(monk
     assert cancelled == ["limit-1"]                        # orders still cancelled
     assert "PAUSE_FAILED=oracle" in result["action"]       # failure is reported
     ks._state["tripped"] = False
+
+
+def test_manual_trip_cancels_pending_orders_from_a_live_snapshot(monkeypatch):
+    import execution.reconciliation as rec
+
+    paused, cancelled = [], []
+    monkeypatch.setattr(bot_state, "set_paused", lambda bot_id, p, reason="": paused.append(bot_id))
+    client = type("Client", (), {"cancel_order_by_id": lambda self, oid: cancelled.append(oid)})()
+    monkeypatch.setattr(rec, "collect_live_snapshot", lambda: {"accounts": [{
+        "bot_id": "oracle", "_client": client,
+        "orders": [{"id": "entry-1", "side": "buy", "type": "limit"},
+                   {"id": "stop-1", "side": "sell", "type": "stop"}]}]})
+    monkeypatch.setattr(ks, "_write_event", lambda *args: None)
+    result = ks.manual_trip("test")
+    assert cancelled == ["entry-1"]                       # stop kept
+    assert set(paused) >= set(ks.ACTIVE_BOTS)
+    assert result["tripped"] is True
+    ks._state["tripped"] = False
+
+
+def test_manual_trip_still_pauses_when_brokers_unreadable(monkeypatch):
+    import execution.reconciliation as rec
+
+    paused = []
+    monkeypatch.setattr(bot_state, "set_paused", lambda bot_id, p, reason="": paused.append(bot_id))
+
+    def broken():
+        raise RuntimeError("broker down")
+
+    monkeypatch.setattr(rec, "collect_live_snapshot", broken)
+    monkeypatch.setattr(ks, "_write_event", lambda *args: None)
+    result = ks.manual_trip("test")
+    assert set(paused) >= set(ks.ACTIVE_BOTS) and result["cancelled"] == 0
+    ks._state["tripped"] = False

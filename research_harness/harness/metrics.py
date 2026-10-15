@@ -63,9 +63,11 @@ def summarize(
     end: date | None = None,
     rf_annual: dict[date, float] | None = None,
     traded_notional: float | None = None,
+    fills: int | None = None,
     cost_label: str | None = None,
 ) -> dict[str, Any]:
-    """trades: dicts with 'close' (date), 'pnl', optional 'r' (risk units)."""
+    """trades: closed round trips, dicts with 'close' (date), 'pnl', optional 'r'.
+    fills: individual executions (a round trip is at least two)."""
     pts = [c for c in curve if (start is None or c[0] >= start) and (end is None or c[0] <= end)]
     tr = [t for t in trades if (start is None or t["close"] >= start) and (end is None or t["close"] <= end)]
     if len(pts) < 2:
@@ -103,6 +105,8 @@ def summarize(
         out["excess_return_vs_tbill_pct"] = round((vals[-1] / vals[0] / cash_growth - 1) * 100, 2)
     if traded_notional is not None and years > 0:
         out["turnover_per_year"] = round(traded_notional / (sum(vals) / len(vals)) / years, 2)
+    if fills is not None:
+        out["fills"] = fills
     if cost_label is not None:
         out["costs"] = cost_label
     return out

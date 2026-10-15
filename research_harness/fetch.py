@@ -13,7 +13,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -44,14 +44,19 @@ def fetch_fx(store: BarStore, dataset: str, to: str) -> dict:
 
 
 def fetch_etf(store: BarStore, dataset: str, symbols: list[str], start: str, end: str) -> dict:
+    import pandas as pd
     import yfinance as yf
 
+    # yfinance's end date is exclusive; make --end inclusive.
+    end_exclusive = (date.fromisoformat(end) + timedelta(days=1)).isoformat()
     data = {}
     for sym in symbols:
-        df = yf.download(sym, start=start, end=end, auto_adjust=True, actions=False,
-                         progress=False, multi_level_index=False)
+        df = yf.download(sym, start=start, end=end_exclusive, auto_adjust=True,
+                         actions=False, progress=False)
         if df is None or df.empty:
             raise RuntimeError(f"no data for {sym}")
+        if isinstance(df.columns, pd.MultiIndex):  # newer yfinance: (field, ticker)
+            df.columns = df.columns.get_level_values(0)
         df = df.dropna(subset=["Open", "High", "Low", "Close"])
         data[sym] = [
             {"day": idx.date(), "open": r["Open"], "high": r["High"], "low": r["Low"], "close": r["Close"]}
@@ -80,7 +85,7 @@ def fetch_tbill(store: BarStore, dataset: str, start: str, end: str) -> dict:
         for o in resp.json()["observations"] if o["value"] not in (".", "")
     ]
     return store.write_dataset(
-        dataset, source=f"FRED DTB3 (3-month T-bill, secondary market) {start}..{end}",
+        dataset, source=f"FRED DTB3 (3-month T-bill, secondary market, discount basis) {start}..{end}",
         bars_by_symbol={"DTB3": rows}, fields=("day", "rate"), positive_fields=(),
         notes="rate is annual, decimal (0.05 = 5%)",
     )

@@ -18,10 +18,22 @@ class HoldoutViolation(RuntimeError):
 
 
 def check_window(end: date, registration_id: str | None) -> None:
-    """Refuse any window reaching the held-out period unless registered."""
-    if end >= HOLDOUT_START and not registration_id:
+    """Refuse any window reaching the held-out period unless registered.
+
+    The id must name a committed, well-formed registration file — any string
+    is not enough, or the lock could be bypassed by typing a made-up id.
+    """
+    if end < HOLDOUT_START:
+        return
+    if not registration_id:
         raise HoldoutViolation(
             f"window ends {end.isoformat()}, inside the held-out period "
             f"(from {HOLDOUT_START.isoformat()}). Exploration must end by "
             f"{EXPLORE_END.isoformat()}; held-out reads need a registration id."
         )
+    from research_harness.harness.registry import RegistrationError, load_registration
+
+    try:
+        load_registration(registration_id)
+    except RegistrationError as exc:
+        raise HoldoutViolation(f"held-out read refused: {exc}") from exc

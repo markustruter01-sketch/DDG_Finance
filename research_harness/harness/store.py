@@ -17,6 +17,7 @@ import hashlib
 import io
 import json
 import os
+import shutil
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
@@ -69,6 +70,11 @@ class BarStore:
         folder = self.root / dataset
         if folder.exists():
             raise FileExistsError(f"dataset {dataset} already exists; datasets are immutable")
+        # Build in a temp folder and rename at the end, so a failed pull never
+        # leaves a half-written dataset that blocks the name forever.
+        final, folder = folder, self.root / f".{dataset}.partial"
+        if folder.exists():
+            shutil.rmtree(folder)
         folder.mkdir(parents=True)
         symbols: dict[str, Any] = {}
         for symbol, bars in sorted(bars_by_symbol.items()):
@@ -98,6 +104,7 @@ class BarStore:
             "symbols": symbols,
         }
         (folder / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True))
+        folder.rename(final)
         return manifest
 
     # ── reading ──────────────────────────────────────────────────────────────

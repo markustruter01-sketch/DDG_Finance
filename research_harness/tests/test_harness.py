@@ -47,7 +47,9 @@ def test_holdout_blocks_unregistered_reads():
     check_window(EXPLORE_END, None)
     with pytest.raises(HoldoutViolation):
         check_window(HOLDOUT_START, None)
-    check_window(HOLDOUT_START, "REG-1")
+    check_window(HOLDOUT_START, "FX-BT1")  # a real, committed registration
+    with pytest.raises(HoldoutViolation, match="no registration file"):
+        check_window(HOLDOUT_START, "made-up-id")
 
 
 # ── store ────────────────────────────────────────────────────────────────────
@@ -66,6 +68,16 @@ def test_store_roundtrip_hash_and_holdout(tmp_path):
     (tmp_path / "ds" / "AAA.csv").write_text("day,open,high,low,close\n2010-01-04,1,1,1,1\n")
     with pytest.raises(DataIntegrityError):
         store.load("ds", "AAA", start=D0, end=EXPLORE_END)
+
+
+def test_failed_write_leaves_name_free(tmp_path):
+    store = BarStore(tmp_path)
+    bad = flat_bars([(10, 11)])
+    bad[0]["close"] = float("nan")
+    with pytest.raises(ValueError):
+        store.write_dataset("ds", source="t", bars_by_symbol={"A": bad})
+    store.write_dataset("ds", source="t", bars_by_symbol={"A": flat_bars([(10, 11)])})
+    assert store.manifest("ds")["symbols"]["A"]["rows"] == 1
 
 
 def test_store_rejects_bad_prices_but_allows_zero_rates(tmp_path):
@@ -186,6 +198,27 @@ def test_cash_interest_financing_and_borrow():
     assert short.borrow_paid > 0
 
 
+def test_short_proceeds_earn_no_interest():
+    bars = {"A": flat_bars([(10, 10)] * 50)}
+    short = simulate(bars, lambda d, v: {"A": -1.0}, costs=FREE, rf_annual={D0: 0.05},
+                     start=D0, end=EXPLORE_END, allow_short=True)
+    cash_only = simulate(bars, lambda d, v: None, costs=FREE, rf_annual={D0: 0.05},
+                         start=D0, end=EXPLORE_END)
+    # Same own cash earns the same interest; the proceeds add nothing.
+    assert short.cash_interest == pytest.approx(cash_only.cash_interest, rel=0.05)
+    assert short.cash_interest < cash_only.cash_interest * 1.5
+
+
+def test_history_window_matches_bars():
+    bars = {"A": flat_bars([(i + 1, i + 1) for i in range(30)])}
+
+    def strat(day, view):
+        assert view.window("A", 5) == view.bars("A")[-5:]
+        return None
+
+    simulate(bars, strat, costs=FREE, rf_annual=None, start=D0, end=EXPLORE_END)
+
+
 def test_limits_are_enforced():
     bars = {"A": flat_bars([(10, 10)] * 3)}
     with pytest.raises(StrategyError, match="short"):
@@ -230,6 +263,15 @@ def test_fleet_sleeve_checks():
     assert out["checks"]["correlation_below_0_5"]
     clone = fleet.evaluate_sleeve("B", {"A": _curve(a), "B": _curve(a)}, {"A": 1, "B": 1}, {D0: 0.0})
     assert not clone["checks"]["correlation_below_0_5"] and not clone["passes"]
+
+
+def test_fleet_aligns_on_common_days_only():
+    days = weekdays(4)
+    a = [(days[0], 100.0, 1), (days[1], 110.0, 1), (days[2], 121.0, 1), (days[3], 121.0, 1)]
+    b = [(days[0], 100.0, 1), (days[2], 120.0, 1), (days[3], 120.0, 1)]  # B closed on day 1
+    common, rets = fleet._aligned({"A": a, "B": b})
+    assert common == [days[2], days[3]]
+    assert rets["A"][0] == pytest.approx(0.21) and rets["B"][0] == pytest.approx(0.20)
 
 
 def test_fleet_vs_spy_needs_both_sharpe_and_drawdown():

@@ -15,15 +15,22 @@ import math
 from datetime import date
 from typing import Any, Sequence
 
-from research_harness.harness.metrics import CurvePoint, daily_returns, max_drawdown, rf_daily_for, sharpe
+from research_harness.harness.metrics import CurvePoint, max_drawdown, rf_daily_for, sharpe
 
 MAX_SLEEVE_CORRELATION = 0.5
 
 
 def _aligned(curves: dict[str, Sequence[CurvePoint]]) -> tuple[list[date], dict[str, list[float]]]:
-    rets = {n: dict(daily_returns(c)) for n, c in curves.items()}
-    days = sorted(set.intersection(*(set(r) for r in rets.values())))
-    return days, {n: [r[d] for d in days] for n, r in rets.items()}
+    """Returns between consecutive days that EVERY curve has, so each sleeve's
+    return covers the same span (a holiday in one market cannot shift them).
+    All curves must label days the same way (calendar date of the close)."""
+    values = {n: {d: v for d, v, _ in c} for n, c in curves.items()}
+    common = sorted(set.intersection(*(set(v) for v in values.values())))
+    rets = {
+        n: [v[common[i]] / v[common[i - 1]] - 1 for i in range(1, len(common))]
+        for n, v in values.items()
+    }
+    return common[1:], rets
 
 
 def correlation(a: Sequence[float], b: Sequence[float]) -> float | None:

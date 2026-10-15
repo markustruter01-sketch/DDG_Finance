@@ -45,6 +45,11 @@ class HistoryView:
     def closes(self, symbol: str) -> list[float]:
         return [b["close"] for b in self.bars(symbol)]
 
+    def window(self, symbol: str, n: int) -> list[dict[str, Any]]:
+        """The last n bars up to today (cheap; use this in long backtests)."""
+        end = bisect.bisect_right(self._days[symbol], self.today)
+        return self._bars[symbol][max(0, end - n):end]
+
 
 Strategy = Callable[[date, HistoryView], "dict[str, float] | None"]
 
@@ -137,9 +142,13 @@ def simulate(
         for s, b in ((s, by_day[s].get(day)) for s in bars):
             if b is not None:
                 last[s] = b["close"]
+        # Short-sale proceeds sit in cash but earn nothing (retail brokers do
+        # not pay interest on them), so only cash beyond them earns T-bills.
+        short_proceeds = sum(-q * last[s] for s, q in shares.items() if q < 0)
         if cash >= 0:
-            res.cash_interest += cash * rf_d[k]
-            cash += cash * rf_d[k]
+            earning = max(0.0, cash - short_proceeds)
+            res.cash_interest += earning * rf_d[k]
+            cash += earning * rf_d[k]
         else:
             charge = -cash * (rf_d[k] + costs.financing_spread_bps_yr / 1e4 / TRADING_DAYS)
             res.financing_paid += charge

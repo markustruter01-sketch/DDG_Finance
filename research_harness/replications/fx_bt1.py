@@ -48,7 +48,11 @@ def run(dataset: str, store: BarStore | None = None, *, record: bool = True) -> 
     import forex_baseline_backtest as fx
 
     store = store or BarStore()
+    from forex_quant_desk import FOREX_PAIRS
+
     reg = registry.begin_run(REG_ID, "replication")
+    if list(FOREX_PAIRS) != list(reg["universe"]):
+        raise RuntimeError(f"pair list changed since FX-BT1: {FOREX_PAIRS} vs {reg['universe']}")
     data = {
         pair: store.load(dataset, pair, start=DATA_START, end=fx.LAST_DAY, registration_id=REG_ID)
         for pair in reg["universe"]

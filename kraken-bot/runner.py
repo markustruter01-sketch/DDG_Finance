@@ -611,6 +611,9 @@ def _write_portfolio_from_alpaca(bot_id: str, profile: dict) -> bool:
     """
     if not _portfolio_write_ok or not _heartbeat_ok:
         return False
+    canonical = _bs_normalise(bot_id) or bot_id
+    account_read_ok = False
+    positions_read_ok = False
     try:
         import alpaca_trade_api as tradeapi
 
@@ -624,9 +627,9 @@ def _write_portfolio_from_alpaca(bot_id: str, profile: dict) -> bool:
 
         api = tradeapi.REST(api_key, secret_key, base_url=base_url)
         acct = api.get_account()
+        account_read_ok = True
         posns = api.list_positions()
-
-        canonical = _bs_normalise(bot_id) or bot_id
+        positions_read_ok = True
 
         positions_list = [
             {
@@ -646,10 +649,23 @@ def _write_portfolio_from_alpaca(bot_id: str, profile: dict) -> bool:
             cash=float(acct.cash or 0),
             equity=float(acct.equity or 0),
             positions=positions_list,
+            positions_read_ok=True,
+            account_read_ok=True,
         )
         logger.debug(f"[{bot_id}] bot_portfolio write OK — equity={acct.equity}")
         return True
     except Exception as exc:
+        if not positions_read_ok:
+            try:
+                from core.bot_state import sync_cash_asset_ledger
+                sync_cash_asset_ledger(
+                    canonical,
+                    None,
+                    positions_read_ok=False,
+                    account_read_ok=account_read_ok,
+                )
+            except Exception:
+                pass
         logger.debug(f"[{bot_id}] portfolio write failed (non-fatal): {exc}")
         return False
 

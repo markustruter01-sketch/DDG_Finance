@@ -440,7 +440,7 @@ def run_bot2_cycle(profile: dict, db_id: int) -> None:
             from sgov_parking import unpark_for_entry as _sgov_unpark
             _all_pos_with_sgov = engine.get_strategy_positions(BOT_ID)
             if any(is_cash_park(p.get("symbol")) for p in _all_pos_with_sgov):
-                _freed = _sgov_unpark(engine, "Bot2", _all_pos_with_sgov, bot_id=BOT_ID)
+                _freed = _sgov_unpark(engine, "Bot2", _all_pos_with_sgov)
                 if _freed > 0:
                     # Refresh account cash after unpark so deployment math is accurate
                     _fresh_acct = engine.get_account()
@@ -553,25 +553,12 @@ def run_bot2_cycle(profile: dict, db_id: int) -> None:
     try:
         from sgov_parking import park_idle_cash as _sgov_park
         _park_acct = engine.get_account()
-        _sgov_park(
-            engine, "Bot2", engine.get_strategy_positions(BOT_ID),
-            _park_acct["cash"], bot_id=BOT_ID,
-        )
+        _sgov_park(engine, "Bot2", engine.get_strategy_positions(BOT_ID), _park_acct["cash"])
     except Exception as _park_exc:
         logger.debug(f"Bot2 | SGOV park error (non-fatal): {_park_exc}")
 
-    # ── Portfolio heartbeat ────────────────────────────────────────────────────
+    # The runner performs the single post-cycle portfolio sync after this returns.
     live_positions = engine.get_strategy_positions(BOT_ID)
-    try:
-        from core.bot_state import write_portfolio as _write_portfolio
-        _write_portfolio(
-            BOT_ID,
-            cash=account["cash"],
-            equity=equity,
-            positions=live_positions,
-        )
-    except Exception as exc:
-        logger.debug(f"Bot2 | write_portfolio failed (non-fatal): {exc}")
     logger.info(
         f"Bot2 | Cycle complete — equity=${equity:,.2f} "
         f"positions={len(live_positions)}"

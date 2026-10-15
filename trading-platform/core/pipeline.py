@@ -1464,16 +1464,29 @@ async def _run_pipeline_inner(
         from core.bot_state import update_portfolio_balances as _bs_update_balances
         _oracle_equity = float(exec_result.get("equity", 0.0) or 0.0)
         _oracle_cash   = 0.0
+        _oracle_account_read_ok = False
+        _oracle_positions_read_ok = False
+        _oracle_positions = None
         try:
             from execution.broker import get_account as _get_acct
             _acct = _get_acct()
             _oracle_cash = float(_acct.get("cash", 0.0) or 0.0)
+            _oracle_account_read_ok = True
         except Exception:
             _oracle_cash = _oracle_equity
+        try:
+            from execution.broker import get_positions as _get_positions
+            _oracle_positions = _get_positions()
+            _oracle_positions_read_ok = True
+        except Exception as _positions_exc:
+            logger.warning(f"Pipeline | cash-asset position sync read failed: {_positions_exc}")
         _bs_update_balances(
             "oracle",
             cash=round(_oracle_cash, 2),
             equity=round(_oracle_equity, 2),
+            broker_positions=_oracle_positions,
+            positions_read_ok=_oracle_positions_read_ok,
+            account_read_ok=_oracle_account_read_ok,
         )
     except Exception as _pf_exc:
         logger.debug(f"Pipeline | Oracle bot_portfolio dual-write failed (non-fatal): {_pf_exc}")

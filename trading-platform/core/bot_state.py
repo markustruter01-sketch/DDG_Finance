@@ -23,6 +23,8 @@ if _TP not in sys.path:
     sys.path.insert(0, _TP)
 
 from core.bot_registry import active_bot_ids, normalise_bot_id
+from core.cash_park import is_cash_park
+from core.symbols import canonical_symbol
 
 # Includes paused but registered bots; retired identities stay excluded.
 ACTIVE_BOT_IDS = set(active_bot_ids())
@@ -218,74 +220,124 @@ def touch_portfolio(bot_id: str) -> None:
         logger.debug(f"BotState | touch_portfolio({bot_id}) failed (non-fatal): {exc}")
 
 
-def apply_position_fill_delta(
-    bot_id: str, symbol: str, side: str, filled_qty: float, *, cursor=None
-) -> None:
-    """Apply a broker-reported fill quantity to the portfolio position ledger."""
-    bot_id = _canonical(bot_id)
-    side = side.lower()
-    if side not in {"buy", "sell"} or filled_qty <= 0:
-        raise ValueError("side must be buy/sell and filled_qty must be positive")
-    delta = filled_qty if side == "buy" else -filled_qty
-    sql = """
-                WITH fill AS (
-                    SELECT %s::text AS symbol, %s::numeric AS delta,
-                           %s::text AS side
+def sync_cash_asset_ledger(
+    bot_id: str,
+    broker_positions: list[dict] | None,
+    *,
+    positions_read_ok: bool,
+    account_read_ok: bool,
+) -> bool:
+    """Set only cash-asset position quantities to this cycle's broker snapshot."""
+    canonical = _canonical(bot_id)
+    if not positions_read_ok or not account_read_ok or broker_positions is None:
+        logger.warning(
+            "BotState | cash-asset sync skipped for %s: broker account/positions "
+            "read was not confirmed successful", canonical
+        )
+        return False
+
+    try:
+        # Use the vault's canonical constants rather than maintaining another list.
+        from execution.per_bot_vault import VAULT_BIL_SYMBOL, VAULT_VOO_SYMBOL
+
+        def is_cash_asset(symbol: object) -> bool:
+            return is_cash_park(symbol) or canonical_symbol(symbol) in (
+                VAULT_BIL_SYMBOL,
+                VAULT_VOO_SYMBOL,
+            )
+
+        broker_assets: dict[str, tuple[float, dict]] = {}
+        for position in broker_positions:
+            symbol = canonical_symbol(position.get("symbol"))
+            if not is_cash_asset(symbol):
+                continue
+            qty = float(position.get("qty", 0) or 0)
+            if qty > 0:
+                broker_assets[symbol] = (qty, position)
+
+        with _get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT positions FROM bot_portfolio WHERE bot_id = %s FOR UPDATE",
+                    (canonical,),
                 )
-                UPDATE bot_portfolio AS p
-                SET positions = (
-                    SELECT COALESCE(
-                        jsonb_agg(
-                            CASE WHEN e.value->>'symbol' = fill.symbol
-                                 THEN jsonb_set(
-                                     e.value, '{qty}',
-                                     to_jsonb(GREATEST(
-                                         0::numeric,
-                                         COALESCE((e.value->>'qty')::numeric, 0) + fill.delta
-                                     )), true
-                                 )
-                                 ELSE e.value
-                            END
-                        ) FILTER (
-                            WHERE e.value->>'symbol' <> fill.symbol
-                               OR COALESCE((e.value->>'qty')::numeric, 0) + fill.delta > 0
-                        ),
-                        '[]'::jsonb
+                row = cur.fetchone()
+                if row is None:
+                    logger.warning(
+                        "BotState | cash-asset sync skipped for %s: portfolio row missing",
+                        canonical,
                     )
-                    || CASE
-                        WHEN fill.delta > 0 AND NOT EXISTS (
-                            SELECT 1 FROM jsonb_array_elements(
-                                COALESCE(p.positions, '[]'::jsonb)
-                            ) AS old(value)
-                            WHERE old.value->>'symbol' = fill.symbol
+                    return False
+                positions = row[0] or []
+                if isinstance(positions, str):
+                    import json
+                    positions = json.loads(positions)
+
+                synced: list[dict] = []
+                seen: set[str] = set()
+                for item in positions:
+                    symbol = canonical_symbol(item.get("symbol"))
+                    if not is_cash_asset(symbol):
+                        synced.append(item)
+                        continue
+                    if symbol in seen:
+                        logger.info(
+                            "BotState | cash-asset ledger sync bot_id=%s symbol=%s old_qty=%s new_qty=absent",
+                            canonical, symbol, float(item.get("qty", 0) or 0),
                         )
-                        THEN jsonb_build_array(jsonb_build_object(
-                            'symbol', fill.symbol, 'qty', fill.delta, 'side', 'long'
-                        ))
-                        ELSE '[]'::jsonb
-                    END
-                    FROM fill
-                    LEFT JOIN LATERAL jsonb_array_elements(
-                        COALESCE(p.positions, '[]'::jsonb)
-                    ) AS e(value) ON TRUE
-                ),
-                last_updated = NOW()
-                WHERE p.bot_id = %s
-                """
-    params = (symbol, delta, side, bot_id)
-    if cursor is not None:
-        cursor.execute(sql, params)
-        if cursor.rowcount == 0:
-            raise RuntimeError(f"bot_portfolio row not found for {bot_id}")
-        return
-    with _get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql, params)
-            if cur.rowcount == 0:
-                raise RuntimeError(f"bot_portfolio row not found for {bot_id}")
+                        continue
+                    seen.add(symbol)
+                    old_qty = float(item.get("qty", 0) or 0)
+                    broker_item = broker_assets.get(symbol)
+                    if broker_item is None:
+                        logger.info(
+                            "BotState | cash-asset ledger sync bot_id=%s symbol=%s old_qty=%s new_qty=absent",
+                            canonical, symbol, old_qty,
+                        )
+                        continue
+                    new_qty, _ = broker_item
+                    updated = dict(item)
+                    updated["qty"] = new_qty
+                    synced.append(updated)
+                    broker_assets.pop(symbol, None)
+                    if old_qty != new_qty:
+                        logger.info(
+                            "BotState | cash-asset ledger sync bot_id=%s symbol=%s old_qty=%s new_qty=%s",
+                            canonical, symbol, old_qty, new_qty,
+                        )
+
+                for symbol, (new_qty, broker_item) in broker_assets.items():
+                    added = dict(broker_item)
+                    added["qty"] = new_qty
+                    synced.append(added)
+                    logger.info(
+                        "BotState | cash-asset ledger sync bot_id=%s symbol=%s old_qty=absent new_qty=%s",
+                        canonical, symbol, new_qty,
+                    )
+
+                import json
+                cur.execute(
+                    "UPDATE bot_portfolio SET positions = %s::jsonb, last_updated = NOW() WHERE bot_id = %s",
+                    (json.dumps(synced), canonical),
+                )
+        return True
+    except Exception as exc:
+        logger.warning(
+            "BotState | cash-asset sync failed for %s; ledger unchanged: %s",
+            canonical, exc,
+        )
+        return False
 
 
-def update_portfolio_balances(bot_id: str, *, cash: float, equity: float) -> None:
+def update_portfolio_balances(
+    bot_id: str,
+    *,
+    cash: float,
+    equity: float,
+    broker_positions: list[dict] | None = None,
+    positions_read_ok: bool = False,
+    account_read_ok: bool = False,
+) -> None:
     """Update account balances without replacing the broker-position ledger."""
     bot_id = _canonical(bot_id)
     with _get_conn() as conn:
@@ -301,6 +353,13 @@ def update_portfolio_balances(bot_id: str, *, cash: float, equity: float) -> Non
                 """,
                 (bot_id, cash, equity),
             )
+    if broker_positions is not None or not positions_read_ok or not account_read_ok:
+        sync_cash_asset_ledger(
+            bot_id,
+            broker_positions,
+            positions_read_ok=positions_read_ok,
+            account_read_ok=account_read_ok,
+        )
 
 
 def write_portfolio(
@@ -308,6 +367,9 @@ def write_portfolio(
     cash: float,
     equity: float,
     positions: list,
+    *,
+    positions_read_ok: bool = False,
+    account_read_ok: bool = False,
 ) -> None:
     """UPSERT portfolio state. Called by bot at end of every cycle.
     Resolves legacy BOT_ID env-var values via LEGACY_TO_CANONICAL first."""
@@ -334,6 +396,13 @@ def write_portfolio(
                         _json.dumps(positions),
                     ),
                 )
+        if positions_read_ok or account_read_ok:
+            sync_cash_asset_ledger(
+                canonical,
+                positions,
+                positions_read_ok=positions_read_ok,
+                account_read_ok=account_read_ok,
+            )
     except Exception as exc:
         logger.debug(f"BotState | write_portfolio({bot_id}) failed (non-fatal): {exc}")
 

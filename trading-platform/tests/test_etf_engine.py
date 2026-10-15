@@ -33,6 +33,25 @@ def test_cash_park_symbol_variants_skip_engine_stop_management():
     )
 
 
+def test_full_close_market_closed_returns_explicit_deferred_marker(monkeypatch):
+    engine = object.__new__(AlpacaEtfEngine)
+    engine.api = _FakeApi()
+    monkeypatch.setattr(
+        engine,
+        "get_positions",
+        lambda: [{"symbol": "EPOL", "qty": "268"}],
+    )
+    monkeypatch.setattr(engine, "is_market_open", lambda: False)
+    monkeypatch.setattr(
+        engine.api,
+        "submit_order",
+        lambda **_kwargs: pytest.fail("market-closed close must not submit an order"),
+    )
+
+    assert engine.close_position("EPOL", bot_id="oracle") is False
+    assert engine._last_close_deferred_market_closed is True
+
+
 class _FakeCursor:
     def __init__(self, rows, trade_row=None):
         self.rows = rows

@@ -34,6 +34,7 @@ _ALPACA_ACCOUNT_ENV = {
     "spy_qqq_trend": ("ALPACA_BB_API_KEY", "ALPACA_BB_SECRET_KEY"),
     "jerome_macro": ("ALPACA_JEROME_API_KEY", "ALPACA_JEROME_SECRET_KEY"),
 }
+_MAX_ALPACA_TRADE_AGE_SECONDS = 300
 
 # ─────────────────────────────────────────────────────────────────────────────
 # DB Helpers
@@ -166,7 +167,7 @@ def _log_result(
 
     Returns (status, discrepancy_pct).
 
-    override_status: when provided (e.g. "WARN"), replaces the computed
+    override_status: when provided (e.g. "WARN" or "UNKNOWN"), replaces the computed
     status.  Use this when the caller has already determined that the
     classification should differ from the arithmetic comparison — for
     example, a legacy position where entry_atr is unavailable so a
@@ -198,7 +199,9 @@ def _log_result(
     # Caller may override the computed status (e.g. FAIL → WARN for legacy positions)
     if override_status is not None:
         status = override_status
-        severity = {"PASS": "INFO", "WARN": "WARNING", "FAIL": "CRITICAL"}.get(status, severity)
+        severity = {
+            "PASS": "INFO", "WARN": "WARNING", "UNKNOWN": "INFO", "FAIL": "CRITICAL"
+        }.get(status, severity)
 
     try:
         conn = _db_conn()
@@ -336,8 +339,10 @@ def _fetch_alpaca_closes(symbol: str, days: int = 70) -> Optional[list[float]]:
 
 
 def _fetch_alpaca_current_prices(bot_id: str) -> Optional[dict[str, float]]:
-    """Read current broker position prices without falling back to stale DB data."""
+    """Read fresh Alpaca latest-trade prices; return None when market data is stale."""
     try:
+        from alpaca.data.historical import StockHistoricalDataClient  # type: ignore
+        from alpaca.data.requests import StockLatestTradeRequest  # type: ignore
         from alpaca.trading.client import TradingClient  # type: ignore
 
         key_name, secret_name = _ALPACA_ACCOUNT_ENV[bot_id]
@@ -346,19 +351,46 @@ def _fetch_alpaca_current_prices(bot_id: str) -> Optional[dict[str, float]]:
         if not key or not secret:
             raise RuntimeError(f"credentials unavailable for {bot_id}")
 
-        client = TradingClient(key, secret, paper=True)
+        trading_client = TradingClient(key, secret, paper=True)
+        if not trading_client.get_clock().is_open:
+            logger.info(f"[math_auditor] Market closed for {bot_id}; skipping current prices")
+            return None
+
+        symbols = [str(position.symbol) for position in trading_client.get_all_positions()]
+        if not symbols:
+            return {}
+
+        data_client = StockHistoricalDataClient(key, secret)
+        trades = data_client.get_stock_latest_trade(
+            StockLatestTradeRequest(symbol_or_symbols=symbols)
+        )
+        now = datetime.now(timezone.utc)
         prices: dict[str, float] = {}
-        for position in client.get_all_positions():
-            raw_price = getattr(position, "current_price", None)
-            if raw_price is None:
+        for symbol in symbols:
+            trade = trades.get(symbol)
+            if trade is None:
+                continue
+            raw_price = getattr(trade, "price", None)
+            timestamp = getattr(trade, "timestamp", None)
+            if raw_price is None or timestamp is None:
+                continue
+            if not isinstance(timestamp, datetime):
+                to_pydatetime = getattr(timestamp, "to_pydatetime", None)
+                timestamp = to_pydatetime() if callable(to_pydatetime) else None
+            if not isinstance(timestamp, datetime):
+                continue
+            if timestamp.tzinfo is None:
+                timestamp = timestamp.replace(tzinfo=timezone.utc)
+            age_seconds = (now - timestamp.astimezone(timezone.utc)).total_seconds()
+            if age_seconds < 0 or age_seconds > _MAX_ALPACA_TRADE_AGE_SECONDS:
                 continue
             price = float(raw_price)
             if math.isfinite(price) and price > 0:
-                prices[str(position.symbol)] = price
+                prices[symbol] = price
         return prices
     except Exception as exc:
         logger.warning(
-            f"[math_auditor] Current Alpaca prices unavailable for {bot_id}: {exc}"
+            f"[math_auditor] Fresh Alpaca trade prices unavailable for {bot_id}: {exc}"
         )
         return None
 
@@ -710,7 +742,7 @@ def audit_atr_open_positions(audit_mode: str = "quick") -> int:
                 "entry relation unavailable for a valid stop"
             )
         elif current is None:
-            status = "WARN"
+            status = "UNKNOWN"
             bot_output = None
             auditor_output = None
             notes = (

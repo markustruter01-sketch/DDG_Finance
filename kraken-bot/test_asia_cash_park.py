@@ -3,6 +3,7 @@ from __future__ import annotations
 import inspect
 import pathlib
 import sys
+from types import SimpleNamespace
 
 _ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_ROOT / "trading-platform"))
@@ -11,6 +12,60 @@ sys.path.insert(1, str(_ROOT / "kraken-bot"))
 import asia_trend_strategy as atlas_strategy
 import sgov_parking
 from core.cash_park import CASH_PARK_SYMBOLS
+
+
+def test_safe_close_treats_market_closed_as_deferred_without_degradation(monkeypatch) -> None:
+    records: list[dict] = []
+    notifications: list[str] = []
+
+    class FakeEngine:
+        _last_close_deferred_market_closed = False
+
+        def get_db_positions(self, _bot_id):
+            return [{"symbol": "EPOL", "stop_order_id": "stop-1", "stop_price": 40.95}]
+
+        def close_position(self, *_args, **_kwargs):
+            self._last_close_deferred_market_closed = True
+            return False
+
+    monkeypatch.setattr(
+        "core.degradation_tracker.record_degradation",
+        lambda **kwargs: records.append(kwargs),
+    )
+    monkeypatch.setattr(
+        "notifications.discord.notify_capital_risk",
+        lambda message, **_kwargs: notifications.append(message),
+    )
+
+    assert atlas_strategy._safe_close(FakeEngine(), "EPOL", "trend exit", None, "oracle") is False
+    assert records == []
+    assert notifications == []
+
+
+def test_safe_close_still_degrades_for_non_market_closed_false(monkeypatch) -> None:
+    records: list[dict] = []
+
+    class FakeEngine:
+        _last_close_deferred_market_closed = False
+
+        def get_db_positions(self, _bot_id):
+            return []
+
+        def close_position(self, *_args, **_kwargs):
+            return False
+
+    monkeypatch.setattr(
+        "core.degradation_tracker.record_degradation",
+        lambda **kwargs: records.append(kwargs),
+    )
+    monkeypatch.setattr(
+        "notifications.discord.notify_capital_risk",
+        lambda *_args, **_kwargs: None,
+    )
+
+    assert atlas_strategy._safe_close(FakeEngine(), "EPOL", "trend exit", None, "oracle") is False
+    assert len(records) == 1
+    assert records[0]["error_type"] == "close_position_failed"
 
 
 def test_deployment_percentage_excludes_parked_cash() -> None:

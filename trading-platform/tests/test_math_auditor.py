@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -92,8 +94,75 @@ def test_zero_or_negative_stop_fails(monkeypatch, stop):
 def test_current_price_unavailable_warns_instead_of_failing(monkeypatch):
     result = _run_audit(monkeypatch, entry=100.0, stop=95.0, current=None)
 
-    assert result["override_status"] == "WARN"
+    assert result["override_status"] == "UNKNOWN"
     assert result["bot_output"] is None
     assert result["auditor_output"] is None
     assert "current price unavailable" in result["notes"]
     assert "unknown, not a fault" in result["notes"]
+
+
+def test_current_price_uses_fresh_latest_alpaca_trade(monkeypatch):
+    from alpaca.data import historical, requests
+    from alpaca.trading import client
+
+    now = datetime.now(timezone.utc)
+
+    class FakeTradingClient:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def get_clock(self):
+            return SimpleNamespace(is_open=True)
+
+        def get_all_positions(self):
+            return [SimpleNamespace(symbol="EWT", current_price=107.40)]
+
+    class FakeStockHistoricalDataClient:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def get_stock_latest_trade(self, request):
+            assert request.symbol_or_symbols == ["EWT"]
+            return {"EWT": SimpleNamespace(price=110.94, timestamp=now)}
+
+    monkeypatch.setattr(client, "TradingClient", FakeTradingClient)
+    monkeypatch.setattr(historical, "StockHistoricalDataClient", FakeStockHistoricalDataClient)
+    monkeypatch.setattr(
+        requests,
+        "StockLatestTradeRequest",
+        lambda **kwargs: SimpleNamespace(**kwargs),
+    )
+
+    assert math_auditor._fetch_alpaca_current_prices("oracle") == {"EWT": 110.94}
+
+
+def test_current_price_ignores_stale_latest_alpaca_trade(monkeypatch):
+    from alpaca.data import historical
+    from alpaca.trading import client
+
+    class FakeTradingClient:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def get_clock(self):
+            return SimpleNamespace(is_open=True)
+
+        def get_all_positions(self):
+            return [SimpleNamespace(symbol="EWT", current_price=107.40)]
+
+    class FakeStockHistoricalDataClient:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def get_stock_latest_trade(self, _request):
+            return {
+                "EWT": SimpleNamespace(
+                    price=107.40,
+                    timestamp=datetime.now(timezone.utc) - timedelta(minutes=6),
+                )
+            }
+
+    monkeypatch.setattr(client, "TradingClient", FakeTradingClient)
+    monkeypatch.setattr(historical, "StockHistoricalDataClient", FakeStockHistoricalDataClient)
+
+    assert math_auditor._fetch_alpaca_current_prices("oracle") == {}

@@ -315,6 +315,12 @@ def _safe_close(engine: AlpacaEtfEngine, symbol: str, exit_reason: str,
             stop_price=float(db_pos["stop_price"]) if db_pos.get("stop_price") is not None else None,
         )
         if not closed:
+            if getattr(engine, "_last_close_deferred_market_closed", False):
+                logger.info(
+                    f"Asia | _safe_close({symbol}): deferred because market is closed; "
+                    "protective stop remains active and next cycle will retry"
+                )
+                return False
             raise RuntimeError("close_position() returned False/None")
         return True
     except Exception as exc:

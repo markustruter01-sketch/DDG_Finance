@@ -777,6 +777,7 @@ class AlpacaEtfEngine:
         stop_price: Optional[float] = None,
     ) -> bool:
         """Close entire position in a symbol."""
+        self._last_close_deferred_market_closed = False
         try:
             live = next((p for p in self.get_positions() if same_symbol(p["symbol"], symbol)), None)
             if not live or abs(float(live["qty"])) < 1e-6:
@@ -788,6 +789,7 @@ class AlpacaEtfEngine:
             self._persist_close_failure(bot_id, symbol, raw_error)
             return False
         if bot_id and not self.is_market_open():
+            self._last_close_deferred_market_closed = True
             logger.info(f"EtfEngine | Full close deferred — market closed; {symbol} stop stays active")
             return False
         if bot_id and self._has_pending_owned_exit(bot_id, symbol):

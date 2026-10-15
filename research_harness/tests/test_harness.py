@@ -302,3 +302,44 @@ def test_fx_bt1_replication_runs_on_synthetic_data(tmp_path):
     out = fx_bt1.run("fx", store, record=False)
     assert out["harness_metrics_match_original_formula"] is True
     assert out["reproduced"] is False  # synthetic data must not "reproduce" the real result
+
+
+# ── live-parity options: whole shares and protective stops ──────────────────
+
+def test_whole_shares_rounds_toward_zero():
+    bars = {"A": flat_bars([(30, 30)] * 3)}
+    res = simulate(bars, lambda d, v: {"A": 1.0}, costs=FREE, rf_annual=None,
+                   start=D0, end=EXPLORE_END, whole_shares=True, start_equity=1000)
+    # 1000 / 30 = 33.33 -> 33 shares; 10 dollars stays in cash
+    assert res.traded_notional == pytest.approx(33 * 30)
+
+
+def test_stop_exits_at_stop_and_stays_flat_until_next_rebalance():
+    prices = [(100, 100), (100, 100), (100, 85), (85, 90), (90, 95)]
+    bars = {"A": flat_bars(prices)}
+    plan = iter([{"A": 1.0}, None, None, None, None])
+    res = simulate(bars, lambda d, v: next(plan), costs=FREE, rf_annual=None,
+                   start=D0, end=EXPLORE_END, stop_pct=0.10)
+    assert res.stops_hit == 1
+    assert res.trades[0]["exit"] == "stop"
+    assert res.trades[0]["pnl"] == pytest.approx(-10_000)    # 100 -> stop at 90
+    assert res.curve[-1][2] == 0.0                            # still flat afterwards
+
+
+def test_stop_fills_at_open_when_price_gaps_through():
+    prices = [(100, 100), (100, 100), (80, 82)]
+    bars = {"A": flat_bars(prices)}
+    plan = iter([{"A": 1.0}, None, None])
+    res = simulate(bars, lambda d, v: next(plan), costs=FREE, rf_annual=None,
+                   start=D0, end=EXPLORE_END, stop_pct=0.10)
+    assert res.trades[0]["pnl"] == pytest.approx(-20_000)    # gapped to 80, not 90
+
+
+def test_stop_resets_at_each_rebalance():
+    prices = [(100, 100), (100, 120), (120, 120), (120, 120), (120, 106)]
+    bars = {"A": flat_bars(prices)}
+    plan = iter([{"A": 1.0}, None, {"A": 1.0}, None, None])
+    res = simulate(bars, lambda d, v: next(plan), costs=FREE, rf_annual=None,
+                   start=D0, end=EXPLORE_END, stop_pct=0.10)
+    # second rebalance at open 120 moves the stop to 108; day 5 low 106 hits it
+    assert res.stops_hit == 1 and res.trades[0]["exit"] == "stop"

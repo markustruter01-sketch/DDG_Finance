@@ -30,6 +30,11 @@ UNIVERSE = ["SPY", "IWM", "EFA", "EEM", "VNQ", "TLT", "IEF", "LQD", "TIP", "GLD"
 CANDIDATES = {"A": "tsmom_252", "B": "sma_210", "C": "blend_63_126_252"}
 LOAD_START = date(1990, 1, 1)   # everything before the window is warm-up
 WINDOW_START = date(2006, 1, 1)
+# Amendment 1 (16 Oct 2026, before any exploration result was seen): live
+# parity. Live positions must be whole shares with a protective stop, so the
+# simulation uses the same rules. Fixed design values, not explored.
+WHOLE_SHARES = True
+STOP_PCT = 0.20
 COSTS = CostModel(commission_bps=0, half_spread_bps=2, slippage_bps=3,
                   short_borrow_bps_yr=0, financing_spread_bps_yr=0)
 
@@ -55,13 +60,15 @@ def run(etf_dataset: str, rates_dataset: str, store: BarStore | None = None,
         "data": {"etf": [etf_dataset, store.manifest_hash(etf_dataset)],
                  "rates": [rates_dataset, store.manifest_hash(rates_dataset)]},
         "costs": COSTS.label() + " (assumed: 0 commission, 2 bps half-spread, 3 bps slippage)",
+        "live_parity": {"whole_shares": WHOLE_SHARES, "stop_pct": STOP_PCT, "amendment": 1},
         "spy_buy_and_hold": metrics.summarize(spy.curve, spy.trades, rf_annual=rf,
                                               traded_notional=spy.traded_notional, fills=spy.fills),
         "candidates": {},
     }
     for cid, rule in CANDIDATES.items():
         res = simulate(bars, make_strategy(UNIVERSE, TrendParams(rule=rule)), costs=COSTS,
-                       rf_annual=rf, start=WINDOW_START, end=EXPLORE_END)
+                       rf_annual=rf, start=WINDOW_START, end=EXPLORE_END,
+                       whole_shares=WHOLE_SHARES, stop_pct=STOP_PCT)
         s = metrics.summarize(res.curve, res.trades, rf_annual=rf, cost_label=res.cost_label,
                               traded_notional=res.traded_notional, fills=res.fills)
         r = _rets(res.curve)
@@ -69,6 +76,7 @@ def run(etf_dataset: str, rates_dataset: str, store: BarStore | None = None,
         corr = correlation([r[d] for d in common], [spy_rets[d] for d in common])
         s["correlation_to_spy"] = round(corr, 3) if corr is not None else None
         s["costs_paid_usd"] = round(res.costs_paid, 2)
+        s["stops_hit"] = res.stops_hit
         out["candidates"][cid] = {"rule": rule, "summary": s}
     order = list(CANDIDATES)  # tie-break: simpler rule first
     best = max(order, key=lambda c: (out["candidates"][c]["summary"].get("sharpe_excess_tbill")

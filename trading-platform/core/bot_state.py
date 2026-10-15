@@ -218,6 +218,91 @@ def touch_portfolio(bot_id: str) -> None:
         logger.debug(f"BotState | touch_portfolio({bot_id}) failed (non-fatal): {exc}")
 
 
+def apply_position_fill_delta(
+    bot_id: str, symbol: str, side: str, filled_qty: float, *, cursor=None
+) -> None:
+    """Apply a broker-reported fill quantity to the portfolio position ledger."""
+    bot_id = _canonical(bot_id)
+    side = side.lower()
+    if side not in {"buy", "sell"} or filled_qty <= 0:
+        raise ValueError("side must be buy/sell and filled_qty must be positive")
+    delta = filled_qty if side == "buy" else -filled_qty
+    sql = """
+                WITH fill AS (
+                    SELECT %s::text AS symbol, %s::numeric AS delta,
+                           %s::text AS side
+                )
+                UPDATE bot_portfolio AS p
+                SET positions = (
+                    SELECT COALESCE(
+                        jsonb_agg(
+                            CASE WHEN e.value->>'symbol' = fill.symbol
+                                 THEN jsonb_set(
+                                     e.value, '{qty}',
+                                     to_jsonb(GREATEST(
+                                         0::numeric,
+                                         COALESCE((e.value->>'qty')::numeric, 0) + fill.delta
+                                     )), true
+                                 )
+                                 ELSE e.value
+                            END
+                        ) FILTER (
+                            WHERE e.value->>'symbol' <> fill.symbol
+                               OR COALESCE((e.value->>'qty')::numeric, 0) + fill.delta > 0
+                        ),
+                        '[]'::jsonb
+                    )
+                    || CASE
+                        WHEN fill.delta > 0 AND NOT EXISTS (
+                            SELECT 1 FROM jsonb_array_elements(
+                                COALESCE(p.positions, '[]'::jsonb)
+                            ) AS old(value)
+                            WHERE old.value->>'symbol' = fill.symbol
+                        )
+                        THEN jsonb_build_array(jsonb_build_object(
+                            'symbol', fill.symbol, 'qty', fill.delta, 'side', 'long'
+                        ))
+                        ELSE '[]'::jsonb
+                    END
+                    FROM fill
+                    LEFT JOIN LATERAL jsonb_array_elements(
+                        COALESCE(p.positions, '[]'::jsonb)
+                    ) AS e(value) ON TRUE
+                ),
+                last_updated = NOW()
+                WHERE p.bot_id = %s
+                """
+    params = (symbol, delta, side, bot_id)
+    if cursor is not None:
+        cursor.execute(sql, params)
+        if cursor.rowcount == 0:
+            raise RuntimeError(f"bot_portfolio row not found for {bot_id}")
+        return
+    with _get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, params)
+            if cur.rowcount == 0:
+                raise RuntimeError(f"bot_portfolio row not found for {bot_id}")
+
+
+def update_portfolio_balances(bot_id: str, *, cash: float, equity: float) -> None:
+    """Update account balances without replacing the broker-position ledger."""
+    bot_id = _canonical(bot_id)
+    with _get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO bot_portfolio (bot_id, cash, equity, positions, last_updated)
+                VALUES (%s, %s, %s, '[]'::jsonb, NOW())
+                ON CONFLICT (bot_id) DO UPDATE
+                SET cash = EXCLUDED.cash,
+                    equity = EXCLUDED.equity,
+                    last_updated = NOW()
+                """,
+                (bot_id, cash, equity),
+            )
+
+
 def write_portfolio(
     bot_id: str,
     cash: float,

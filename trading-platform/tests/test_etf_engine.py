@@ -589,7 +589,7 @@ def test_run_exit_checks_uses_immutable_qty_for_scale_out(monkeypatch):
     captured = []
     db_position = {
         "symbol": "SPY",
-        "qty": 100.0,
+        "qty": 320.0,
         "current_qty": 20.0,
         "entry_price": 500.0,
         "stop_price": 450.0,
@@ -614,7 +614,8 @@ def test_run_exit_checks_uses_immutable_qty_for_scale_out(monkeypatch):
         trail_pct=0.08,
     )
 
-    assert captured == pytest.approx([33.3])
+    assert captured == [106]
+    assert 320 - captured[0] == 214
 
 
 class _ProtectiveStopApi:

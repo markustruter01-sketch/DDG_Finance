@@ -1459,9 +1459,9 @@ async def _run_pipeline_inner(
         logger.warning(f"Pipeline | Correlation matrix failed (non-fatal): {_corr_exc}")
         _eq_crypto_corr = 0.0
 
-    # ── Oracle: dual-write to bot_portfolio (Stage 2) ─────────────────────────
+    # ── Oracle: update balances without replacing the broker-position ledger ──
     try:
-        from core.bot_state import write_portfolio as _bs_write_pf
+        from core.bot_state import update_portfolio_balances as _bs_update_balances
         _oracle_equity = float(exec_result.get("equity", 0.0) or 0.0)
         _oracle_cash   = 0.0
         try:
@@ -1470,11 +1470,10 @@ async def _run_pipeline_inner(
             _oracle_cash = float(_acct.get("cash", 0.0) or 0.0)
         except Exception:
             _oracle_cash = _oracle_equity
-        _bs_write_pf(
+        _bs_update_balances(
             "oracle",
             cash=round(_oracle_cash, 2),
             equity=round(_oracle_equity, 2),
-            positions=[],
         )
     except Exception as _pf_exc:
         logger.debug(f"Pipeline | Oracle bot_portfolio dual-write failed (non-fatal): {_pf_exc}")

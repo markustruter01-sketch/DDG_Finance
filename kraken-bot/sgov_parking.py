@@ -16,6 +16,7 @@ import time
 from loguru import logger
 from jerome_alpaca import _nyse_is_open
 from core.cash_park import CASH_PARK_SYMBOLS, is_cash_park
+from core.bot_state import apply_position_fill_delta
 
 PARK_SYMBOL          = next(iter(CASH_PARK_SYMBOLS))
 PARK_THRESHOLD_USD   = 1_000.0   # minimum idle cash to bother parking
@@ -51,6 +52,7 @@ def park_idle_cash(
     account_cash: float,
     *,
     buy_side: str = "buy",   # "buy" for AlpacaEtfEngine; "long" for JeromeAlpaca
+    bot_id: str | None = None,
 ) -> None:
     """
     After all entry/exit logic: park idle cash in SGOV.
@@ -87,6 +89,11 @@ def park_idle_cash(
         elapsed = time.monotonic() - t0
 
         if result:
+            if bot_id and result.get("order_id"):
+                order = engine.api.get_order(result["order_id"])
+                filled_qty = float(getattr(order, "filled_qty", 0) or 0)
+                if filled_qty > 0:
+                    apply_position_fill_delta(bot_id, PARK_SYMBOL, "buy", filled_qty)
             logger.info(
                 f"{bot_label} | SGOV PARK ✅ notional=${notional:,.2f} "
                 f"order_id={result.get('order_id', '?')} latency={elapsed:.2f}s"
@@ -106,6 +113,8 @@ def unpark_for_entry(
     engine,
     bot_label: str,
     live_positions: list[dict],
+    *,
+    bot_id: str | None = None,
 ) -> float:
     """
     Before placing any new entry order: liquidate SGOV to free up cash.
@@ -131,9 +140,19 @@ def unpark_for_entry(
     )
     t0 = time.monotonic()
     try:
+        before_qty = abs(float(sgov.get("qty", 0) or 0))
         ok = engine.close_position(PARK_SYMBOL)
         elapsed = time.monotonic() - t0
         if ok:
+            if bot_id and before_qty > 0:
+                after = next(
+                    (p for p in engine.get_strategy_positions(bot_id) if is_sgov(p)),
+                    None,
+                )
+                after_qty = abs(float(after.get("qty", 0) or 0)) if after else 0.0
+                sold_qty = max(0.0, before_qty - after_qty)
+                if sold_qty > 0:
+                    apply_position_fill_delta(bot_id, PARK_SYMBOL, "sell", sold_qty)
             logger.info(
                 f"{bot_label} | SGOV UNPARK ✅ freed ≈${market_value:,.2f} "
                 f"latency={elapsed:.2f}s "

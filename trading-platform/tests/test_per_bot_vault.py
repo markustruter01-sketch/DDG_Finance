@@ -179,6 +179,10 @@ class _FakeCursor:
             self.rowcount = 1
             return
 
+        if normalized.startswith("with fill as"):
+            self.rowcount = 1
+            return
+
         raise AssertionError(f"Unexpected SQL: {sql}")
 
     def fetchall(self):
@@ -283,6 +287,29 @@ def test_reconciliation_clears_filled_orders_even_when_fill_delta_is_zero(monkey
     assert row["voo_order_id"] is None
     assert row["status"] == "complete"
     assert not any("%s" in sql and params is None for sql, params in cursor.executed)
+
+
+def test_vault_buy_fill_applies_broker_filled_qty_to_strategy_ledger(monkeypatch):
+    row = _queue_row(bil_filled_usd=0.0, voo_order_id=None)
+    cursor = _FakeCursor(queue_rows=[row])
+    _install_db_fake(monkeypatch, _FakeConnection(cursor))
+    monkeypatch.setattr(vault, "vault_enabled", lambda: True)
+    monkeypatch.setattr(
+        vault,
+        "_read_vault_order",
+        lambda _bot, _order: {
+            "status": "filled",
+            "filled_qty": 2.75,
+            "filled_avg_price": 50.0,
+        },
+    )
+
+    vault.reconcile_deployment_orders()
+
+    ledger_write = next(
+        params for sql, params in cursor.executed if sql.startswith("with fill as")
+    )
+    assert ledger_write == ("BIL", 2.75, "buy", "oracle")
 
 
 def test_reconciliation_tracks_replacement_without_clearing_queue_order(monkeypatch):

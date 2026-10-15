@@ -40,6 +40,7 @@ from config.settings import settings
 from analysis.schemas import is_crypto_pair
 from execution.resilience import alpaca_retry
 from core.order_ids import submit_with_unique_client_order_id
+from core.cash_park import is_cash_park
 
 # ── Singleton client ────────────────────────────────────────────────────────
 _trading_client: TradingClient | None = None
@@ -55,6 +56,24 @@ def _client() -> TradingClient:
         )
         logger.debug("Broker | TradingClient singleton created")
     return _trading_client
+
+
+def _apply_cash_asset_fill(symbol: str, side: str, filled_qty: float) -> None:
+    """Mirror confirmed SGOV/BIL/VOO fills into Oracle's strategy-position ledger."""
+    if filled_qty <= 0:
+        return
+    if not is_cash_park(symbol):
+        from execution.per_bot_vault import is_vault_asset
+        if not is_vault_asset(symbol):
+            return
+    from core.bot_state import apply_position_fill_delta
+    try:
+        apply_position_fill_delta("oracle", symbol, side, filled_qty)
+    except Exception as exc:
+        logger.error(
+            f"Broker | cash-asset fill ledger sync failed for {symbol} "
+            f"({side} {filled_qty}): {exc}"
+        )
 
 
 # ── Account + positions ────────────────────────────────────────────────────
@@ -182,7 +201,9 @@ def place_order(
             "status":     order.status.value,
             "created_at": str(order.created_at),
             "client_order_id": client_order_id,
+            "filled_qty": float(order.filled_qty or 0),
         }
+        _apply_cash_asset_fill(ticker, side.lower(), result["filled_qty"])
         logger.info(f"Broker | Order submitted: {result['id']} {ticker} status={result['status']}")
         return result
     except Exception as exc:
@@ -316,6 +337,7 @@ def close_position(ticker: str) -> dict:
             ),
             f"broker-close-{ticker}",
         )
+        _apply_cash_asset_fill(ticker, "sell", float(order.filled_qty or 0))
         return {
             "id":     str(order.id),
             "symbol": order.symbol,
@@ -361,6 +383,7 @@ def close_position_gtc(ticker: str) -> dict:
             ),
             f"broker-close-gtc-{ticker}",
         )
+        _apply_cash_asset_fill(ticker, "sell", float(order.filled_qty or 0))
         return {
             "id":     str(order.id),
             "symbol": order.symbol,

@@ -13,6 +13,7 @@ from uuid import uuid4
 from typing import Any
 
 from loguru import logger
+from core.bot_state import apply_position_fill_delta
 
 # Deliberately remains an Alpaca-only allowlist; forex_ai has no Alpaca vault.
 ACTIVE_BOT_IDS = ("oracle", "spy_qqq_trend", "jerome_macro")
@@ -31,6 +32,11 @@ TERMINAL_ORDER_STATUSES = {
     "done_for_day",
     "replaced",
 }
+
+
+def is_vault_asset(symbol: str) -> bool:
+    """Use the vault's canonical symbol constants for broker fill routing."""
+    return symbol.upper() in (VAULT_BIL_SYMBOL, VAULT_VOO_SYMBOL)
 ACCOUNT_ENV = {
     "oracle": ("ALPACA_API_KEY", "ALPACA_SECRET_KEY"),
     "spy_qqq_trend": ("ALPACA_BB_API_KEY", "ALPACA_BB_SECRET_KEY"),
@@ -480,7 +486,13 @@ def reconcile_deployment_orders() -> dict[str, Any]:
                 with get_conn() as conn:
                     with conn.cursor() as cur:
                         if delta > 0:
-                            filled_qty_delta = round(delta / order["filled_avg_price"], 8) if order["filled_avg_price"] else 0
+                            filled_qty_delta = (
+                                float(order["filled_qty"])
+                                if old_applied <= 0
+                                else round(delta / order["filled_avg_price"], 8)
+                                if order["filled_avg_price"]
+                                else 0
+                            )
                             cur.execute(
                                 """
                                 UPDATE per_bot_vault_holdings
@@ -516,6 +528,10 @@ def reconcile_deployment_orders() -> dict[str, Any]:
                                 bot_id,
                             ),
                         )
+                        if delta > 0 and filled_qty_delta > 0:
+                            apply_position_fill_delta(
+                                bot_id, symbol, "buy", filled_qty_delta, cursor=cur
+                            )
                 active_orders[symbol] = queue_order_id
                 pending_bil = next_pending_bil
                 pending_voo = next_pending_voo

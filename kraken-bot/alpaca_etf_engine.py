@@ -1935,7 +1935,7 @@ class AlpacaEtfEngine:
         # 3. TP2 scale-out
         if self.check_tp2_hit(db_pos_fresh, current):
             qty = float(db_position.get("qty", 0))
-            scale_qty = qty * 0.333
+            scale_qty = math.floor(qty * 0.333)
             if scale_qty > 0:
                 if self.close_partial(
                     symbol,
@@ -1962,7 +1962,7 @@ class AlpacaEtfEngine:
         # 4. TP1 scale-out
         if self.check_tp1_hit(db_pos_fresh, current):
             qty = float(db_position.get("qty", 0))
-            scale_qty = qty * 0.333
+            scale_qty = math.floor(qty * 0.333)
             if scale_qty > 0:
                 if self.close_partial(
                     symbol,

@@ -1,9 +1,0 @@
-{
-  "source": "development database export",
-  "captured_at": "2026-08-21",
-  "table": "forex_vault",
-  "development_row_count": 0,
-  "production_row_count": 2,
-  "columns": [],
-  "rows": []
-}

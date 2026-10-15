@@ -110,3 +110,48 @@ def test_empty_positions_require_successful_account_read_and_non_cash_is_untouch
     )
     assert result
     assert positions == [{"symbol": "QQQ", "qty": 8}]
+
+
+def test_sync_change_log_contains_the_real_values(monkeypatch):
+    """loguru ignores %s placeholders; the audit line must show the numbers."""
+    import json
+    from contextlib import contextmanager
+
+    from loguru import logger
+
+    from core import bot_state
+
+    class Cur:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def execute(self, sql, params=None):
+            self.sql = sql
+
+        def fetchone(self):
+            return (json.dumps([{"symbol": "SGOV", "qty": 189}]),)
+
+    @contextmanager
+    def conn():
+        class C:
+            def cursor(self):
+                return Cur()
+        yield C()
+
+    monkeypatch.setattr(bot_state, "_get_conn", conn)
+    lines = []
+    sink = logger.add(lambda m: lines.append(str(m)), format="{message}")
+    try:
+        ok = bot_state.sync_cash_asset_ledger(
+            "spy_qqq_trend", [{"symbol": "SGOV", "qty": "215"}],
+            positions_read_ok=True, account_read_ok=True,
+        )
+    finally:
+        logger.remove(sink)
+    assert ok is True
+    change = [l for l in lines if "cash-asset ledger sync" in l]
+    assert change and "symbol=SGOV" in change[0] and "old_qty=189" in change[0] and "new_qty=215" in change[0]
+    assert "%s" not in "".join(lines)

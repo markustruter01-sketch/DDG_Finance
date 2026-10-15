@@ -238,8 +238,8 @@ def sync_cash_asset_ledger(
     canonical = _canonical(bot_id)
     if not positions_read_ok or not account_read_ok or broker_positions is None:
         logger.warning(
-            "BotState | cash-asset sync skipped for %s: broker account/positions "
-            "read was not confirmed successful", canonical
+            f"BotState | cash-asset sync skipped for {canonical}: broker account/positions "
+            "read was not confirmed successful"
         )
         return False
 
@@ -271,8 +271,7 @@ def sync_cash_asset_ledger(
                 row = cur.fetchone()
                 if row is None:
                     logger.warning(
-                        "BotState | cash-asset sync skipped for %s: portfolio row missing",
-                        canonical,
+                        f"BotState | cash-asset sync skipped for {canonical}: portfolio row missing"
                     )
                     return False
                 positions = row[0] or []
@@ -289,8 +288,8 @@ def sync_cash_asset_ledger(
                         continue
                     if symbol in seen:
                         logger.info(
-                            "BotState | cash-asset ledger sync bot_id=%s symbol=%s old_qty=%s new_qty=absent",
-                            canonical, symbol, float(item.get("qty", 0) or 0),
+                            f"BotState | cash-asset ledger sync bot_id={canonical} symbol={symbol} "
+                            f"old_qty={float(item.get('qty', 0) or 0)} new_qty=absent (duplicate row dropped)"
                         )
                         continue
                     seen.add(symbol)
@@ -298,8 +297,8 @@ def sync_cash_asset_ledger(
                     broker_item = broker_assets.get(symbol)
                     if broker_item is None:
                         logger.info(
-                            "BotState | cash-asset ledger sync bot_id=%s symbol=%s old_qty=%s new_qty=absent",
-                            canonical, symbol, old_qty,
+                            f"BotState | cash-asset ledger sync bot_id={canonical} symbol={symbol} "
+                            f"old_qty={old_qty} new_qty=absent"
                         )
                         continue
                     new_qty, _ = broker_item
@@ -309,8 +308,8 @@ def sync_cash_asset_ledger(
                     broker_assets.pop(symbol, None)
                     if old_qty != new_qty:
                         logger.info(
-                            "BotState | cash-asset ledger sync bot_id=%s symbol=%s old_qty=%s new_qty=%s",
-                            canonical, symbol, old_qty, new_qty,
+                            f"BotState | cash-asset ledger sync bot_id={canonical} symbol={symbol} "
+                            f"old_qty={old_qty} new_qty={new_qty}"
                         )
 
                 for symbol, (new_qty, broker_item) in broker_assets.items():
@@ -318,8 +317,8 @@ def sync_cash_asset_ledger(
                     added["qty"] = new_qty
                     synced.append(added)
                     logger.info(
-                        "BotState | cash-asset ledger sync bot_id=%s symbol=%s old_qty=absent new_qty=%s",
-                        canonical, symbol, new_qty,
+                        f"BotState | cash-asset ledger sync bot_id={canonical} symbol={symbol} "
+                        f"old_qty=absent new_qty={new_qty}"
                     )
 
                 import json
@@ -329,10 +328,7 @@ def sync_cash_asset_ledger(
                 )
         return True
     except Exception as exc:
-        logger.warning(
-            "BotState | cash-asset sync failed for %s; ledger unchanged: %s",
-            canonical, exc,
-        )
+        logger.warning(f"BotState | cash-asset sync failed for {canonical}; ledger unchanged: {exc}")
         return False
 
 

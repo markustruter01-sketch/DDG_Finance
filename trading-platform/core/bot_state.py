@@ -96,7 +96,11 @@ def touch_heartbeat(bot_id: str, status: str = "running", error: str = "") -> No
 
 
 def is_paused(bot_id: str) -> bool:
-    """Check if a bot is paused. Falls back to False if row missing or DB unavailable."""
+    """The single pause switch: bots_state.paused.
+
+    Fails CLOSED: a missing row or an unreadable database counts as paused,
+    so a bot never trades because its pause state could not be read.
+    """
     bot_id = _canonical(bot_id)
     try:
         with _get_conn() as conn:
@@ -106,30 +110,33 @@ def is_paused(bot_id: str) -> bool:
                     (bot_id,),
                 )
                 row = cur.fetchone()
-                return bool(row[0]) if row else False
     except Exception as exc:
-        logger.debug(f"BotState | is_paused({bot_id}) failed (non-fatal): {exc}")
-        return False
+        logger.error(f"BotState | is_paused({bot_id}) unreadable, treating as PAUSED: {exc}")
+        return True
+    if row is None:
+        logger.error(f"BotState | is_paused({bot_id}) has no bots_state row, treating as PAUSED")
+        return True
+    return bool(row[0])
 
 
 def set_paused(bot_id: str, paused: bool, reason: str = "") -> None:
-    """Pause or unpause a bot in bots_state."""
+    """Pause or resume a bot. Raises if the change was not written."""
     bot_id = _canonical(bot_id)
-    try:
-        with _get_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    UPDATE bots_state
-                       SET paused       = %s,
-                           pause_reason = %s,
-                           paused_at    = CASE WHEN %s THEN NOW() ELSE paused_at END
-                     WHERE bot_id = %s
-                    """,
-                    (paused, reason, paused, bot_id),
-                )
-    except Exception as exc:
-        logger.debug(f"BotState | set_paused({bot_id}) failed (non-fatal): {exc}")
+    with _get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE bots_state
+                   SET paused       = %s,
+                       pause_reason = %s,
+                       paused_at    = CASE WHEN %s THEN NOW() ELSE paused_at END
+                 WHERE bot_id = %s
+                """,
+                (paused, reason, paused, bot_id),
+            )
+            if cur.rowcount != 1:
+                raise RuntimeError(f"set_paused({bot_id}): no bots_state row updated")
+    logger.warning(f"BotState | {bot_id} {'PAUSED' if paused else 'RESUMED'} reason={reason!r}")
 
 
 def get_bot_state(bot_id: str) -> dict:
@@ -231,8 +238,8 @@ def sync_cash_asset_ledger(
     canonical = _canonical(bot_id)
     if not positions_read_ok or not account_read_ok or broker_positions is None:
         logger.warning(
-            "BotState | cash-asset sync skipped for %s: broker account/positions "
-            "read was not confirmed successful", canonical
+            f"BotState | cash-asset sync skipped for {canonical}: broker account/positions "
+            "read was not confirmed successful"
         )
         return False
 
@@ -264,8 +271,7 @@ def sync_cash_asset_ledger(
                 row = cur.fetchone()
                 if row is None:
                     logger.warning(
-                        "BotState | cash-asset sync skipped for %s: portfolio row missing",
-                        canonical,
+                        f"BotState | cash-asset sync skipped for {canonical}: portfolio row missing"
                     )
                     return False
                 positions = row[0] or []
@@ -282,8 +288,8 @@ def sync_cash_asset_ledger(
                         continue
                     if symbol in seen:
                         logger.info(
-                            "BotState | cash-asset ledger sync bot_id=%s symbol=%s old_qty=%s new_qty=absent",
-                            canonical, symbol, float(item.get("qty", 0) or 0),
+                            f"BotState | cash-asset ledger sync bot_id={canonical} symbol={symbol} "
+                            f"old_qty={float(item.get('qty', 0) or 0)} new_qty=absent (duplicate row dropped)"
                         )
                         continue
                     seen.add(symbol)
@@ -291,8 +297,8 @@ def sync_cash_asset_ledger(
                     broker_item = broker_assets.get(symbol)
                     if broker_item is None:
                         logger.info(
-                            "BotState | cash-asset ledger sync bot_id=%s symbol=%s old_qty=%s new_qty=absent",
-                            canonical, symbol, old_qty,
+                            f"BotState | cash-asset ledger sync bot_id={canonical} symbol={symbol} "
+                            f"old_qty={old_qty} new_qty=absent"
                         )
                         continue
                     new_qty, _ = broker_item
@@ -302,8 +308,8 @@ def sync_cash_asset_ledger(
                     broker_assets.pop(symbol, None)
                     if old_qty != new_qty:
                         logger.info(
-                            "BotState | cash-asset ledger sync bot_id=%s symbol=%s old_qty=%s new_qty=%s",
-                            canonical, symbol, old_qty, new_qty,
+                            f"BotState | cash-asset ledger sync bot_id={canonical} symbol={symbol} "
+                            f"old_qty={old_qty} new_qty={new_qty}"
                         )
 
                 for symbol, (new_qty, broker_item) in broker_assets.items():
@@ -311,8 +317,8 @@ def sync_cash_asset_ledger(
                     added["qty"] = new_qty
                     synced.append(added)
                     logger.info(
-                        "BotState | cash-asset ledger sync bot_id=%s symbol=%s old_qty=absent new_qty=%s",
-                        canonical, symbol, new_qty,
+                        f"BotState | cash-asset ledger sync bot_id={canonical} symbol={symbol} "
+                        f"old_qty=absent new_qty={new_qty}"
                     )
 
                 import json
@@ -322,10 +328,7 @@ def sync_cash_asset_ledger(
                 )
         return True
     except Exception as exc:
-        logger.warning(
-            "BotState | cash-asset sync failed for %s; ledger unchanged: %s",
-            canonical, exc,
-        )
+        logger.warning(f"BotState | cash-asset sync failed for {canonical}; ledger unchanged: {exc}")
         return False
 
 

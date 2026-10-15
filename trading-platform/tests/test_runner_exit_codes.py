@@ -119,7 +119,7 @@ def _configure_main_harness(
         lambda: events.append(("health_server",)),
     )
     monkeypatch.setattr(runner_module, "_probe_trading_api", lambda: None)
-    monkeypatch.setattr(runner_module, "_assert_pause_alignment", lambda: True)
+    monkeypatch.setattr(runner_module, "_assert_pause_state_readable", lambda: True)
     monkeypatch.setattr(runner_module, "_update_status", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(runner_module, "_run_bot_loop", lambda *_args: None)
     monkeypatch.setattr(runner_module, "_release_owned_runner_locks", lambda: None)
@@ -196,7 +196,7 @@ def test_uncaught_startup_failure_returns_crash_code(runner_module, monkeypatch)
     monkeypatch.setattr(runner_module, "_prepare_runner_locks", lambda: True)
     monkeypatch.setattr(
         runner_module,
-        "_assert_pause_alignment",
+        "_assert_pause_state_readable",
         lambda: (_ for _ in ()).throw(RuntimeError("startup boom")),
     )
 

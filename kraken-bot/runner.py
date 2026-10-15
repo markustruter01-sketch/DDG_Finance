@@ -96,7 +96,7 @@ except Exception as _hb_exc:
     logger.warning(f"Runner | Could not import heartbeat helpers: {_hb_exc}")
     _heartbeat_ok = False
     _bs_touch = lambda *a, **k: None  # noqa: E731
-    _bs_is_paused = lambda *a, **k: False  # noqa: E731
+    _bs_is_paused = lambda *a, **k: True  # noqa: E731  # fail closed: no pause read, no trading
     _bs_get_state = lambda *a, **k: {}  # noqa: E731
     _bs_normalise = lambda bot_id: bot_id  # noqa: E731
 
@@ -195,7 +195,7 @@ _api_liveness: dict[str, object] = {
     "last_error": None,
 }
 _shutdown_event = threading.Event()
-_pause_alignment_ok = True
+_pause_state_ok = True
 
 
 def _canonical_lock_bot_id(bot_id: str) -> str:
@@ -492,46 +492,29 @@ def _record_runner_heartbeat(loop_count: int, status: str) -> bool:
     )
 
 
-def _assert_pause_alignment() -> bool:
-    """Require module, profile, and canonical DB pause sources to agree."""
-    aligned = True
-    for bot_id, module_name, _ in BOTS:
-        profile = _profile_for_bot(bot_id)
+def _assert_pause_state_readable() -> bool:
+    """bots_state.paused is the only pause switch. Refuse to start unless every
+    bot's row exists and can be read (a missing row would leave that bot
+    permanently paused, which is safe but almost certainly a setup error)."""
+    if not _heartbeat_ok:
+        logger.critical("Pause state | bot_state helpers unavailable; runner will fail closed")
+        return False
+    readable = True
+    for bot_id, _module_name, _ in BOTS:
         canonical = _bs_normalise(bot_id) or bot_id
-        state = _bs_get_state(canonical) if _heartbeat_ok else {}
-        static_paused = bool(profile.get("BOT_PAUSED", False))
-        database_paused = state.get("paused") if state else None
         try:
-            strategy_module = importlib.import_module(module_name)
-            module_paused = getattr(strategy_module, "BOT_PAUSED", None)
+            state = _bs_get_state(canonical)
         except Exception as exc:
-            module_paused = None
-            aligned = False
+            state = {}
+            logger.critical(f"Pause state | read failed bot={bot_id}: {exc}")
+        paused = state.get("paused") if state else None
+        logger.info(f"Pause state | bot={bot_id} canonical={canonical} paused={paused}")
+        if paused is None:
+            readable = False
             logger.critical(
-                f"Pause alignment module load failed | bot={bot_id} "
-                f"module={module_name}: {exc}; runner will fail closed"
+                f"Pause state | bot={bot_id} has no readable bots_state row; runner will fail closed"
             )
-        logger.info(
-            f"Pause alignment | bot={bot_id} canonical={canonical} "
-            f"module={module_paused if module_paused is not None else 'not_defined'} "
-            f"profile={static_paused} database={database_paused}"
-        )
-        module_disagrees = (
-            module_paused is not None and bool(module_paused) != static_paused
-        )
-        if (
-            database_paused is None
-            or static_paused != bool(database_paused)
-            or module_disagrees
-        ):
-            aligned = False
-            logger.critical(
-                f"Pause alignment disagreement | bot={bot_id} "
-                f"module={module_paused if module_paused is not None else 'not_defined'} "
-                f"profile={static_paused} database={database_paused}; "
-                "runner will fail closed"
-            )
-    return aligned
+    return readable
 
 
 def _entry_window_bounds(profile: dict[str, Any], now: datetime) -> tuple[datetime, datetime] | None:
@@ -814,9 +797,9 @@ def _run_bot_loop(bot_id: str, module_name: str, fn_name: str):
         logger.critical(f"[{bot_id}] Runner lock refused — strategy thread will not trade")
         _update_status(bot_id, status="lock_refused", error="runner_lock_not_owned")
         return
-    if not _pause_alignment_ok:
-        logger.critical(f"[{bot_id}] Startup pause alignment failed — refusing to run")
-        _update_status(bot_id, status="paused", pause_source="alignment_assertion")
+    if not _pause_state_ok:
+        logger.critical(f"[{bot_id}] Startup pause-state check failed — refusing to run")
+        _update_status(bot_id, status="paused", pause_source="pause_state_check")
         return
 
     # Lazy load the bot profile — BOT_PROFILES loaded at module level via importlib
@@ -863,11 +846,9 @@ def _run_bot_loop(bot_id: str, module_name: str, fn_name: str):
                 _update_status(bot_id, status="lock_lost", error="runner_lock_lost")
                 return
 
-            # Fail closed on either pause source.  The static profile guard is
-            # retained for defense in depth, while bots_state lets the
-            # platform pause a runner without relying on a legacy alias.
-            db_paused = _bs_is_paused(bot_id) if _heartbeat_ok else False
-            profile_paused = bool(profile.get("BOT_PAUSED", False))
+            # bots_state.paused is the only pause switch; is_paused fails
+            # closed (unreadable or missing row = paused).
+            db_paused = _bs_is_paused(bot_id)
             if not _runner_can_trade:
                 logger.info(
                     f"[{bot_id}] Read-only runner — skipping strategy cycle"
@@ -890,12 +871,9 @@ def _run_bot_loop(bot_id: str, module_name: str, fn_name: str):
                         "read_only",
                         success=True,
                     )
-            elif profile_paused or db_paused:
-                logger.info(
-                    f"[{bot_id}] Paused — "
-                    f"profile={profile_paused} database={db_paused}; skipping cycle"
-                )
-                pause_source = "profile" if profile_paused else "database"
+            elif db_paused:
+                logger.info(f"[{bot_id}] Paused (bots_state) — skipping cycle")
+                pause_source = "database"
                 if bot_id == "forex_ai":
                     monitor_error = None
                     try:
@@ -1158,7 +1136,7 @@ def _send_lease_refusal_alert(
 
 
 def main() -> int:
-    global _pause_alignment_ok
+    global _pause_state_ok
     signal.signal(signal.SIGTERM, _shutdown_handler)
     signal.signal(signal.SIGINT, _shutdown_handler)
 
@@ -1292,11 +1270,11 @@ def main() -> int:
         logger.info("KRAKEN-BOT RUNNER — multiplexed strategy host")
         logger.info(f"Bots: {', '.join(b[0] for b in BOTS)}")
         logger.info("=" * 60)
-        _pause_alignment_ok = _assert_pause_alignment()
-        logger.info(f"Pause alignment assertion: {'PASS' if _pause_alignment_ok else 'FAIL — fail closed'}")
-        if not _pause_alignment_ok:
+        _pause_state_ok = _assert_pause_state_readable()
+        logger.info(f"Pause state check: {'PASS' if _pause_state_ok else 'FAIL — fail closed'}")
+        if not _pause_state_ok:
             logger.critical(
-                "Runner | pause alignment failed; refusing to start bot threads"
+                "Runner | pause state unreadable; refusing to start bot threads"
             )
             exit_code = EXIT_REFUSAL
             return exit_code

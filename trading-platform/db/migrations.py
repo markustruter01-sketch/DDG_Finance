@@ -154,6 +154,37 @@ def _m002_delete_dead_ratchet_rows(cur) -> dict:
     return {"deleted": symbols, "count": cur.rowcount}
 
 
+# ── 2026-10-16-003: keep forex_ai paused when the static flags are retired ───
+# Until this deploy a bot was paused if config.py, its strategy module, OR
+# bots_state said so. config.py and forex_ai_strategy.py both said
+# BOT_PAUSED=True for forex_ai; those flags are removed in the same deploy
+# and bots_state.paused becomes the only switch. Setting it TRUE here keeps
+# forex_ai's effective state exactly as it was. Every other bot's static
+# flags were False, so its effective state already equals bots_state.
+
+_FOREX_PAUSE_REASON = (
+    "migration 2026-10-16-003: static BOT_PAUSED flags retired; "
+    "bots_state is the only pause switch (forex_ai was paused by its static flags)"
+)
+
+
+def _m003_preserve_forex_pause(cur) -> dict:
+    cur.execute("SELECT paused FROM bots_state WHERE bot_id = 'forex_ai' FOR UPDATE")
+    row = cur.fetchone()
+    if row is None:
+        raise MigrationGuardError("bots_state has no forex_ai row")
+    if row[0] is True:
+        return {"forex_ai": "already paused", "changed": 0}
+    cur.execute(
+        "UPDATE bots_state SET paused = TRUE, pause_reason = %s, paused_at = NOW() "
+        "WHERE bot_id = 'forex_ai'",
+        (_FOREX_PAUSE_REASON,),
+    )
+    if cur.rowcount != 1:
+        raise MigrationGuardError(f"expected to update 1 forex_ai row, updated {cur.rowcount}")
+    return {"forex_ai": f"paused (was {row[0]!r})", "changed": 1}
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(
         id="2026-10-15-001-resolve-stale-degradations",
@@ -164,6 +195,11 @@ MIGRATIONS: tuple[Migration, ...] = (
         id="2026-10-15-002-delete-dead-ratchet-rows",
         description="FIN-22c: delete the 17 dead ratchet_stops rows",
         apply=_m002_delete_dead_ratchet_rows,
+    ),
+    Migration(
+        id="2026-10-16-003-preserve-forex-pause",
+        description="Keep forex_ai paused as static BOT_PAUSED flags are retired",
+        apply=_m003_preserve_forex_pause,
     ),
 )
 

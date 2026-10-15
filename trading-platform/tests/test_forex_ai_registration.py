@@ -429,44 +429,36 @@ def test_scheduler_fleet_snapshot_queries_every_registry_bot(monkeypatch):
     assert cursor.params == (ids,)
 
 
-def test_runner_pause_alignment_requires_existing_matching_forex_state(
+def test_runner_pause_state_check_requires_a_readable_row(
     monkeypatch,
     runner_module,
 ):
+    """bots_state.paused is the only switch: start-up needs a readable row,
+    whatever its value; no static flag is consulted."""
     monkeypatch.setattr(
         runner_module,
         "BOTS",
         [("forex_ai", "forex_ai_strategy", "run_forex_cycle")],
     )
-    monkeypatch.setattr(
-        runner_module,
-        "_profile_for_bot",
-        lambda _bot_id: {"BOT_PAUSED": True},
-    )
     monkeypatch.setattr(runner_module, "_heartbeat_ok", True)
     monkeypatch.setattr(runner_module, "_bs_normalise", lambda bot_id: bot_id)
-    monkeypatch.setattr(
-        runner_module.importlib,
-        "import_module",
-        lambda _module_name: SimpleNamespace(BOT_PAUSED=True),
-    )
 
     monkeypatch.setattr(runner_module, "_bs_get_state", lambda _bot_id: {})
-    assert runner_module._assert_pause_alignment() is False
+    assert runner_module._assert_pause_state_readable() is False
 
-    monkeypatch.setattr(
-        runner_module,
-        "_bs_get_state",
-        lambda _bot_id: {"paused": False},
-    )
-    assert runner_module._assert_pause_alignment() is False
+    for paused in (True, False):
+        monkeypatch.setattr(runner_module, "_bs_get_state", lambda _bot_id, p=paused: {"paused": p})
+        assert runner_module._assert_pause_state_readable() is True
 
-    monkeypatch.setattr(
-        runner_module,
-        "_bs_get_state",
-        lambda _bot_id: {"paused": True},
-    )
-    assert runner_module._assert_pause_alignment() is True
+    def unreadable(_bot_id):
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr(runner_module, "_bs_get_state", unreadable)
+    assert runner_module._assert_pause_state_readable() is False
+
+    monkeypatch.setattr(runner_module, "_heartbeat_ok", False)
+    monkeypatch.setattr(runner_module, "_bs_get_state", lambda _bot_id: {"paused": True})
+    assert runner_module._assert_pause_state_readable() is False
 
 
 def test_forex_profile_and_database_seed_are_paused_and_hourly():
@@ -475,7 +467,7 @@ def test_forex_profile_and_database_seed_are_paused_and_hourly():
         WORKSPACE / "kraken-bot" / "config.py",
     )
     profile = config.BOT_PROFILES["forex_ai"]
-    assert profile["BOT_PAUSED"] is True
+    assert "BOT_PAUSED" not in profile  # bots_state.paused is the only switch
     assert profile["LOOP_SLEEP_SECONDS"] == 3600
 
     source = (WORKSPACE / "trading-platform" / "db" / "postgres.py").read_text()

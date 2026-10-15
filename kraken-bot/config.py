@@ -55,9 +55,6 @@ BOT_PROFILES = {
         "TP2_PCT":           0.12,
         "MIN_HOLD_DAYS":     5,
         "MAX_DEPLOYMENT":    0.80,
-        # Enable only after migrate_global_etf.py reports all three accounts
-        # flat, reconciled, and free of orphaned protective orders.
-        "BOT_PAUSED":        False,
     },
     "jerome_macro": {
         # Stage 5 merge (2026-08-11): LatAm (EWZ/EWW/ECH) + Frontier (EEM/EZA/EPOL/GREK/TUR)
@@ -83,23 +80,22 @@ BOT_PROFILES = {
         "MIN_HOLD_DAYS":     5,
         "MAX_DEPLOYMENT":    1.00,
         # Reserved for Phase 3 Bot 3; activation follows separate validation.
-        "BOT_PAUSED":        False,
     },
 
     # ── Phase 2: New Alpaca-based bots (built paused, staggered activation) ───
     #
     # All 4 share the ALPACA_BB paper account with Jerome.
-    # All start with BOT_PAUSED=True — flip to False on the activation schedule:
+    # Pause/resume is bots_state.paused only (dashboard or POST /bots/{id}/pause|resume).
+    # Historical activation schedule:
     #   Week 2: bot2_spy_qqq   (db_id=1, replaces Davy Jones)
     #   Week 3: bot4_sector    (db_id=3, replaces Calypso)
     #   Week 4: bot7_macro_bond (db_id=7, replaces FOMO Fred/Poseidon)
     #   Week 5: bot5_defensive  (db_id=4, replaces Apex Predator)
     #
-    # ACTIVATION CHECKLIST (run before flipping BOT_PAUSED=False):
+    # ACTIVATION CHECKLIST:
     #   1. UPDATE kraken_heartbeat SET bot_id=<new>, bot_display_name=<new>
     #      WHERE id=<db_id>;
-    #   2. Set BOT_PAUSED=False in this file.
-    #   3. Restart the relevant workflow.
+    #   2. Resume the bot (bots_state.paused = false via the dashboard/API).
 
     "bot2_spy_qqq": {
         "display_name":      "Single-Stock Momentum",
@@ -121,7 +117,6 @@ BOT_PROFILES = {
         "SPY_SLEEVE_WEIGHT": 0.20,
         "SPY_SLEEVE_STOP_PCT": 0.35,
         # Reserved for the separately validated Bot 2 activation.
-        "BOT_PAUSED":        False,
     },
 
     "forex_ai": {
@@ -137,7 +132,6 @@ BOT_PROFILES = {
         # line-up recorded in the registered plan; dry run passed 11 Oct). Shadow only:
         # no order code exists. Set False to stop all AI calls.
         "FOREX_COUNCIL_ENABLED": True,
-        "BOT_PAUSED":        True,
     },
 }
 

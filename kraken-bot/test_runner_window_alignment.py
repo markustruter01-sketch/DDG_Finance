@@ -127,8 +127,10 @@ class RunnerPortfolioCycleTests(unittest.TestCase):
             if forex_monitor is not None:
                 return forex_monitor()
 
+        # Test knob: _db_paused stands in for bots_state.paused (the only switch).
+        db_paused = bool(profile.get("_db_paused", False))
         profile = {
-            **profile,
+            **{k: v for k, v in profile.items() if k != "_db_paused"},
             "LOOP_SLEEP_SECONDS": 1,
             "db_id": "runner-test-db",
         }
@@ -140,7 +142,7 @@ class RunnerPortfolioCycleTests(unittest.TestCase):
             patch.multiple(
                 runner,
                 _runner_can_trade=runner_can_trade,
-                _pause_alignment_ok=True,
+                _pause_state_ok=True,
                 _owned_lock_bot_ids={bot_id},
                 _shutdown_event=shutdown_event,
                 _heartbeat_ok=True,
@@ -149,7 +151,7 @@ class RunnerPortfolioCycleTests(unittest.TestCase):
             patch.object(runner, "_profile_for_bot", return_value=profile),
             patch.object(runner.importlib, "import_module", return_value=strategy_module),
             patch.object(runner, "_refresh_bot_lock", return_value=True),
-            patch.object(runner, "_bs_is_paused", return_value=False),
+            patch.object(runner, "_bs_is_paused", return_value=db_paused),
             patch.object(runner, "_bs_normalise", side_effect=lambda bot_id: bot_id),
             patch.object(runner, "_bs_touch"),
             patch.object(runner, "_update_status", side_effect=update_status),
@@ -181,7 +183,7 @@ class RunnerPortfolioCycleTests(unittest.TestCase):
         writer = MagicMock(return_value=True)
 
         result = self._run_cycles(
-            {"BOT_PAUSED": True},
+            {"_db_paused": True},
             writer,
             cycle_limit=2,
         )
@@ -201,8 +203,8 @@ class RunnerPortfolioCycleTests(unittest.TestCase):
 
     def test_read_only_runner_never_writes_or_runs_strategy_for_paused_or_active_bots(self):
         for state, profile in (
-            ("paused", {"BOT_PAUSED": True}),
-            ("active", {"BOT_PAUSED": False}),
+            ("paused", {"_db_paused": True}),
+            ("active", {"_db_paused": False}),
         ):
             with self.subTest(state=state):
                 writer = MagicMock(return_value=True)
@@ -227,7 +229,7 @@ class RunnerPortfolioCycleTests(unittest.TestCase):
         writer = MagicMock(return_value=True)
 
         result = self._run_cycles(
-            {"BOT_PAUSED": False},
+            {"_db_paused": False},
             writer,
             cycle_limit=1,
         )
@@ -248,7 +250,7 @@ class RunnerPortfolioCycleTests(unittest.TestCase):
         )
 
         result = self._run_cycles(
-            {"BOT_PAUSED": True},
+            {"_db_paused": True},
             writer,
             cycle_limit=2,
         )
@@ -286,7 +288,7 @@ class RunnerPortfolioCycleTests(unittest.TestCase):
             monitor_calls.append("refresh")
 
         result = self._run_cycles(
-            {"BOT_PAUSED": True},
+            {"_db_paused": True},
             MagicMock(return_value=True),
             cycle_limit=1,
             bot_id="forex_ai",
@@ -311,7 +313,7 @@ class RunnerPortfolioCycleTests(unittest.TestCase):
             raise RuntimeError("OANDA monitor unavailable")
 
         result = self._run_cycles(
-            {"BOT_PAUSED": True},
+            {"_db_paused": True},
             MagicMock(return_value=True),
             cycle_limit=2,
             bot_id="forex_ai",
@@ -361,7 +363,7 @@ class RunnerPortfolioCycleTests(unittest.TestCase):
 
     def test_paused_momentum_cycle_keeps_existing_liveness_before_portfolio_refresh(self):
         result = self._run_cycles(
-            {"BOT_PAUSED": True},
+            {"_db_paused": True},
             MagicMock(return_value=True),
             cycle_limit=1,
         )

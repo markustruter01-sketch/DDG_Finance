@@ -14,7 +14,6 @@ import forex_ledger
 
 
 BOT_ID = "forex_ai"
-BOT_PAUSED = True
 
 
 def _finite_amount(value: Any, field: str, *, allow_zero: bool = False) -> float:

@@ -416,11 +416,6 @@ def run_asia_cycle(profile: dict, db_id: int) -> None:
     max_positions = int(profile.get("MAX_POSITIONS", 6))
     max_deployment = float(profile.get("MAX_DEPLOYMENT", 0.80))
 
-    # Pause guard — always first
-    if profile.get("BOT_PAUSED", False):
-        logger.info("Asia | BOT_PAUSED=True — skipping cycle")
-        return
-
     logger.info(
         f"Asia | === ASIA-PACIFIC TREND CYCLE — "
         f"{datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')} ==="

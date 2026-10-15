@@ -679,8 +679,9 @@ CREATE INDEX IF NOT EXISTS idx_review_flags_status ON review_flags (status, due_
 
 -- ── Unified Bot State Table ────────────────────────────────────────────────
 -- Single source of truth for pause state, heartbeat, and status across all bots.
--- Replaces: poseidon_control.json, kc_control.json, navigator_control.json,
---           BOT_PAUSED in config.py, per-bot rows in kraken_heartbeat.
+-- bots_state.paused is the ONLY pause switch (static BOT_PAUSED flags retired
+-- 16 Oct 2026). Replaces: poseidon_control.json, kc_control.json,
+-- navigator_control.json, per-bot rows in kraken_heartbeat.
 -- Legacy tables are kept during migration; bots dual-write to both.
 CREATE TABLE IF NOT EXISTS bots_state (
   bot_id         TEXT PRIMARY KEY,

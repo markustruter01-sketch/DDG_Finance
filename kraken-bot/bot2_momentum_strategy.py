@@ -76,7 +76,6 @@ def _load_bot2_profile() -> dict[str, Any]:
 
 BOT2_PROFILE = _load_bot2_profile()
 BOT_ID = "spy_qqq_trend"
-BOT_PAUSED = False
 ALPACA_BASE_URL = "https://paper-api.alpaca.markets"
 ALPACA_DATA_BASE_URL = "https://data.alpaca.markets"
 MAX_POSITIONS = int(BOT2_PROFILE["MAX_POSITIONS"])
@@ -2133,11 +2132,8 @@ def run_bot2_cycle(
     db_id: int | None = None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
-    """Live-shaped cycle with the permanent pause as the first executable branch."""
+    """Live cycle. Only called by the runner, which enforces bots_state.paused."""
     gate_passed = universe_gate_is_passed()
-    if BOT_PAUSED:
-        logger.info("Bot 2 | BOT_PAUSED=True — no client, account read, or order activity")
-        return {"status": "paused", "orders": 0}
     profile = profile or {}
     now = now or datetime.now(timezone.utc)
     if not us_equity_session_open(now):
@@ -2426,7 +2422,7 @@ def dry_run_cycle() -> dict[str, Any]:
         f"| cash=${account['cash']:,.2f} | as_of={as_of.isoformat()}"
     )
     print(f"DRY_RUN_DATA_FEED | {data_feed}")
-    print(f"DRY_RUN_PAUSE | module={BOT_PAUSED} | orders_submitted=0")
+    print("DRY_RUN_PAUSE | dry run places no orders | orders_submitted=0")
     print(f"DRY_RUN_VAULT | symbols={sorted(vault_symbols)} | market_value=${vault_market_value:,.2f}")
     print(f"DRY_RUN_INVESTABLE_BASE | ${plan['investable_base']:,.2f}")
     print(f"DRY_RUN_UNIVERSE_SIZE | {len(screened)}")

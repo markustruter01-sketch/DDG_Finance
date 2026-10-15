@@ -1,0 +1,26 @@
+{
+  "id": "FX-BT1",
+  "registered_at": "2026-10-11, ~09:20 Brisbane (before any data was pulled)",
+  "source_document": "Project doc businesses/finance/forex-baseline-backtest-registration-2026-10-11.md",
+  "hypothesis": "Describe how the registered Forex baseline trend rule behaved historically; a fixed rule, not a validation of edge.",
+  "candidate": "LONG if close > SMA100 and 63-day return > 0; SHORT if close < SMA100 and 63-day return < 0; else FLAT. Stop 2.0 x ATR(14) fixed at entry. Exit on call change. Code: kraken-bot/forex_baseline_backtest.py",
+  "candidates_declared": 1,
+  "prior_variants_tried": 0,
+  "universe": ["EUR_USD", "USD_JPY", "GBP_USD", "AUD_USD", "USD_CAD", "USD_CHF", "NZD_USD"],
+  "window": "4999 complete OANDA daily BA candles per pair ending on or before Fri 9 Oct 2026",
+  "sizing": "0.5% of equity risked per trade to the stop; max 4 open; strongest by |63d return| / (ATR/close)",
+  "leverage": "gross cap 2.0x equity",
+  "costs": "bid/ask spread paid on entry and exit; financing OMITTED (direction of bias unknown); no slippage beyond gap fills",
+  "pass_bar": "None: descriptive baseline. Reference bar for later Forex work is 'beat holding nothing (0%)'.",
+  "original_result": {
+    "read_from": "FX-BT1.txt via the project doc, run 11 Oct 2026, commit d951b80",
+    "total_return_pct": -17.6,
+    "max_drawdown_pct": -33.9,
+    "sharpe_daily_rf0": -0.02,
+    "trades": 792,
+    "win_rate_pct": 24.5,
+    "expectancy_R": -0.04,
+    "avg_gross_leverage": 1.28,
+    "max_gross_leverage": 2.01
+  }
+}

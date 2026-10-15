@@ -163,15 +163,23 @@ class OandaClient:
         instrument: str,
         *,
         count: int = 5,
+        to: str | None = None,
     ) -> list[dict[str, Any]]:
-        """Complete daily candles with bid and ask OHLC (read-only)."""
+        """Complete daily candles with bid and ask OHLC (read-only).
+
+        ``to`` (RFC 3339, e.g. "2026-10-10T00:00:00Z") ends the window there
+        instead of now, so a research pull can be repeated exactly.
+        """
         if not instrument or not isinstance(instrument, str):
             raise ValueError("instrument must be a non-empty string")
         if isinstance(count, bool) or not isinstance(count, int) or not 1 <= count <= 4999:
             raise ValueError("count must be an integer between 1 and 4999")
+        params: dict[str, Any] = {"granularity": "D", "price": "BA", "count": count + 1}
+        if to is not None:
+            params["to"] = to
         payload = self._get(
             f"/instruments/{quote(instrument, safe='')}/candles",
-            params={"granularity": "D", "price": "BA", "count": count + 1},
+            params=params,
         )
         candles = payload.get("candles")
         if not isinstance(candles, list) or any(

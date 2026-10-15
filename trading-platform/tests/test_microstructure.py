@@ -867,12 +867,20 @@ class TestExecutorVaRGate(unittest.TestCase):
         """Slots are NOT blocked when var_tripped=False (dry_run exits after compliance checks)."""
         slot    = self._make_slot(ticker="SPY")
         results = self._make_results()
-        results, _ = self._execute_slot(
-            slot, equity=100_000, max_position_usd=20_000,
-            remaining_cash=100_000, current_positions={},
-            results=results, dry_run=True,
-            var_tripped=False,
-        )
+        # The wash-sale check reads the trade journal; stub it so this unit
+        # test never opens a database connection (FIN-22f).
+        not_blocked = {"blocked": False, "reason": None, "similar_ticker": None,
+                       "loss_date": None, "pnl_pct": None}
+        with unittest.mock.patch("execution.executor.check_wash_sale",
+                                 return_value=not_blocked), \
+             unittest.mock.patch("execution.executor.get_latest_price",
+                                 return_value=None):
+            results, _ = self._execute_slot(
+                slot, equity=100_000, max_position_usd=20_000,
+                remaining_cash=100_000, current_positions={},
+                results=results, dry_run=True,
+                var_tripped=False,
+            )
         # Should NOT have a var_circuit_breaker skip entry
         var_skips = [e for e in results["skipped"] if e.get("reason") == "var_circuit_breaker"]
         self.assertEqual(len(var_skips), 0)

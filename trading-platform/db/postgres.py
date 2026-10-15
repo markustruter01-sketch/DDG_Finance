@@ -1333,6 +1333,11 @@ def ensure_schema() -> None:
     except Exception as _l_exc:
         logger.error(f"DB | Phase L walk-forward column migrations failed: {_l_exc}")
 
+    # Run-once, guarded data migrations (db/migrations.py). New one-off data
+    # fixes go there, never into this function.
+    from db.migrations import apply_pending_migrations
+    apply_pending_migrations(get_conn)
+
 
 def insert_post_mortem(
     ticker: str,

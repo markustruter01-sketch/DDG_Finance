@@ -20,7 +20,6 @@ Live parity options (the live sleeve runs the same rules):
 from __future__ import annotations
 
 import bisect
-import math
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Callable
@@ -28,6 +27,7 @@ from typing import Any, Callable
 from research_harness.harness.costs import CostModel
 from research_harness.harness.holdout import check_window
 from research_harness.harness.metrics import TRADING_DAYS, CurvePoint, rf_daily_for
+from research_harness.harness.sizing import stop_price, target_shares
 
 EPS = 1e-9
 
@@ -147,16 +147,14 @@ def simulate(
                     continue
                 px = bar["open"]
                 cur = shares.get(sym, 0.0)
-                target = w * equity_open / px
-                if whole_shares:
-                    target = float(math.trunc(target))
+                target = target_shares(w, equity_open, px, whole_shares=whole_shares)
                 if abs(target - cur) * px >= 0.01:
                     if cur and target and (cur > 0) != (target > 0):  # flip: close first
                         trade(sym, -cur, px, day)
                         cur = 0.0
                     trade(sym, target - cur, px, day)
                 if stop_pct is not None and sym in shares:  # re-set at every rebalance
-                    stops[sym] = px * (1 - stop_pct) if shares[sym] > 0 else px * (1 + stop_pct)
+                    stops[sym] = stop_price(px, long=shares[sym] > 0, stop_pct=stop_pct)
             pending = carry or None
         # 1b. Protective stops during today's bar.
         if stop_pct is not None:

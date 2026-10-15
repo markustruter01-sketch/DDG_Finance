@@ -1064,7 +1064,12 @@ def get_job_status() -> list[dict]:
         jobs.append({
             "id":            job.id,
             "name":          job.name,
-            "next_fire_utc": str(job.next_run_time) if job.next_run_time else "paused",
+            # A job added before the scheduler starts has no next_run_time yet.
+            "next_fire_utc": (
+                str(job.next_run_time)
+                if getattr(job, "next_run_time", None)
+                else "paused"
+            ),
         })
     return jobs
 

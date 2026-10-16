@@ -185,6 +185,37 @@ def _m003_preserve_forex_pause(cur) -> dict:
     return {"forex_ai": f"paused (was {row[0]!r})", "changed": 1}
 
 
+# ── 2026-10-16-004: clear pause reasons left on running bots ─────────────────
+# Read 2026-10-16 ~00:20 UTC: jerome_macro and bot2_spy_qqq have paused = FALSE
+# but still carry an old pause_reason ("BTC stop lost in failed rebalance",
+# "publish failed; ..."), which the dashboard can show as if they were paused.
+# set_paused() now writes the reason on every change, so this only clears the
+# leftovers. paused and paused_at are not touched.
+
+_STALE_REASON_BOTS = {"bot2_spy_qqq", "jerome_macro"}
+
+
+def _m004_clear_stale_pause_reasons(cur) -> dict:
+    cur.execute(
+        "SELECT bot_id FROM bots_state WHERE paused = FALSE "
+        "AND COALESCE(pause_reason, '') <> '' FOR UPDATE"
+    )
+    found = {row[0] for row in cur.fetchall()}
+    if found != _STALE_REASON_BOTS:
+        raise MigrationGuardError(
+            f"running bots with a pause_reason are {sorted(found)}, "
+            f"expected {sorted(_STALE_REASON_BOTS)}"
+        )
+    cur.execute(
+        "UPDATE bots_state SET pause_reason = NULL "
+        "WHERE paused = FALSE AND bot_id = ANY(%s)",
+        (sorted(_STALE_REASON_BOTS),),
+    )
+    if cur.rowcount != len(_STALE_REASON_BOTS):
+        raise MigrationGuardError(f"expected 2 rows, updated {cur.rowcount}")
+    return {"cleared": sorted(_STALE_REASON_BOTS), "count": cur.rowcount}
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(
         id="2026-10-15-001-resolve-stale-degradations",
@@ -200,6 +231,11 @@ MIGRATIONS: tuple[Migration, ...] = (
         id="2026-10-16-003-preserve-forex-pause",
         description="Keep forex_ai paused as static BOT_PAUSED flags are retired",
         apply=_m003_preserve_forex_pause,
+    ),
+    Migration(
+        id="2026-10-16-004-clear-stale-pause-reasons",
+        description="Clear old pause reasons on bots that are running",
+        apply=_m004_clear_stale_pause_reasons,
     ),
 )
 

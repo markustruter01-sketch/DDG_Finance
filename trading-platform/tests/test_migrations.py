@@ -33,6 +33,12 @@ class FakeCursor:
             self.rowcount = len(gone)
             for x in gone:
                 self.db.pending_ratchet_deletes.add(x)
+        elif s.startswith("SELECT bot_id FROM bots_state WHERE paused = FALSE"):
+            self._fetch = [(b,) for b in sorted(self.db.stale_reason_bots)]
+        elif s.startswith("UPDATE bots_state SET pause_reason = NULL"):
+            hit = [b for b in params[0] if b in self.db.stale_reason_bots]
+            self.rowcount = len(hit)
+            self.db.pending_cleared = set(hit)
         elif s.startswith("SELECT paused FROM bots_state"):
             self._fetch = [] if self.db.forex_paused == "missing" else [(self.db.forex_paused,)]
         elif s.startswith("UPDATE bots_state"):
@@ -51,7 +57,10 @@ class FakeCursor:
 
 
 class FakeDB:
-    def __init__(self, ratchet=None, applied=(), update_rowcounts=None, forex_paused=True):
+    def __init__(self, ratchet=None, applied=(), update_rowcounts=None, forex_paused=True,
+                 stale_reason_bots=("bot2_spy_qqq", "jerome_macro")):
+        self.stale_reason_bots = set(stale_reason_bots)
+        self.pending_cleared = set()
         self.forex_paused = forex_paused
         self.pending_forex_paused = None
         self.ratchet = dict(ratchet if ratchet is not None else m._DEAD_RATCHET_ROWS)
@@ -77,11 +86,14 @@ class FakeDB:
             self.pending_applied.clear()
             self.pending_ratchet_deletes.clear()
             self.pending_forex_paused = None
+            self.pending_cleared = set()
             raise
         else:
             if self.pending_forex_paused is not None:
                 self.forex_paused = self.pending_forex_paused
                 self.pending_forex_paused = None
+            self.stale_reason_bots -= self.pending_cleared
+            self.pending_cleared = set()
             self.applied |= self.pending_applied
             for sym in self.pending_ratchet_deletes:
                 self.ratchet.pop(sym, None)
@@ -190,3 +202,29 @@ def test_m003_guard_fails_without_forex_row():
     db = FakeDB(forex_paused="missing")
     assert _m003(db)[M003] == "guard-failed"
     assert M003 not in db.applied
+
+
+M004 = "2026-10-16-004-clear-stale-pause-reasons"
+
+
+def _m004(db):
+    only = tuple(x for x in m.MIGRATIONS if x.id == M004)
+    return m.apply_pending_migrations(db.get_conn, migrations=only, is_production=lambda: True)
+
+
+def test_m004_clears_the_two_stale_reasons():
+    db = FakeDB()
+    assert _m004(db)[M004] == "applied"
+    assert db.stale_reason_bots == set()
+
+
+def test_m004_guard_fails_when_another_running_bot_has_a_reason():
+    db = FakeDB(stale_reason_bots=("bot2_spy_qqq", "jerome_macro", "oracle"))
+    assert _m004(db)[M004] == "guard-failed"
+    assert db.stale_reason_bots == {"bot2_spy_qqq", "jerome_macro", "oracle"}
+    assert M004 not in db.applied
+
+
+def test_m004_guard_fails_when_already_clean():
+    db = FakeDB(stale_reason_bots=())
+    assert _m004(db)[M004] == "guard-failed"

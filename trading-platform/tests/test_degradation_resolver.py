@@ -90,3 +90,15 @@ def test_unknown_or_ambiguous_state_fails_closed():
     state = _state()
     state["pauses"] = {}
     assert resolution_for_event(event, state) is None
+
+def test_atr_stop_audit_fail_needs_coverage_pass_and_fresh_clean_recon():
+    event = _event("audit_fail_atr_stop_check")
+    assert resolution_for_event(event, _state()) == (
+        "stop-coverage invariant PASS and latest reconciliation is clean"
+    )
+    stale = _state()
+    stale["reconciliation"]["run_ts"] = NOW - timedelta(hours=3)
+    assert resolution_for_event(event, stale) is None
+    uncovered = _state()
+    uncovered["invariants"]["strategy_positions_have_covering_stops"] = "FAIL"
+    assert resolution_for_event(event, uncovered) is None

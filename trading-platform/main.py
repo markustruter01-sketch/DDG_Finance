@@ -13,6 +13,7 @@ All endpoint handlers live in ``routes/`` sub-modules.  This file keeps only:
 import asyncio
 import hashlib
 import hmac
+import json
 import os
 import subprocess as _subprocess
 import sys
@@ -370,6 +371,57 @@ async def lifespan(app: FastAPI):
     _register_yahoo_refresh_jobs(scheduler)
 
     from apscheduler.triggers.cron import CronTrigger as _CronTrigger
+
+    def _weekly_database_backup() -> None:
+        script = os.path.join(os.path.dirname(__file__), "scripts", "backup_db.py")
+        try:
+            result = _subprocess.run(
+                [sys.executable, script],
+                cwd=os.path.dirname(__file__),
+                capture_output=True,
+                text=True,
+                timeout=7200,
+                check=False,
+            )
+            if result.returncode != 0:
+                detail = (result.stderr or result.stdout or "backup script failed")[-1800:]
+                raise RuntimeError(detail)
+            payload = json.loads(result.stdout.strip().splitlines()[-1])
+            size_mb = int(payload["size_bytes"]) / (1024 * 1024)
+            logger.info(
+                "Database backup | "
+                f"object={payload['object']} size_mb={size_mb:.2f} "
+                f"sha256={payload['sha256']}"
+            )
+        except Exception as exc:
+            logger.error(f"Database backup failed: {exc}")
+            try:
+                from core.degradation_tracker import record_degradation
+
+                record_degradation(
+                    component="database",
+                    severity="error",
+                    error_type="db_backup_failed",
+                    message=f"Weekly production database backup failed: {exc!s}"[:480],
+                    detail=repr(exc),
+                )
+            except Exception as degradation_exc:
+                logger.error(f"Database backup degradation recording failed: {degradation_exc}")
+
+    _add_scheduler_job(
+        scheduler,
+        func=_weekly_database_backup,
+        trigger=_CronTrigger(
+            day_of_week="sun",
+            hour=3,
+            minute=0,
+            timezone="Australia/Brisbane",
+        ),
+        id="weekly_database_backup",
+        name="Weekly production database backup",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
     logger.info("Apex Predator options engine removed — Bot #5 now runs as crypto momentum scalper via Kraken pool")
 
     # FOREX NAVIGATOR is retired. Its engine code remains on disk as a

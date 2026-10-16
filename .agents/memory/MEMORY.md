@@ -64,6 +64,7 @@
 - [Degradation lifecycle policy](degradation-lifecycle-policy.md) — auto-resolution requires explicit live recovery evidence; paused bots are not stale.
 - [Condition alert identity](condition-alert-identity.md) — safety alert deduplication must exclude volatile diagnostic text and reset only after recovery evidence.
 - [Database backup client versions](database-backup-client-versions.md) — pg_dump must match each server major; current dev is PostgreSQL 17 while production is PostgreSQL 16.
+- [App Storage Python client](app-storage-python-client.md) — use Replit's Python SDK; it authenticates through the sidecar and requires google-cloud-storage below v3.
 - [Large backup asset packaging](large-backup-asset-packaging.md) — downloadable asset registration caps files at 100 MiB; split larger verified archives and preserve the full-file hash.
 - [Research connection isolation](research-connection-isolation.md) — research imports must not initialize or fall back through the shared application database.
 - [ETF current quantity backfill](current-qty-backfill.md) — keep immutable entry qty separate from one-time broker-matched current_qty backfill; closed=0, canceled=NULL, failures stay NULL.

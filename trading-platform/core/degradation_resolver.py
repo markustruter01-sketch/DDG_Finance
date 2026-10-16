@@ -19,6 +19,7 @@ from core.bot_liveness import PORTFOLIO_STALE_THRESHOLDS
 
 
 RESOLVABLE_ERROR_TYPES = (
+    "audit_fail_atr_stop_check",
     "bot_stale_workflow",
     "broker_stop_rejected",
     "close_position_failed",
@@ -30,7 +31,12 @@ RESOLVABLE_ERROR_TYPES = (
     "stop_sweep_placement_failed",
 )
 
+# The math auditor's atr_stop_check fails when a ledger stop is missing or not
+# below the market price. It clears on the same live evidence as a stop
+# placement failure: every position covered by a live broker stop, and a clean
+# broker/ledger reconciliation.
 STOP_ERROR_TYPES = {
+    "audit_fail_atr_stop_check",
     "broker_stop_rejected",
     "protective_stop_failed",
     "stop_placement_failed",

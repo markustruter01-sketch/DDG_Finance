@@ -344,6 +344,7 @@ def test_trip_pauses_bots_and_only_cancels_non_protective_orders(monkeypatch):
 
 def test_reset_requires_exact_confirmation_when_latched(monkeypatch):
     ks._state["tripped"] = True
+    monkeypatch.setattr(ks, "_write_reset_event", lambda: None)
     monkeypatch.delenv("KILL_SWITCH_RESET_CONFIRMATION", raising=False)
     with pytest.raises(ValueError, match="not configured"):
         ks.reset()
@@ -422,3 +423,76 @@ def test_pause_lookup_by_any_alias_uses_same_canonical_row(monkeypatch, alias, c
     monkeypatch.setattr(bot_state, "_get_conn", lambda: connection)
     assert bot_state.is_paused(alias) is True
     assert connection.cursor_instance.params == (canonical,)
+
+def _events_conn(rows, error=None, inserted=None):
+    from contextlib import contextmanager
+
+    @contextmanager
+    def get_conn():
+        class Cur:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def execute(self, sql, params=None):
+                if error:
+                    raise error
+                if inserted is not None and sql.strip().startswith("INSERT"):
+                    inserted.append(params)
+
+            def fetchone(self):
+                return rows[0] if rows else None
+
+        class Conn:
+            def cursor(self):
+                return Cur()
+
+        yield Conn()
+
+    return get_conn
+
+
+@pytest.mark.parametrize(
+    ("rows", "expected"),
+    [([], False), ([("reset",)], False), ([("manual",)], True), ([("missing_stop",)], True)],
+)
+def test_restore_latch_follows_newest_event(monkeypatch, rows, expected):
+    import db.postgres as pg
+    monkeypatch.setattr(pg, "get_conn", _events_conn(rows))
+    ks._state["tripped"] = False
+    assert ks.restore_latch() is expected
+    assert ks.is_tripped() is expected
+    ks._state["tripped"] = False
+
+
+def test_restore_latch_fails_closed_when_unreadable(monkeypatch):
+    import db.postgres as pg
+    monkeypatch.setattr(pg, "get_conn", _events_conn([], error=RuntimeError("db down")))
+    ks._state["tripped"] = False
+    assert ks.restore_latch() is True
+    assert ks.is_tripped() is True
+    ks._state["tripped"] = False
+
+
+def test_reset_persists_a_reset_event(monkeypatch):
+    import db.postgres as pg
+    inserted = []
+    monkeypatch.setattr(pg, "get_conn", _events_conn([], inserted=inserted))
+    monkeypatch.setenv("KILL_SWITCH_RESET_CONFIRMATION", "tok")
+    ks._state["tripped"] = True
+    ks.reset(confirmation_token="tok")
+    assert ks.is_tripped() is False
+    assert inserted and inserted[0][0] == ks.RESET_EVENT_TRIGGER
+
+
+def test_reset_stays_tripped_when_reset_cannot_be_saved(monkeypatch):
+    import db.postgres as pg
+    monkeypatch.setattr(pg, "get_conn", _events_conn([], error=RuntimeError("db down")))
+    monkeypatch.setenv("KILL_SWITCH_RESET_CONFIRMATION", "tok")
+    ks._state["tripped"] = True
+    with pytest.raises(RuntimeError):
+        ks.reset(confirmation_token="tok")
+    assert ks.is_tripped() is True
+    ks._state["tripped"] = False

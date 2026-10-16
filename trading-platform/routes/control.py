@@ -516,8 +516,17 @@ async def pause_bot_unified(bot_id: str, reason: str = ""):
 
 @control_router.post("/bots/{bot_id}/resume")
 async def resume_bot_unified(bot_id: str):
-    """Resume any bot by bot_id — writes bots_state.paused = false."""
+    """Resume any bot by bot_id — writes bots_state.paused = false.
+
+    Refused while the kill switch is tripped: a trip pauses every bot, and
+    only a confirmed reset may lift that.
+    """
     from core.bot_state import set_paused
+    if is_tripped():
+        raise HTTPException(
+            status_code=409,
+            detail="Kill switch is tripped. Reset it with the confirmation token before resuming bots.",
+        )
     try:
         set_paused(bot_id, paused=False, reason="")
         return {"bot_id": bot_id, "paused": False}

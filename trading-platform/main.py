@@ -272,6 +272,10 @@ async def lifespan(app: FastAPI):
     init_db()
     logger.info("Trade journal database initialised")
 
+    # A kill-switch trip must survive restarts (it is otherwise in memory only).
+    from core.kill_switch import restore_latch
+    restore_latch()
+
     try:
         from analysis.learning_snapshot import seed_from_snapshot
         seed_result = seed_from_snapshot()

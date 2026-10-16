@@ -31,6 +31,9 @@ EQUITY_STOP_SHORTFALL_TOLERANCE = 1.0
 MISSING_STOP_SECONDS = 60.0
 MISMATCH_REQUIRED_CHECKS = 2
 RESET_CONFIRMATION_ENV_VAR = "KILL_SWITCH_RESET_CONFIRMATION"
+# kill_switch_events doubles as the persisted latch: the switch is tripped
+# while the newest event is anything other than a reset.
+RESET_EVENT_TRIGGER = "reset"
 # Registry list includes paused, non-retired bots so the safety monitor still
 # observes Forex while its strategy remains paused.
 ACTIVE_BOTS = tuple(active_bot_ids())
@@ -729,17 +732,58 @@ def trip(triggers: list[dict[str, Any]], snapshot: dict[str, Any]) -> dict[str, 
 
 
 def reset(opening_equity: float | None = None, confirmation_token: str | None = None) -> None:
-    if _state["tripped"]:
+    was_tripped = bool(_state["tripped"])
+    if was_tripped:
         expected_confirmation = os.getenv(RESET_CONFIRMATION_ENV_VAR, "").strip()
         if not expected_confirmation:
             raise ValueError("Kill-switch reset confirmation is not configured.")
         if not confirmation_token or not hmac.compare_digest(confirmation_token, expected_confirmation):
             raise ValueError("Invalid kill-switch reset confirmation.")
+        # Persist the reset before clearing memory. If it cannot be written the
+        # switch stays tripped; otherwise a restart would re-latch it silently.
+        _write_reset_event()
     _state["tripped"] = False
     _state["last_snapshot"] = {}
     _state["missing_stop_since"] = {}
     _state["mismatch_counts"] = {}
     logger.warning("Kill switch manually reset after explicit confirmation")
+
+
+def _write_reset_event() -> None:
+    from db.postgres import get_conn
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO kill_switch_events (trigger, account, snapshot, action_taken) "
+                "VALUES (%s, NULL, '{}'::jsonb, %s)",
+                (RESET_EVENT_TRIGGER, "reset_with_confirmation"),
+            )
+
+
+def restore_latch() -> bool:
+    """Re-apply a trip that survived a restart. Call once at startup.
+
+    Tripped when the newest kill_switch_events row is not a reset. If the
+    table cannot be read the switch is treated as tripped (fail closed): bots
+    cannot be resumed until someone resets it with the confirmation token.
+    """
+    try:
+        from db.postgres import get_conn
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT trigger FROM kill_switch_events "
+                    "ORDER BY event_ts DESC, id DESC LIMIT 1"
+                )
+                row = cur.fetchone()
+        tripped = row is not None and str(row[0]) != RESET_EVENT_TRIGGER
+    except Exception as exc:
+        logger.critical(f"Kill switch | latch unreadable at startup, treating as TRIPPED: {exc}")
+        tripped = True
+    if tripped:
+        _state["tripped"] = True
+        logger.critical("Kill switch | latched from a previous run; reset with the confirmation token to clear")
+    return tripped
 
 
 def is_tripped() -> bool:

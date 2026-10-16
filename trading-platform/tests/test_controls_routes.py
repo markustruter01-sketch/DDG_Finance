@@ -70,3 +70,24 @@ def test_kill_route_runs_trip_and_reports_cancellations(monkeypatch):
     monkeypatch.setattr(control, "ks_get_state", lambda: {"tripped": True})
     out = asyncio.run(control.trip_kill_switch())
     assert calls == ["manual_api_trip"] and out["cancelled_orders"] == 2
+
+
+def test_resume_refused_while_kill_switch_tripped(monkeypatch):
+    import core.bot_state as bot_state
+    calls = []
+    monkeypatch.setattr(control, "is_tripped", lambda: True)
+    monkeypatch.setattr(bot_state, "set_paused", lambda *a, **k: calls.append(a))
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(control.resume_bot_unified("oracle"))
+    assert exc.value.status_code == 409
+    assert calls == []
+
+
+def test_resume_allowed_when_not_tripped(monkeypatch):
+    import core.bot_state as bot_state
+    calls = []
+    monkeypatch.setattr(control, "is_tripped", lambda: False)
+    monkeypatch.setattr(bot_state, "set_paused", lambda *a, **k: calls.append((a, k)))
+    out = asyncio.run(control.resume_bot_unified("oracle"))
+    assert out == {"bot_id": "oracle", "paused": False}
+    assert calls

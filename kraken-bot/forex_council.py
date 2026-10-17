@@ -305,8 +305,10 @@ def _http_post(url: str, headers: dict[str, str], body: dict[str, Any]) -> dict[
     try:
         with httpx.Client(timeout=TIMEOUT_SECONDS, follow_redirects=False) as client:
             response = client.post(url, headers=headers, json=body)
-    except Exception:
-        raise CouncilError("provider request failed") from None
+    except Exception as exc:
+        # Only the exception's class name (e.g. ReadTimeout, ConnectError) is kept:
+        # it says why the call failed without carrying URLs, headers or keys.
+        raise CouncilError(f"provider request failed ({type(exc).__name__})") from None
     if not 200 <= response.status_code < 300:
         raise CouncilError(f"provider returned HTTP {response.status_code}")
     try:

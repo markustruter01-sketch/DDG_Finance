@@ -207,3 +207,22 @@ def test_malformed_reply_gets_one_repair_attempt_and_prose_is_tolerated(keys):
     assert record["status"] == "shadow" and attempts["gemini"] == 2
     assert any("retrying once" in e for e in record["errors"])
     assert [c["attempt"] for c in record["calls"] if c["role"] == "decision_maker"] == [1, 2]
+
+
+def test_transport_failure_records_only_the_exception_class(monkeypatch):
+    """A failed request names its cause (e.g. ReadTimeout) but never the URL or key."""
+    import httpx
+
+    class Boom:
+        def __init__(self, *a, **k): pass
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def post(self, url, headers=None, json=None):
+            raise httpx.ReadTimeout(f"timed out calling {url} with {headers}")
+
+    monkeypatch.setattr(fc.httpx, "Client", Boom)
+    with pytest.raises(fc.CouncilError) as err:
+        fc._http_post("https://openrouter.ai/api/v1/chat/completions", {"Authorization": "Bearer sk-secret"}, {})
+    msg = str(err.value)
+    assert msg == "provider request failed (ReadTimeout)"
+    assert "sk-secret" not in msg and "openrouter" not in msg

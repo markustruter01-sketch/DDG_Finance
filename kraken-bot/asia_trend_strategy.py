@@ -406,6 +406,31 @@ def _unpark_before_entries(engine, candidates: list[dict]) -> float:
 
 # ── Main cycle ─────────────────────────────────────────────────────────────────
 
+_last_trend_shadow_date: Optional[date] = None
+
+
+def _maybe_run_trend_shadow(engine, account: dict, live_positions: list[dict]) -> None:
+    """Once a day: log the TREND-V1-B rebalance plan for this account (shadow).
+    Places no orders and writes nothing; any failure is logged and ignored so
+    Atlas's own cycle is never affected."""
+    global _last_trend_shadow_date
+    today = datetime.now(timezone.utc).date()
+    if _last_trend_shadow_date == today:
+        return
+    _last_trend_shadow_date = today
+    try:
+        from core.kill_switch import _vault_symbols
+        from sleeve_runtime.trend_shadow import alpaca_bar_fetcher, run_shadow
+
+        exclude = set(_vault_symbols(BOT_ID)) | {
+            p["symbol"] for p in live_positions if is_cash_park(p.get("symbol"))
+        }
+        run_shadow(fetch_bars=alpaca_bar_fetcher(engine.api), account=account,
+                   positions=live_positions, exclude=exclude)
+    except Exception as exc:
+        logger.warning(f"Asia | TREND-V1-B shadow skipped: {type(exc).__name__}: {exc}")
+
+
 def run_asia_cycle(profile: dict, db_id: int) -> None:
     """
     Asia-Pacific ETF trend cycle. Called from runner.py on the oracle thread.
@@ -447,6 +472,8 @@ def run_asia_cycle(profile: dict, db_id: int) -> None:
     logger.info(
         f"Asia | Positions: {len(live_positions)} live, {len(db_positions)} in DB"
     )
+
+    _maybe_run_trend_shadow(engine, account, live_positions)
 
     # ── Exit checks ─────────────────────────────────────────────────────────
     # Multi-lot deduplication: process primary (earliest) lot fully,

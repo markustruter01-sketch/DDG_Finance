@@ -293,6 +293,33 @@ async def reset_kill_switch(request: KillResetRequest) -> dict:
     }
 
 
+@control_router.get("/forex-ai/kill", tags=["Risk"])
+async def forex_ai_kill_status() -> dict:
+    from core.forex_ai_kill import ai_kill_state
+    return await asyncio.to_thread(ai_kill_state)
+
+
+@control_router.post("/forex-ai/kill", tags=["Risk"])
+async def forex_ai_kill_on(reason: str = "operator_manual") -> dict:
+    """Turn off every Forex AI call. No orders are touched."""
+    from core.forex_ai_kill import ai_kill_state, set_ai_kill
+    try:
+        await asyncio.to_thread(set_ai_kill, True, reason)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"kill switch not written: {exc}")
+    return await asyncio.to_thread(ai_kill_state)
+
+
+@control_router.post("/forex-ai/kill/clear", tags=["Risk"])
+async def forex_ai_kill_off(reason: str = "operator_manual") -> dict:
+    from core.forex_ai_kill import ai_kill_state, set_ai_kill
+    try:
+        await asyncio.to_thread(set_ai_kill, False, reason)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"kill switch not written: {exc}")
+    return await asyncio.to_thread(ai_kill_state)
+
+
 @control_router.get("/kill/report", tags=["Risk"])
 async def kill_switch_report() -> dict:
     from execution.reconciliation import run_kill_switch_check

@@ -55,6 +55,10 @@ BOT_PROFILES = {
         "TP2_PCT":           0.12,
         "MIN_HOLD_DAYS":     5,
         "MAX_DEPLOYMENT":    0.80,
+        # TREND-V1-B cutover switch (sleeve_runtime/trend_executor.py). Off =
+        # legacy Atlas strategy. Turning it on needs Markus's OK and, in the
+        # same change, MAX_DEPLOYMENT 1.00 (the sleeve can invest ~99%).
+        "TREND_SLEEVE_LIVE": False,
     },
     "jerome_macro": {
         # Stage 5 merge (2026-08-11): LatAm (EWZ/EWW/ECH) + Frontier (EEM/EZA/EPOL/GREK/TUR)

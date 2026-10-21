@@ -1703,6 +1703,49 @@ class AlpacaEtfEngine:
             logger.error(f"EtfEngine | log_trade mirror failed: {_lt_exc}")
         return True
 
+    def record_resize(
+        self,
+        bot_id: str,
+        symbol: str,
+        added_qty: float,
+        broker_qty: float,
+        avg_entry_price: float,
+    ) -> bool:
+        """A position grew (sleeve rebalance buy): update its single open row.
+        qty (entry size) grows by the fill; current_qty becomes the broker
+        quantity; entry_price is the broker's average. Refuses unless exactly
+        one open row exists for the symbol."""
+        _ensure_tp()
+        try:
+            from db.postgres import get_conn, is_pg_available
+            if not is_pg_available():
+                logger.error(f"EtfEngine | record_resize unavailable for {bot_id}/{symbol}")
+                return False
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        UPDATE alpaca_etf_positions
+                           SET qty          = qty + %s,
+                               current_qty  = %s,
+                               entry_price  = %s,
+                               notional_usd = %s
+                         WHERE bot_id = %s AND symbol = %s AND status = 'open'
+                    """, (added_qty, broker_qty, avg_entry_price,
+                          broker_qty * avg_entry_price, bot_id, symbol))
+                    if cur.rowcount != 1:
+                        conn.rollback()
+                        logger.error(
+                            f"EtfEngine | record_resize matched {cur.rowcount} rows for "
+                            f"{bot_id}/{symbol}; nothing written"
+                        )
+                        return False
+                conn.commit()
+            logger.info(f"EtfEngine | DB: resized {bot_id}/{symbol} +{added_qty} -> {broker_qty}")
+            return True
+        except Exception as exc:
+            logger.error(f"EtfEngine | record_resize failed: {exc}")
+            return False
+
     def record_close(
         self,
         bot_id: str,

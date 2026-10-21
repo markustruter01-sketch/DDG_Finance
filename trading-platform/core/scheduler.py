@@ -796,13 +796,8 @@ async def _deploy_hash_check() -> None:
         return
 
     try:
-        import subprocess as _sp
-        latest = _sp.check_output(
-            ["git", "rev-parse", "--short", "HEAD"],
-            cwd=os.path.dirname(os.path.abspath(__file__)),
-            stderr=_sp.DEVNULL,
-            timeout=3,
-        ).decode().strip()
+        from core.build_info import current_commit
+        latest = current_commit()
 
         # Lazy import to avoid circular dependency (main imports scheduler)
         try:
@@ -810,7 +805,9 @@ async def _deploy_hash_check() -> None:
         except Exception:
             _running = "unknown"
 
-        if _running == "unknown" or latest != _running:
+        if "unknown" in (_running, latest):
+            logger.info("Scheduler | deploy_hash_check: cannot verify (no commit stamp or git here)")
+        elif latest != _running:
             from notifications.discord import alert_critical
             alert_critical(
                 title="⚠️ Deploy Hash Mismatch",

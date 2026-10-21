@@ -27,18 +27,9 @@ from fastapi import FastAPI, APIRouter
 from loguru import logger
 
 # ── Running-process git hash (captured once at startup) ──────────────────────
-def _read_git_hash() -> str:
-    try:
-        return _subprocess.check_output(
-            ["git", "rev-parse", "--short", "HEAD"],
-            cwd=os.path.dirname(os.path.abspath(__file__)),
-            stderr=_subprocess.DEVNULL,
-            timeout=3,
-        ).decode().strip()
-    except Exception:
-        return "unknown"
+from core.build_info import current_commit
 
-_RUNNING_HASH: str = _read_git_hash()
+_RUNNING_HASH: str = current_commit()
 _STARTED_AT: str   = datetime.now(_tz.utc).isoformat()
 
 _REPO_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
@@ -791,19 +782,11 @@ async def version_info():
     current HEAD hash.  If they differ, the process has not been restarted
     since the last deploy — restart the deployment to pick up the new code.
     """
-    try:
-        latest = _subprocess.check_output(
-            ["git", "rev-parse", "--short", "HEAD"],
-            cwd=os.path.dirname(os.path.abspath(__file__)),
-            stderr=_subprocess.DEVNULL,
-            timeout=3,
-        ).decode().strip()
-    except Exception:
-        latest = "unknown"
+    latest = current_commit()
     return {
         "running_hash": _RUNNING_HASH,
         "latest_hash":  latest,
-        "match":        _RUNNING_HASH == latest,
+        "match":        None if "unknown" in (_RUNNING_HASH, latest) else _RUNNING_HASH == latest,
         "started_at":   _STARTED_AT,
     }
 

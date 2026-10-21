@@ -139,8 +139,8 @@ def compute_params_hash(bot_id: str) -> str:
 
 _ARC0: dict[str, str] = {
     "oracle": """
-        AND status           = 'closed'
-        AND realised_pnl_usd IS NOT NULL
+        AND status       = 'closed'
+        AND realised_pnl IS NOT NULL
         AND opened_at        >= '2026-08-07 00:00:00+00'
     """,
     "spy_qqq_trend": """
@@ -177,7 +177,7 @@ def _fetch_closed_trades(bot_id: str, days_back: int) -> list[tuple[datetime, fl
                     # Stage 3B (2026-08-07): oracle slot is now Asia-Pacific ETF
                     # trend. Reads from alpaca_etf_positions (same as jerome_macro).
                     cur.execute(f"""
-                        SELECT closed_at, realised_pnl_usd::float
+                        SELECT closed_at, realised_pnl::float
                         FROM   alpaca_etf_positions
                         WHERE  bot_id    = 'oracle'
                           AND  closed_at >= %s

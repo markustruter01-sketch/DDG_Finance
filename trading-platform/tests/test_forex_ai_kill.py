@@ -1,5 +1,8 @@
+import json
+
 import pytest
 
+import core.bot_state as bs
 import core.forex_ai_kill as k
 
 
@@ -21,7 +24,7 @@ class _Conn:
 
 
 def _use(monkeypatch, cur):
-    monkeypatch.setattr(k, "_conn", lambda: _Conn(cur))
+    monkeypatch.setattr(bs, "_get_conn", lambda: _Conn(cur))
 
 
 def test_reads_the_stored_switch(monkeypatch):
@@ -34,15 +37,16 @@ def test_reads_the_stored_switch(monkeypatch):
 def test_missing_row_or_unreadable_state_fails_closed(monkeypatch):
     _use(monkeypatch, _Cur(None))
     assert k.ai_kill_state()["on"] is True
-    monkeypatch.setattr(k, "_conn", lambda: (_ for _ in ()).throw(RuntimeError("db down")))
+    monkeypatch.setattr(bs, "_get_conn", lambda: (_ for _ in ()).throw(RuntimeError("db down")))
     assert k.ai_kill_state()["on"] is True
 
 
-def test_set_writes_one_row_or_raises(monkeypatch):
+def test_set_merges_one_row_or_raises(monkeypatch):
     cur = _Cur(None)
     _use(monkeypatch, cur)
     k.set_ai_kill(True, "operator")
-    assert cur.sql[0][1] == (True, "operator", "forex_ai")
+    patch, bot = cur.sql[0][1]
+    assert bot == "forex_ai" and json.loads(patch)["ai_kill"] is True
     _use(monkeypatch, _Cur(None, rowcount=0))
     with pytest.raises(RuntimeError):
         k.set_ai_kill(True)

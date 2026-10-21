@@ -404,9 +404,19 @@ def _unpark_before_entries(engine, candidates: list[dict]) -> float:
     return unpark_for_entry(engine, "Asia", engine.get_positions())
 
 
-# ── Main cycle ─────────────────────────────────────────────────────────────────
+# ── TREND-V1-B sleeve (shadow log, and live when TREND_SLEEVE_LIVE) ───────────
 
 _last_trend_shadow_date: Optional[date] = None
+
+
+def _sleeve_exclusions(live_positions: list[dict]) -> tuple[set[str], set[str]]:
+    """(vault symbols, parked-cash symbols) for this account."""
+    from core.cash_park import CASH_PARK_SYMBOLS
+    from core.kill_switch import _vault_symbols
+    vault = {canonical_symbol(s) for s in _vault_symbols(BOT_ID)}
+    parked = {canonical_symbol(s) for s in CASH_PARK_SYMBOLS}
+    parked |= {p["symbol"] for p in live_positions if is_cash_park(p.get("symbol"))}
+    return vault, parked
 
 
 def _maybe_run_trend_shadow(engine, account: dict, live_positions: list[dict]) -> None:
@@ -419,17 +429,45 @@ def _maybe_run_trend_shadow(engine, account: dict, live_positions: list[dict]) -
         return
     _last_trend_shadow_date = today
     try:
-        from core.kill_switch import _vault_symbols
-        from sleeve_runtime.trend_shadow import alpaca_bar_fetcher, run_shadow
+        from sleeve_runtime.trend_v1b import alpaca_bar_fetcher, run_shadow
 
-        exclude = set(_vault_symbols(BOT_ID)) | {
-            p["symbol"] for p in live_positions if is_cash_park(p.get("symbol"))
-        }
+        vault, parked = _sleeve_exclusions(live_positions)
         run_shadow(fetch_bars=alpaca_bar_fetcher(engine.api), account=account,
-                   positions=live_positions, exclude=exclude)
+                   positions=live_positions, vault=vault, cash_park=parked)
     except Exception as exc:
         logger.warning(f"Asia | TREND-V1-B shadow skipped: {type(exc).__name__}: {exc}")
 
+
+def _run_trend_sleeve(engine, live_positions: list[dict]) -> None:
+    """TREND_SLEEVE_LIVE: the registered TREND-V1-B sleeve owns this account.
+    Replaces the legacy exits/entries entirely for this cycle."""
+    from core import bot_state
+    from core.degradation_tracker import record_degradation
+    from core.kill_switch import latch_tripped
+    from sgov_parking import park_idle_cash, unpark_for_entry
+    from sleeve_runtime.trend_executor import STATE_KEY, run_trend_cycle
+    from sleeve_runtime.trend_v1b import alpaca_bar_fetcher
+
+    vault, parked = _sleeve_exclusions(live_positions)
+    result = run_trend_cycle(
+        engine,
+        bot_id=BOT_ID,
+        fetch_bars=alpaca_bar_fetcher(engine.api),
+        vault=vault,
+        cash_park=parked,
+        read_state=lambda: (bot_state.read_metadata(BOT_ID) or {}).get(STATE_KEY, {}),
+        write_state=lambda st: bot_state.merge_metadata(BOT_ID, {STATE_KEY: st}),
+        kill_tripped=latch_tripped,
+        unpark=lambda e, live: unpark_for_entry(e, "TrendV1B", live),
+        park=lambda e, live, cash: park_idle_cash(e, "TrendV1B", live, cash),
+        alert=lambda severity, msg: record_degradation(
+            component=BOT_ID, severity=severity, error_type="trend_v1b_rebalance",
+            message=msg[:500], bot_id=BOT_ID),
+    )
+    logger.info(f"Asia | TREND-V1-B live cycle | {result['status']}")
+
+
+# ── Main cycle ─────────────────────────────────────────────────────────────────
 
 def run_asia_cycle(profile: dict, db_id: int) -> None:
     """
@@ -472,6 +510,10 @@ def run_asia_cycle(profile: dict, db_id: int) -> None:
     logger.info(
         f"Asia | Positions: {len(live_positions)} live, {len(db_positions)} in DB"
     )
+
+    if profile.get("TREND_SLEEVE_LIVE", False):
+        _run_trend_sleeve(engine, live_positions)
+        return
 
     _maybe_run_trend_shadow(engine, account, live_positions)
 

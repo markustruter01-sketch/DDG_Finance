@@ -760,13 +760,9 @@ def _write_reset_event() -> None:
             )
 
 
-def restore_latch() -> bool:
-    """Re-apply a trip that survived a restart. Call once at startup.
-
-    Tripped when the newest kill_switch_events row is not a reset. If the
-    table cannot be read the switch is treated as tripped (fail closed): bots
-    cannot be resumed until someone resets it with the confirmation token.
-    """
+def latch_tripped() -> bool:
+    """Read the persisted latch (any process may call this). Tripped when the
+    newest kill_switch_events row is not a reset; unreadable = tripped."""
     try:
         from db.postgres import get_conn
         with get_conn() as conn:
@@ -776,10 +772,17 @@ def restore_latch() -> bool:
                     "ORDER BY event_ts DESC, id DESC LIMIT 1"
                 )
                 row = cur.fetchone()
-        tripped = row is not None and str(row[0]) != RESET_EVENT_TRIGGER
+        return row is not None and str(row[0]) != RESET_EVENT_TRIGGER
     except Exception as exc:
-        logger.critical(f"Kill switch | latch unreadable at startup, treating as TRIPPED: {exc}")
-        tripped = True
+        logger.critical(f"Kill switch | latch unreadable, treating as TRIPPED: {exc}")
+        return True
+
+
+def restore_latch() -> bool:
+    """Re-apply a trip that survived a restart. Call once at startup.
+    Fails closed: an unreadable latch counts as tripped, and bots cannot be
+    resumed until someone resets it with the confirmation token."""
+    tripped = latch_tripped()
     if tripped:
         _state["tripped"] = True
         logger.critical("Kill switch | latched from a previous run; reset with the confirmation token to clear")

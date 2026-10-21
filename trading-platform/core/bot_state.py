@@ -95,6 +95,40 @@ def touch_heartbeat(bot_id: str, status: str = "running", error: str = "") -> No
         logger.debug(f"BotState | touch_heartbeat({bot_id}) failed (non-fatal): {exc}")
 
 
+def read_metadata(bot_id: str) -> Optional[dict]:
+    """bots_state.metadata for a bot, or None when the row is missing.
+    Raises if the database cannot be read: callers decide how to fail."""
+    bot_id = _canonical(bot_id)
+    with _get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT metadata FROM bots_state WHERE bot_id = %s", (bot_id,))
+            row = cur.fetchone()
+    if row is None:
+        return None
+    meta = row[0] or {}
+    if isinstance(meta, str):
+        import json
+        meta = json.loads(meta)
+    return meta
+
+
+def merge_metadata(bot_id: str, patch: dict) -> None:
+    """Merge top-level keys into bots_state.metadata. The heartbeat never
+    touches metadata, so values survive restarts. Raises unless exactly one
+    row was written."""
+    import json
+    bot_id = _canonical(bot_id)
+    with _get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE bots_state SET metadata = COALESCE(metadata, '{}'::jsonb) || %s::jsonb "
+                "WHERE bot_id = %s",
+                (json.dumps(patch), bot_id),
+            )
+            if cur.rowcount != 1:
+                raise RuntimeError(f"merge_metadata({bot_id}): no bots_state row updated")
+
+
 def is_paused(bot_id: str) -> bool:
     """The single pause switch: bots_state.paused.
 

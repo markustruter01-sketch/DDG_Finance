@@ -9,8 +9,9 @@ Safety rules built into every plan:
   its full quantity at stop_pct below the rebalance reference price.
 - Sells come before buys; buys are scaled down (never up) to fit the cash
   that will be available, keeping a cash buffer.
-- A symbol with no usable price is left exactly as it is (no trade, its
-  existing stop untouched) and reported, never guessed.
+- A symbol with no usable price, or one the caller freezes (with a reason),
+  is left exactly as it is (no trade, its existing stop untouched) and
+  reported, never guessed.
 - Execution order is explicit: cancel the stops of positions whose size
   changes (brokers reserve shares held by a stop), sell, buy, then place
   their new stops. Positions whose size does NOT change keep their stop and
@@ -62,6 +63,7 @@ def plan_rebalance(
     stop_pct: float,
     cash_buffer_pct: float,
     max_gross: float = 1.0,
+    frozen: dict[str, str] | None = None,
 ) -> RebalancePlan:
     if equity <= 0:
         raise ValueError("equity must be positive")
@@ -80,6 +82,10 @@ def plan_rebalance(
     for sym in sorted(set(weights) | set(positions)):
         cur = int(positions.get(sym, 0))
         px = prices.get(sym)
+        if frozen and sym in frozen:
+            plan.skipped[sym] = f"frozen: {frozen[sym]}; position and stop left unchanged"
+            targets[sym] = cur
+            continue
         if px is None or not px > 0:
             plan.skipped[sym] = "no usable price; position and stop left unchanged"
             targets[sym] = cur

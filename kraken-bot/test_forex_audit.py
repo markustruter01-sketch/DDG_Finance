@@ -1,0 +1,52 @@
+from datetime import date, datetime, timezone
+from pathlib import Path
+
+import forex_audit as fa
+import forex_ai_strategy as fs
+from forex_council import build_pack
+
+ROW = {
+    "pair": "EUR_USD", "trend": "up", "momentum_return": 0.03, "short_momentum_return": 0.01,
+    "atr_pct": 0.006, "realised_vol": 0.08, "carry": {"long_rate": 0.02, "short_rate": -0.01},
+    "spread_to_atr": 0.1,
+}
+
+
+def _good_record():
+    pack, label_map = build_pack([ROW])
+    import json
+    return {"pack": pack, "label_map": label_map,
+            "calls": [{"role": "member_1", "request": {"system": "rules", "user": json.dumps(pack)}, "raw": "{}"}]}
+
+
+def test_clean_record_and_real_source_have_no_findings():
+    assert fa.audit_records([(date(2026, 10, 20), _good_record())]) == []
+    assert fa.audit_source() == []
+
+
+def test_off_schema_pack_and_key_like_strings_are_flagged():
+    rec = _good_record()
+    rec["pack"]["pairs"][0]["extra"] = 1
+    rec["calls"][0]["raw"] = "token gsk_abcdefghijkl1234"
+    found = fa.audit_records([(date(2026, 10, 20), rec)])
+    assert any("off schema" in f for f in found)
+    assert any("key-like string in member_1 reply" in f for f in found)
+
+
+def test_unexpected_host_in_code_is_flagged(tmp_path):
+    (tmp_path / "x.py").write_text('URL = "https://evil.example.com/post"\n')
+    assert fa.audit_source(tmp_path, ("x.py",)) == ["x.py: host evil.example.com is not on the allowlist"]
+
+
+def test_weekly_audit_runs_saturdays_only_and_records_findings(monkeypatch):
+    fs._last_audit_day = None
+    seen = []
+    monkeypatch.setattr(fa, "run_weekly_audit", lambda _c: ["boom"])
+    import core.degradation_tracker as dt
+    monkeypatch.setattr(dt, "record_degradation", lambda **k: seen.append(k) or True)
+    friday = datetime(2026, 10, 23, 15, 0, tzinfo=timezone.utc)
+    saturday = datetime(2026, 10, 24, 15, 0, tzinfo=timezone.utc)
+    assert fs._maybe_run_weekly_audit(now=friday, get_conn=object) == "not due"
+    assert fs._maybe_run_weekly_audit(now=saturday, get_conn=object) == "findings=1"
+    assert fs._maybe_run_weekly_audit(now=saturday, get_conn=object) == "not due"
+    assert seen[0]["component"] == "forex_council" and seen[0]["bot_id"] == "forex_ai"

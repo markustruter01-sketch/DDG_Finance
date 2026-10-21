@@ -54,6 +54,9 @@ class FakeDB:
 FRIDAY_CLOSE = datetime(2026, 10, 9, 21, 10, tzinfo=timezone.utc)
 
 
+OFF = lambda: {"on": False, "reason": "", "at": None}
+
+
 def test_shadow_council_runs_once_per_day_and_appends_record():
     db, calls = FakeDB(), []
 
@@ -63,7 +66,7 @@ def test_shadow_council_runs_once_per_day_and_appends_record():
 
     positions = [{"instrument": "EUR_USD", "long": {"units": "100"}, "short": {"units": "0"}}]
     status = fs.run_shadow_council({"rows": []}, positions, now=lambda: FRIDAY_CLOSE,
-                                   get_conn=db.conn, council=council)
+                                   get_conn=db.conn, council=council, kill_state=OFF)
     assert status.startswith("logged 2026-10-09 status=shadow")
     assert calls == [{"EUR_USD": "long"}]
     assert [s for s, _ in db.sql] == ["CREATE", "SELECT", "INSERT"]
@@ -74,13 +77,25 @@ def test_shadow_council_skips_when_logged_not_due_or_failing():
         raise AssertionError("must not run")
 
     assert fs.run_shadow_council({"rows": []}, [], now=lambda: FRIDAY_CLOSE,
-                                 get_conn=FakeDB(logged=True).conn, council=boom) == "already logged 2026-10-09"
+                                 get_conn=FakeDB(logged=True).conn, council=boom, kill_state=OFF) == "already logged 2026-10-09"
     saturday = datetime(2026, 10, 10, 22, 0, tzinfo=timezone.utc)
     assert fs.run_shadow_council({"rows": []}, [], now=lambda: saturday,
-                                 get_conn=FakeDB().conn, council=boom) == "not due"
+                                 get_conn=FakeDB().conn, council=boom, kill_state=OFF) == "not due"
 
     def broken_conn():
         raise RuntimeError("db down")
 
     assert fs.run_shadow_council({"rows": []}, [], now=lambda: FRIDAY_CLOSE,
-                                 get_conn=broken_conn, council=boom) == "failed: RuntimeError"
+                                 get_conn=broken_conn, council=boom, kill_state=OFF) == "failed: RuntimeError"
+
+
+def test_ai_kill_switch_stops_the_council_before_any_call_or_ledger_write():
+    def boom(*_a):
+        raise AssertionError("must not run")
+
+    db = FakeDB()
+    on = lambda: {"on": True, "reason": "operator", "at": None}
+    status = fs.run_shadow_council({"rows": []}, [], now=lambda: FRIDAY_CLOSE,
+                                   get_conn=db.conn, council=boom, kill_state=on)
+    assert status == "ai kill switch on: operator"
+    assert db.sql == []

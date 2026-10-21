@@ -47,6 +47,7 @@ def run_shadow_council(
     now: Callable[[], Any] = forex_ledger.utc_now,
     get_conn: Callable[[], Any] | None = None,
     council: Callable[..., dict[str, Any]] | None = None,
+    kill_state: Callable[[], dict[str, Any]] | None = None,
 ) -> str:
     """Phase 4 shadow cycle: once per New York trading day, run the AI council
     and append the full record to the ledger. Never places orders. Returns a
@@ -55,6 +56,11 @@ def run_shadow_council(
         trading_day = forex_ledger.trading_day_due(now())
         if trading_day is None:
             return "not due"
+        if kill_state is None:
+            from core.forex_ai_kill import ai_kill_state as kill_state
+        killed = kill_state()
+        if killed["on"]:
+            return f"ai kill switch on: {killed['reason'] or 'no reason given'}"
         if get_conn is None:
             from db.postgres import get_conn as get_conn  # runner puts trading-platform on sys.path
         if council is None:
@@ -94,6 +100,37 @@ def _maybe_log_weekly_scorecard(client_factory: Callable[[], Any], *, now=None, 
         return "logged"
     except Exception as exc:
         logger.warning(f"FOREX scorecard | skipped: {type(exc).__name__}")
+        return f"failed: {type(exc).__name__}"
+
+
+_last_audit_day = None
+
+
+def _maybe_run_weekly_audit(*, now=None, get_conn=None) -> str:
+    """Saturdays (New York): audit the ledger and council code; any finding goes
+    to the degradation log (the warning channel). Read-only. Never raises."""
+    global _last_audit_day
+    try:
+        from forex_audit import run_weekly_audit
+
+        ny = (now or forex_ledger.utc_now()).astimezone(forex_ledger.NEW_YORK)
+        if ny.weekday() != 5 or _last_audit_day == ny.date():
+            return "not due"
+        _last_audit_day = ny.date()
+        if get_conn is None:
+            from db.postgres import get_conn as get_conn
+        findings = run_weekly_audit(get_conn)
+        if findings:
+            from core.degradation_tracker import record_degradation
+            record_degradation(
+                component="forex_council", severity="error", error_type="weekly_audit",
+                message=f"Forex council weekly audit: {len(findings)} finding(s)",
+                detail="; ".join(findings)[:1500], bot_id="forex_ai",
+            )
+        logger.info(f"FOREX audit (weekly) | findings={len(findings)}")
+        return f"findings={len(findings)}"
+    except Exception as exc:
+        logger.warning(f"FOREX audit | skipped: {type(exc).__name__}")
         return f"failed: {type(exc).__name__}"
 
 
@@ -153,6 +190,7 @@ def run_forex_cycle(
     if council_enabled:
         logger.info(f"FOREX council (shadow) | {council_status}")
         _maybe_log_weekly_scorecard(factory)
+        _maybe_run_weekly_audit()
     return {
         "bot_id": BOT_ID,
         "currency": "USD",

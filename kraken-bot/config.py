@@ -54,11 +54,13 @@ BOT_PROFILES = {
         "TP1_PCT":           0.06,
         "TP2_PCT":           0.12,
         "MIN_HOLD_DAYS":     5,
-        "MAX_DEPLOYMENT":    0.80,
-        # TREND-V1-B cutover switch (sleeve_runtime/trend_executor.py). Off =
-        # legacy Atlas strategy. Turning it on needs Markus's OK and, in the
-        # same change, MAX_DEPLOYMENT 1.00 (the sleeve can invest ~99%).
-        "TREND_SLEEVE_LIVE": False,
+        # The TREND-V1-B sleeve can invest ~99% of sleeve equity (gross <= 1.0,
+        # 1% cash buffer); the kill switch's deployment check must allow it.
+        "MAX_DEPLOYMENT":    1.00,
+        # TREND-V1-B cutover switch (sleeve_runtime/trend_executor.py). On =
+        # the registered sleeve owns this account; legacy Atlas logic is off.
+        # Rollback: set False (and MAX_DEPLOYMENT back to 0.80) and publish.
+        "TREND_SLEEVE_LIVE": True,
     },
     "jerome_macro": {
         # Stage 5 merge (2026-08-11): LatAm (EWZ/EWW/ECH) + Frontier (EEM/EZA/EPOL/GREK/TUR)

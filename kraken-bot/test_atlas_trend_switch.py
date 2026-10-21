@@ -50,5 +50,7 @@ def test_switch_on_runs_only_the_sleeve(monkeypatch):
     assert _cycle(monkeypatch, True) == ["sleeve"]
 
 
-def test_switch_ships_off():
-    assert load_bot_profiles()["oracle"]["TREND_SLEEVE_LIVE"] is False
+def test_live_sleeve_has_a_full_deployment_cap():
+    oracle = load_bot_profiles()["oracle"]
+    if oracle["TREND_SLEEVE_LIVE"]:
+        assert oracle["MAX_DEPLOYMENT"] == 1.0

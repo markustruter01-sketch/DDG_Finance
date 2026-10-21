@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import math
 from typing import Any, Callable
 
@@ -69,6 +71,32 @@ def run_shadow_council(
         return f"failed: {type(exc).__name__}"
 
 
+_last_scorecard_day = None
+
+
+def _maybe_log_weekly_scorecard(client_factory: Callable[[], Any], *, now=None, get_conn=None) -> str:
+    """Saturdays (New York): score the week's shadow decisions and log one JSON
+    line. Read-only. Never raises."""
+    global _last_scorecard_day
+    try:
+        from forex_scorecard import NEW_YORK, run_weekly_scorecard
+        from forex_quant_desk import FOREX_PAIRS
+
+        ny = (now or forex_ledger.utc_now()).astimezone(NEW_YORK)
+        if ny.weekday() != 5 or _last_scorecard_day == ny.date():
+            return "not due"
+        _last_scorecard_day = ny.date()
+        if get_conn is None:
+            from db.postgres import get_conn as get_conn
+        with client_factory() as client:
+            card = run_weekly_scorecard(client, get_conn, FOREX_PAIRS)
+        logger.info(f"FOREX scorecard (weekly) | {json.dumps(card, separators=(',', ':'))}")
+        return "logged"
+    except Exception as exc:
+        logger.warning(f"FOREX scorecard | skipped: {type(exc).__name__}")
+        return f"failed: {type(exc).__name__}"
+
+
 def run_forex_cycle(
     *,
     profile: dict[str, Any] | None = None,
@@ -124,6 +152,7 @@ def run_forex_cycle(
     )
     if council_enabled:
         logger.info(f"FOREX council (shadow) | {council_status}")
+        _maybe_log_weekly_scorecard(factory)
     return {
         "bot_id": BOT_ID,
         "currency": "USD",

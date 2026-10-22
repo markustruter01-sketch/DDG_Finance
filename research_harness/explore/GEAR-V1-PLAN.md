@@ -121,3 +121,15 @@ A fail is reported as a fail.
 - Check that Alpaca paper and live accounts can trade SSO/QLD without extra
   restrictions (not yet verified).
 - Forward paper trading first, like every sleeve.
+
+## Amendment 1: data source (22 Oct 2026 ~15:15 Brisbane)
+Made BEFORE any SSO/QLD/QQQ data entered the harness and before any
+exploration ran. The yfinance library pull failed in the Replit workspace
+("SPY: possibly delisted; no timezone found"; no dataset was written), while
+Yahoo's chart endpoint answered directly (a read-only test returned SSO bars
+from 21 Jun 2006 with adjusted closes; that test fetched no data into the
+harness and computed nothing). Data source is therefore the same vendor
+through `research_harness.fetch yahoo` (Yahoo chart API v8), adjusted the
+same way as before (every price scaled by adjclose / close, as yfinance's
+auto_adjust=True does), into dataset `gear_etf_ych_2026-10-22`. Nothing else
+in the plan changes.

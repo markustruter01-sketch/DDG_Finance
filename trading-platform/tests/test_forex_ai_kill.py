@@ -29,7 +29,8 @@ def _use(monkeypatch, cur):
 
 def test_reads_the_stored_switch(monkeypatch):
     _use(monkeypatch, _Cur(({"ai_kill": True, "ai_kill_reason": "x", "ai_kill_at": "t"},)))
-    assert k.ai_kill_state() == {"on": True, "reason": "x", "at": "t"}
+    st = k.ai_kill_state()
+    assert (st["on"], st["reason"], st["at"]) == (True, "x", "t")
     _use(monkeypatch, _Cur(({},)))
     assert k.ai_kill_state()["on"] is False
 
@@ -50,3 +51,58 @@ def test_set_merges_one_row_or_raises(monkeypatch):
     _use(monkeypatch, _Cur(None, rowcount=0))
     with pytest.raises(RuntimeError):
         k.set_ai_kill(True)
+
+
+def test_ai_is_off_if_either_source_says_off(monkeypatch):
+    _use(monkeypatch, _Cur(({"ai_kill": False, "ai_kill_control": {"ai_off": True, "reason": "owner"}},)))
+    st = k.ai_kill_state()
+    assert st["on"] is True and st["reason"] == "DDG Control: owner"
+    _use(monkeypatch, _Cur(({"ai_kill": True, "ai_kill_reason": "audit", "ai_kill_control": {"ai_off": False}},)))
+    assert k.ai_kill_state()["on"] is True
+    _use(monkeypatch, _Cur(({"ai_kill": False, "ai_kill_control": {"ai_off": False}},)))
+    assert k.ai_kill_state()["on"] is False
+
+
+class _Resp:
+    def __init__(self, status, body=None):
+        self.status_code, self._body = status, body
+
+    def json(self):
+        return self._body
+
+
+def test_control_url_is_derived_from_the_push_url(monkeypatch):
+    monkeypatch.setenv("DDG_FLEET_PUSH_URL", "https://ctrl.example.app/api/inbound/fleet")
+    assert k.control_switch_url() == "https://ctrl.example.app/api/inbound/finance/forex-ai-switch"
+    monkeypatch.setenv("DDG_FLEET_PUSH_URL", "https://elsewhere/other")
+    assert k.control_switch_url() is None
+
+
+def test_sync_stores_controls_answer_and_keeps_state_on_any_failure(monkeypatch):
+    monkeypatch.setenv("DDG_FLEET_PUSH_URL", "https://ctrl.example.app/api/inbound/fleet")
+    monkeypatch.setenv("FLEET_INBOUND_KEY", "push-key")
+    cur = _Cur(None)
+    _use(monkeypatch, cur)
+    seen = {}
+
+    def get(url, headers, timeout):
+        seen.update(url=url, auth=headers["Authorization"])
+        return _Resp(200, {"ai_off": True, "reason": "owner", "changed_at": "2026-10-22T00:00:00Z"})
+
+    assert k.sync_from_control(get) == "ai_off=True"
+    assert seen["auth"] == "Bearer push-key"
+    patch = json.loads(cur.sql[0][1][0])["ai_kill_control"]
+    assert patch["ai_off"] is True and patch["reason"] == "owner"
+
+    for resp in (_Resp(404), _Resp(500), _Resp(200, {"ai_off": "yes"}), _Resp(200, [1])):
+        cur2 = _Cur(None)
+        _use(monkeypatch, cur2)
+        assert "ai_off=" not in k.sync_from_control(lambda *a, **kw: resp)
+        assert cur2.sql == []                          # nothing written
+
+    def down(*a, **kw):
+        raise ConnectionError("no route")
+
+    assert "kept last state" in k.sync_from_control(down)
+    monkeypatch.delenv("FLEET_INBOUND_KEY")
+    assert k.sync_from_control(get) == "not configured"

@@ -414,3 +414,12 @@ async def fleet_bot_history(days: int = 90):
             "deployed_pct": num(deployed), "positions": held,
         })
     return {"days": days, "bots": bots}
+
+
+@fleet_equity_router.get("/fleet/shadow/gear")
+async def fleet_gear_shadow():
+    """GEAR-V1-G4 forward shadow test (no orders): one stored row per finished
+    session since 23 Oct 2026, replayed with the backtest's own rules."""
+    from core.gear_shadow_job import SLEEVE_ID, history
+    rows = history()
+    return {"sleeve": SLEEVE_ID, "latest": rows[-1] if rows else None, "history": rows}

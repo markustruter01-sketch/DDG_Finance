@@ -508,6 +508,18 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
     logger.info("Scheduler | Registered: order_watchdog (09:05-16:35 NY, every 30 min)")
 
     scheduler.add_job(
+        func=_gear_shadow,
+        trigger=CronTrigger(day_of_week="mon-fri", hour=16, minute=40, timezone="America/New_York"),
+        id="gear_v1_g4_shadow",
+        name="GEAR-V1-G4 shadow replay (no orders, after the close)",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=3600,
+    )
+    logger.info("Scheduler | Registered: gear_v1_g4_shadow (16:40 NY weekdays, no orders)")
+
+    scheduler.add_job(
         func=_per_bot_vault_quarterly_rebalance,
         trigger=CronTrigger(
             month="1,4,7,10",
@@ -1138,6 +1150,16 @@ async def _daily_discord_pnl_report() -> None:
         logger.info("Scheduler | daily_discord_pnl_report: sent successfully")
     except Exception as exc:
         logger.error(f"Scheduler | daily_discord_pnl_report FAILED: {exc}")
+
+
+async def _gear_shadow() -> None:
+    """Replay the GEAR-V1-G4 rules on live bars and store the day's result. No orders."""
+    try:
+        from core.gear_shadow_job import run_and_store
+        result = await asyncio.to_thread(run_and_store)
+        logger.info(f"Scheduler | gear_v1_g4_shadow: {result.get('status')} as_of={result.get('as_of')}")
+    except Exception as exc:
+        logger.error(f"Scheduler | gear_v1_g4_shadow FAILED: {type(exc).__name__}: {exc}")
 
 
 async def _order_watchdog() -> None:

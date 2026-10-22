@@ -1,0 +1,18 @@
+{
+  "dataset": "fred_dtb3_2026-10-16",
+  "fetched_at": "2026-10-15T18:49:16.203624+00:00",
+  "fields": [
+    "day",
+    "rate"
+  ],
+  "notes": "rate is annual, decimal (0.05 = 5%)",
+  "source": "FRED DTB3 public CSV (3-month T-bill, secondary market, discount basis) 1990-01-01..2026-10-15",
+  "symbols": {
+    "DTB3": {
+      "first": "1990-01-02",
+      "last": "2026-10-13",
+      "rows": 9201,
+      "sha256": "c9e971da84a4155e52d62c036efa7af1f856c75334816fa671a24428ba4d237d"
+    }
+  }
+}

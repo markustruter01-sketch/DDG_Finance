@@ -1,0 +1,27 @@
+{
+  "dataset": "crypto_daily_cb_2026-10-22",
+  "fetched_at": "2026-10-22T00:22:12.749555+00:00",
+  "fields": [
+    "day",
+    "open",
+    "high",
+    "low",
+    "close"
+  ],
+  "notes": "Single-exchange daily OHLC; a product's history starts when Coinbase listed it.",
+  "source": "Coinbase Exchange public candles, granularity 86400 (UTC days) 2014-01-01..2026-10-15",
+  "symbols": {
+    "BTC-USD": {
+      "first": "2015-07-20",
+      "last": "2026-10-15",
+      "rows": 4106,
+      "sha256": "4f6d51f9141fceb6e8302a99a8f9a7143ca613a7f50b8b4a10efa8e2115ccff1"
+    },
+    "ETH-USD": {
+      "first": "2016-05-18",
+      "last": "2026-10-15",
+      "rows": 3801,
+      "sha256": "dfd194b5202faf6a61b188c5be5813fd4e1cef26ec51e07ee5f722e87c3b101f"
+    }
+  }
+}

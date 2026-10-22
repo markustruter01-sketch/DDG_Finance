@@ -1,0 +1,81 @@
+{
+  "dataset": "etf_daily_yf_2026-10-16",
+  "fetched_at": "2026-10-15T18:34:58.679924+00:00",
+  "fields": [
+    "day",
+    "open",
+    "high",
+    "low",
+    "close"
+  ],
+  "notes": "Dividend/split-adjusted OHLC (total-return proxy). The vendor revises adjusted history, so a later pull can differ; the manifest hash pins this one.",
+  "source": "yfinance auto_adjust=True 1993-01-01..2026-10-15",
+  "symbols": {
+    "DBC": {
+      "first": "2006-02-06",
+      "last": "2026-10-15",
+      "rows": 5206,
+      "sha256": "5120f6941aec6c00eba2be30d337ea8a42074ddde6eadf4b19c228acc98779c3"
+    },
+    "EEM": {
+      "first": "2003-04-14",
+      "last": "2026-10-15",
+      "rows": 5915,
+      "sha256": "f79d107ad258aba88d7f231ae408fb2bf45d3f190f30f81ff2184405f3f703d1"
+    },
+    "EFA": {
+      "first": "2001-08-27",
+      "last": "2026-10-15",
+      "rows": 6321,
+      "sha256": "7732c904efd1cc47ce386777e1065e1755ceb8b71e80f93a799ae80572b035d1"
+    },
+    "GLD": {
+      "first": "2004-11-18",
+      "last": "2026-10-15",
+      "rows": 5511,
+      "sha256": "afa158acf1902dacb9c5fa52e3ae5ae29b3bbf07fb6c6dcde5b15a1b4e3aecec"
+    },
+    "IEF": {
+      "first": "2002-07-30",
+      "last": "2026-10-15",
+      "rows": 6093,
+      "sha256": "dcd98c9c453cdab723d7e336b2fdea575b9a5a1d31f50b0a39c4f6538a90e8f8"
+    },
+    "IWM": {
+      "first": "2000-05-26",
+      "last": "2026-10-15",
+      "rows": 6636,
+      "sha256": "2b828c3080bc59fa0241bdb7b5549aeab5f2fe20bde8e59402cbe9986a1886c9"
+    },
+    "LQD": {
+      "first": "2002-07-30",
+      "last": "2026-10-15",
+      "rows": 6093,
+      "sha256": "1261c591c590ca8ef26608cf698bf6bf2c143ae5f38c3bcb7aadd9a8d8a88617"
+    },
+    "SPY": {
+      "first": "1993-01-29",
+      "last": "2026-10-15",
+      "rows": 8486,
+      "sha256": "b2170bd5275c15ae1f47d0516d8e1ca31de57cc070bf90a053178cd58f1fe0cc"
+    },
+    "TIP": {
+      "first": "2003-12-05",
+      "last": "2026-10-15",
+      "rows": 5751,
+      "sha256": "86c47661bb1c2bbd5e10201f79395676893d01f07612963a6bd2401b356bc10a"
+    },
+    "TLT": {
+      "first": "2002-07-30",
+      "last": "2026-10-15",
+      "rows": 6093,
+      "sha256": "6fd699933d5164a891228f82df1c1d90094efcd35703c78547475449b81386ca"
+    },
+    "VNQ": {
+      "first": "2004-09-29",
+      "last": "2026-10-15",
+      "rows": 5547,
+      "sha256": "3fddd2488f3690d760de4dc9c4031d11c971c5a91c6cb58f699e679923a686c0"
+    }
+  }
+}

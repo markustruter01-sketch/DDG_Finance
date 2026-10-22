@@ -1,0 +1,61 @@
+{
+  "dataset": "oanda_fx_ba_to_2026-10-10",
+  "fetched_at": "2026-10-15T17:59:22.049158+00:00",
+  "fields": [
+    "day",
+    "bo",
+    "bh",
+    "bl",
+    "bc",
+    "ao",
+    "ah",
+    "al",
+    "ac"
+  ],
+  "notes": "day = candle open date (NY 17:00 alignment), as in FX-BT1",
+  "source": "OANDA practice API daily BA candles, count=4999, to=2026-10-10T00:00:00Z",
+  "symbols": {
+    "AUD_USD": {
+      "first": "2008-11-18",
+      "last": "2026-10-08",
+      "rows": 4999,
+      "sha256": "fad17bde70c045a7c20eb085d91a65dcf2908aec18abbc2f5a0f660e084c289c"
+    },
+    "EUR_USD": {
+      "first": "2008-12-11",
+      "last": "2026-10-08",
+      "rows": 4999,
+      "sha256": "bfcacf49f8279ab820d542057a3fd8abbbf012090dc896c129b724665e2fabc3"
+    },
+    "GBP_USD": {
+      "first": "2008-12-04",
+      "last": "2026-10-08",
+      "rows": 4999,
+      "sha256": "95f255f8a5e8cdfcee9fbd585d3aa430b803e948967da3dd348ab858bc566550"
+    },
+    "NZD_USD": {
+      "first": "2008-11-24",
+      "last": "2026-10-08",
+      "rows": 4999,
+      "sha256": "bdf332c0bf8a174ac50832df857c5cc0dffdef7cf81ce1118a800352b9f28ee1"
+    },
+    "USD_CAD": {
+      "first": "2008-12-15",
+      "last": "2026-10-08",
+      "rows": 4999,
+      "sha256": "50b8a1cce6dee6f914bd1976c55e8f46c0f0a8d6147697147f1dd2f057079a1a"
+    },
+    "USD_CHF": {
+      "first": "2008-12-12",
+      "last": "2026-10-08",
+      "rows": 4999,
+      "sha256": "dfd93c3d5532839971ca2f18df07e3e02d4341235ad1692b88424111bddcc41a"
+    },
+    "USD_JPY": {
+      "first": "2008-12-23",
+      "last": "2026-10-08",
+      "rows": 4999,
+      "sha256": "947f8988434490546b5cd7b939b09754e1ad8f41443b263d94fcbc7c2efab7a1"
+    }
+  }
+}

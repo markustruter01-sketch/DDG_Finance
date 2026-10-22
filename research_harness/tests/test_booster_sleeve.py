@@ -100,3 +100,45 @@ def test_exploration_runs_on_sessions_and_logs(tmp_path):
         assert s["max_gross_leverage"] <= 1.0001
     assert out["chosen_for_registration"] in {"A", "B", "C", None}
     assert log.read_text().count("BOOST-V1") == 1
+
+
+def test_heldout_runs_once_reports_four_bars_and_refuses_a_second_test(tmp_path, monkeypatch):
+    import json as _json
+
+    import pytest
+
+    from research_harness.explore import boost_v1
+    from research_harness.harness.registry import RegistrationError
+    from research_harness.heldout import boost_v1 as hb
+
+    store = BarStore(tmp_path / "data")
+    sessions = _calendar(4400, date(2010, 1, 4), weekdays_only=True)
+    sessions = [d for d in sessions if d <= date(2026, 10, 15)]
+    etf = {s: _series(sessions, 0.0002 * (i % 3), 0.01, 10 + i) for i, s in enumerate(boost_v1.TREND_UNIVERSE)}
+    store.write_dataset("etf_t", source="synthetic", bars_by_symbol=etf)
+    cal = [d for d in _calendar(6000, date(2013, 1, 1), weekdays_only=False) if d <= date(2026, 10, 15)]
+    store.write_dataset("crypto_t", source="synthetic", bars_by_symbol={
+        bs.BTC: _series(cal, 0.001, 0.04, 7),
+        bs.ETH: _series([d for d in cal if d >= date(2017, 11, 9)], 0.001, 0.05, 8)})
+    store.write_dataset("fred_t", source="synthetic", fields=("day", "rate"), positive_fields=(),
+                        bars_by_symbol={"DTB3": [{"day": date(2010, 1, 1), "rate": 0.02}]})
+    regs = tmp_path / "regs"
+    regs.mkdir()
+    reg = {"id": "BOOST-V1-T", "registered_at": "test", "hypothesis": "h", "candidate": "B",
+           "candidate_id": "B", "candidates_declared": 3, "prior_variants_tried": "1",
+           "universe": [bs.BTC], "window": "w", "sizing": "s", "leverage": "none", "costs": "c",
+           "pass_bar": "p", "data": {d: store.manifest_hash(d) for d in ("crypto_t", "etf_t", "fred_t")}}
+    (regs / "BOOST-V1-T.json").write_text(_json.dumps(reg))
+    import research_harness.harness.registry as rg
+    real_load = rg.load_registration
+    # the store's held-out lock must find this test registration
+    monkeypatch.setattr(rg, "load_registration", lambda reg_id, directory=regs: real_load(reg_id, regs))
+    ledger = tmp_path / "ledger.jsonl"
+    out = hb.run("BOOST-V1-T", store, directory=regs, ledger=ledger)
+    assert out["candidate"] == "B" and set(out["pass_bar"]) >= {
+        "1_beats_tbills_after_costs", "2_max_drawdown_no_worse_than_-50pct",
+        "3_correlation_to_trend_below_0.5", "4_fleet_sharpe_rises_with_4pct_booster"}
+    assert out["verdict"].startswith(("PASS", "FAIL"))
+    assert out["summary"]["from"] >= "2021-01-01" and out["summary"]["to"] <= "2026-10-15"
+    with pytest.raises(RegistrationError):
+        hb.run("BOOST-V1-T", store, directory=regs, ledger=ledger)

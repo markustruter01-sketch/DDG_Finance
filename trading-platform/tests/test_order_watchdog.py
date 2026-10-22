@@ -48,10 +48,12 @@ def test_alerts_and_only_resolves_when_every_account_is_clean(monkeypatch):
     loop = _every(datetime(2026, 10, 21, 13, 30, tzinfo=UTC), 7.5, 28)
     monkeypatch.setattr(wd, "_today_submissions",
                         lambda bot, _now: loop if bot == "oracle" else [])
+    monkeypatch.setattr(wd, "_untradable_holdings", lambda bot: ["GREK"] if bot == "jerome_macro" else [])
     report = wd.run_watchdog(now)
-    assert report["oracle"]["status"] == "alert" and report["jerome_macro"]["status"] == "ok"
-    assert [r["error_type"] for r in recorded] == ["order_rate_sustained"]
-    assert resolved == ["order_rate_daily"]                  # sustained stays open: oracle still hits it
+    assert report["oracle"]["status"] == "alert" and report["spy_qqq_trend"]["status"] == "ok"
+    assert sorted(r["error_type"] for r in recorded) == ["held_asset_not_tradable", "order_rate_sustained"]
+    assert "GREK" in [r for r in recorded if r["bot_id"] == "jerome_macro"][0]["message"]
+    assert resolved == ["order_rate_daily"]                  # the two open rules stay open
 
 
 def test_unreadable_account_blocks_resolving(monkeypatch):
@@ -65,5 +67,24 @@ def test_unreadable_account_blocks_resolving(monkeypatch):
             raise RuntimeError("broker down")
         return []
     monkeypatch.setattr(wd, "_today_submissions", read)
+    monkeypatch.setattr(wd, "_untradable_holdings", lambda bot: [])
     report = wd.run_watchdog(datetime(2026, 10, 21, 17, 5, tzinfo=UTC))
     assert report["oracle"]["status"] == "unknown" and resolved == []
+
+
+def test_untradable_lookup(monkeypatch):
+    class P:
+        def __init__(self, s): self.symbol = s
+
+    class A:
+        def __init__(self, t): self.tradable = t
+
+    class C:
+        def get_all_positions(self): return [P("SPY"), P("GREK"), P("BTCUSD")]
+        def get_asset(self, s):
+            if s == "BTCUSD":
+                raise ValueError("lookup failed")
+            return A(s != "GREK")
+    import execution.reconciliation as rec
+    monkeypatch.setattr(rec, "_client_for", lambda b: C())
+    assert wd._untradable_holdings("oracle") == ["GREK"]

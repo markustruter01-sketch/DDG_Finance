@@ -5,6 +5,7 @@ Run from the repo root in the Replit workspace (needs vendor keys):
     python -m research_harness.fetch etf   --dataset etf_daily_yf_2026-10-16 --symbols SPY,TLT,GLD --start 2003-01-01 --end 2026-10-15
     python -m research_harness.fetch tbill --dataset fred_dtb3_2026-10-16 --start 2003-01-01 --end 2026-10-15
     python -m research_harness.fetch coinbase --dataset crypto_daily_cb_2026-10-22 --symbols BTC-USD,ETH-USD --start 2014-01-01 --end 2026-10-15
+    python -m research_harness.fetch yahoo --dataset gear_etf_ych_2026-10-22 --symbols SPY,QQQ,SSO,QLD --start 1998-01-01 --end 2026-10-15
 
 Datasets are immutable: a new pull gets a new dataset name.
 """
@@ -117,6 +118,65 @@ def fetch_coinbase(store: BarStore, dataset: str, symbols: list[str], start: str
     )
 
 
+YAHOO_CHART = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+
+
+def parse_yahoo_chart(payload: dict, first: date, last: date) -> list[dict]:
+    """Daily bars from Yahoo's chart API, adjusted the way yfinance's
+    auto_adjust=True does it: every price is scaled by adjclose / close, so
+    dividends and splits are in the series (a total-return proxy). Days with
+    any missing value are dropped. Dates are exchange-local trading days."""
+    from datetime import datetime, timezone
+    res = payload["chart"]["result"][0]
+    offset = int(res["meta"].get("gmtoffset", 0))
+    q = res["indicators"]["quote"][0]
+    adj = res["indicators"]["adjclose"][0]["adjclose"]
+    out = []
+    for i, ts in enumerate(res.get("timestamp") or []):
+        o, h, lo, c, a = q["open"][i], q["high"][i], q["low"][i], q["close"][i], adj[i]
+        if None in (o, h, lo, c, a) or c <= 0:
+            continue
+        day = datetime.fromtimestamp(ts + offset, tz=timezone.utc).date()
+        if not first <= day <= last:
+            continue
+        f = a / c
+        out.append({"day": day, "open": o * f, "high": h * f, "low": lo * f, "close": a})
+    return sorted({b["day"]: b for b in out}.values(), key=lambda b: b["day"])
+
+
+def fetch_yahoo_chart(store: BarStore, dataset: str, symbols: list[str], start: str, end: str,
+                      http_get=None, pause: float = 0.5) -> dict:
+    """Same vendor and adjustment as fetch_etf, through Yahoo's chart endpoint
+    directly (the yfinance library stopped returning data in the Replit
+    workspace on 22 Oct 2026 while this endpoint still answered)."""
+    import time as _time
+    from datetime import datetime, timezone
+    if http_get is None:
+        import requests
+        http_get = requests.get
+    first, last = date.fromisoformat(start), date.fromisoformat(end)
+    p1 = int(datetime(first.year, first.month, first.day, tzinfo=timezone.utc).timestamp())
+    p2 = int(datetime(last.year, last.month, last.day, tzinfo=timezone.utc).timestamp()) + 2 * 86400
+    data = {}
+    for sym in symbols:
+        resp = http_get(YAHOO_CHART.format(symbol=sym),
+                        params={"period1": p1, "period2": p2, "interval": "1d",
+                                "events": "div,splits", "includeAdjustedClose": "true"},
+                        headers={"User-Agent": "Mozilla/5.0"}, timeout=30)
+        resp.raise_for_status()
+        bars = parse_yahoo_chart(resp.json(), first, last)
+        if not bars:
+            raise RuntimeError(f"no data for {sym}")
+        data[sym] = bars
+        _time.sleep(pause)
+    return store.write_dataset(
+        dataset, source=f"Yahoo chart API v8, adjusted by adjclose/close (as yfinance auto_adjust=True) {start}..{end}",
+        bars_by_symbol=data,
+        notes=("Dividend/split-adjusted OHLC (total-return proxy). The vendor revises "
+               "adjusted history, so a later pull can differ; the manifest hash pins this one."),
+    )
+
+
 def parse_fred_csv(text: str) -> list[dict]:
     """FRED's keyless CSV: header row, then 'date,value'; '.' or '' = missing."""
     lines = [ln.strip() for ln in text.strip().splitlines() if ln.strip()]
@@ -152,7 +212,7 @@ def fetch_tbill(store: BarStore, dataset: str, start: str, end: str) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("kind", choices=("fx", "etf", "tbill", "coinbase"))
+    ap.add_argument("kind", choices=("fx", "etf", "tbill", "coinbase", "yahoo"))
     ap.add_argument("--dataset", required=True)
     ap.add_argument("--to")
     ap.add_argument("--symbols")
@@ -164,6 +224,8 @@ def main(argv: list[str] | None = None) -> int:
         m = fetch_fx(store, a.dataset, a.to)
     elif a.kind == "etf":
         m = fetch_etf(store, a.dataset, a.symbols.split(","), a.start, a.end)
+    elif a.kind == "yahoo":
+        m = fetch_yahoo_chart(store, a.dataset, a.symbols.split(","), a.start, a.end)
     elif a.kind == "coinbase":
         m = fetch_coinbase(store, a.dataset, a.symbols.split(","), a.start, a.end)
     else:

@@ -615,6 +615,10 @@ def test_spy_sleeve_rows_append_with_strict_sql_placeholder_validation(monkeypat
         connection.fake_cursor.execute("SELECT %s, %s", (1,))
 
 
+@pytest.mark.skipif(
+    not __import__("os").environ.get("HELIUM_DATABASE_URL"),
+    reason="needs the Helium research database (price panel); runs where it is configured",
+)
 def test_experiment_18_default_sharpe_reproduces_exactly():
     assets, candidates = _load_assets()
     end = _latest_complete_month_end()

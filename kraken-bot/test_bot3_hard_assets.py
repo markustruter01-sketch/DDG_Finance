@@ -21,6 +21,13 @@ sys.modules[_SPEC.name] = bot3
 _SPEC.loader.exec_module(bot3)
 
 
+@pytest.fixture(autouse=True)
+def _no_decision_log_writes(monkeypatch):
+    """Unit tests must never write the decision log: in Replit the database
+    is production. Tests that check logging patch this again themselves."""
+    monkeypatch.setattr(bot3, "_log_decision", lambda *args, **kwargs: None)
+
+
 class _EntryClient:
     def __init__(self) -> None:
         self.qty = 0.0

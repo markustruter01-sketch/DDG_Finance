@@ -363,7 +363,7 @@ async def lifespan(app: FastAPI):
 
     from apscheduler.triggers.cron import CronTrigger as _CronTrigger
 
-    def _weekly_database_backup() -> None:
+    def _daily_database_backup() -> None:
         script = os.path.join(os.path.dirname(__file__), "scripts", "backup_db.py")
         try:
             result = _subprocess.run(
@@ -393,7 +393,7 @@ async def lifespan(app: FastAPI):
                     component="database",
                     severity="error",
                     error_type="db_backup_failed",
-                    message=f"Weekly production database backup failed: {exc!s}"[:480],
+                    message=f"Daily production database backup failed: {exc!s}"[:480],
                     detail=repr(exc),
                 )
             except Exception as degradation_exc:
@@ -401,15 +401,17 @@ async def lifespan(app: FastAPI):
 
     _add_scheduler_job(
         scheduler,
-        func=_weekly_database_backup,
+        func=_daily_database_backup,
+        # Daily at 08:00 Brisbane = after the US close (03:00 was mid-session
+        # in New York). A dump is ~2.8 MB, so daily costs nothing and caps
+        # data loss at one day instead of seven.
         trigger=_CronTrigger(
-            day_of_week="sun",
-            hour=3,
+            hour=8,
             minute=0,
             timezone="Australia/Brisbane",
         ),
-        id="weekly_database_backup",
-        name="Weekly production database backup",
+        id="daily_database_backup",
+        name="Daily production database backup",
         replace_existing=True,
         misfire_grace_time=3600,
     )

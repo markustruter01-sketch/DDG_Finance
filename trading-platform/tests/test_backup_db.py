@@ -45,15 +45,17 @@ def test_pruning_waits_until_new_upload_is_confirmed_with_matching_size():
     assert storage.deleted == []
 
 
-def test_pruning_deletes_only_oldest_dumps_beyond_twelve():
-    names = [f"backups/quant-terminal/2026-10-{day:02d}_0300.dump" for day in range(1, 14)]
+def test_pruning_deletes_only_oldest_dumps_beyond_retention():
+    from scripts.backup_db import RETENTION_DUMPS
+    names = [f"backups/quant-terminal/2026-10-{day:02d}_0300.dump" for day in range(1, RETENTION_DUMPS + 2)]
     names += [f"{name}.sha256" for name in names]
-    storage = FakeStorage(names, {"backups/quant-terminal/2026-10-13_0300.dump": 100})
+    newest = f"backups/quant-terminal/2026-10-{RETENTION_DUMPS + 1:02d}_0300.dump"
+    storage = FakeStorage(names, {newest: 100})
 
     removed = _prune_old_dumps(
         storage,
         "backups/quant-terminal/",
-        "backups/quant-terminal/2026-10-13_0300.dump",
+        newest,
         100,
     )
 

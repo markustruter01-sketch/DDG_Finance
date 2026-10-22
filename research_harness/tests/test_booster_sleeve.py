@@ -142,3 +142,33 @@ def test_heldout_runs_once_reports_four_bars_and_refuses_a_second_test(tmp_path,
     assert out["summary"]["from"] >= "2021-01-01" and out["summary"]["to"] <= "2026-10-15"
     with pytest.raises(RegistrationError):
         hb.run("BOOST-V1-T", store, directory=regs, ledger=ledger)
+
+
+def test_coinbase_fetch_pages_300_days_and_writes_oldest_first(tmp_path):
+    from datetime import datetime, timezone
+
+    from research_harness import fetch
+
+    calls = []
+
+    class R:
+        def __init__(self, rows): self.rows = rows
+        def raise_for_status(self): pass
+        def json(self): return self.rows
+
+    def get(url, params, headers, timeout):
+        calls.append(params)
+        lo = date.fromisoformat(params["start"][:10])
+        hi = date.fromisoformat(params["end"][:10])
+        rows, d = [], lo
+        while d <= hi:
+            t = int(datetime(d.year, d.month, d.day, tzinfo=timezone.utc).timestamp())
+            rows.append([t, 9.0, 11.0, 10.0, 10.5, 1.0])
+            d += timedelta(days=1)
+        return R(list(reversed(rows)))                     # newest first, as Coinbase sends
+
+    store = BarStore(tmp_path / "d")
+    m = fetch.fetch_coinbase(store, "cb", ["BTC-USD"], "2020-01-01", "2020-12-31", http_get=get, pause=0)
+    assert len(calls) == 2 and m["symbols"]["BTC-USD"]["rows"] == 366
+    bars = store.load("cb", "BTC-USD", start=date(2020, 1, 1), end=date(2020, 12, 31))
+    assert bars[0]["day"] == date(2020, 1, 1) and bars[0]["open"] == 10.0 and bars[0]["low"] == 9.0

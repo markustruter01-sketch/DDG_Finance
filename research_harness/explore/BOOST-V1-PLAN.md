@@ -93,3 +93,15 @@ Reported every time: return, CAGR, volatility, Sharpe (rf 0 and excess
 T-bills), max drawdown, round trips, fills, stops hit, win rate,
 expectancy, turnover, leverage, and BTC buy-and-hold for reference.
 A fail is reported as a fail; no variant is tried afterwards.
+
+## Amendment 1 — data source (22 Oct 2026 ~10:30 Brisbane)
+Made BEFORE any crypto data entered the harness and before any exploration
+ran. The yfinance pull failed in the Replit workspace ("BTC-USD: possibly
+delisted; no timezone found", no data returned), so no dataset was written.
+Data source changed to Coinbase Exchange's free public daily candles
+(granularity 86400, UTC days, no key), `research_harness.fetch coinbase`,
+dataset `crypto_daily_cb_2026-10-22`. Consequences, stated now: each
+product's history starts when Coinbase listed it (the fetch prints the first
+date; it may be later than yfinance's), so candidate A starts trading at the
+first available bar and B/C only once the 210-session average exists. Prices
+are from one exchange, not an aggregate. Nothing else in the plan changes.

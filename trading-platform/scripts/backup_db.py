@@ -27,7 +27,7 @@ TABLES = (
     "reconciliation_log",
 )
 PREFIX = "backups/quant-terminal/"
-RETENTION_DUMPS = 12
+RETENTION_DUMPS = 14   # two weeks of daily dumps (~2.8 MB each, Oct 2026)
 
 
 def _storage_client():

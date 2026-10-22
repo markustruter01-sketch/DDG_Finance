@@ -141,7 +141,10 @@ def _legacy_engine(**kw):
     return eng
 
 
-def _run(engine, state=None, now=NOV3_OPEN, tripped=False):
+ALLOW = {"allowed": True, "reasons": []}
+
+
+def _run(engine, state=None, now=NOV3_OPEN, tripped=False, risk=ALLOW):
     box = {"state": dict(state or {}), "alerts": [], "parked": 0, "unparked": 0}
 
     def unpark(e, live):
@@ -155,7 +158,8 @@ def _run(engine, state=None, now=NOV3_OPEN, tripped=False):
         read_state=lambda: box["state"], write_state=lambda st: box["state"].update(st) or None,
         kill_tripped=lambda: tripped, unpark=unpark,
         park=lambda e, live, cash: box.__setitem__("parked", box["parked"] + 1),
-        alert=lambda sev, msg: box["alerts"].append((sev, msg)), now=now)
+        alert=lambda sev, msg: box["alerts"].append((sev, msg)),
+        risk_check=lambda: box.setdefault("risk_calls", []).append(1) or risk, now=now)
     return out, box
 
 
@@ -305,7 +309,18 @@ def test_unpark_failure_means_no_buys_beyond_real_cash():
             vault={"BIL", "VOO"}, cash_park={"SGOV"}, read_state=lambda: {},
             write_state=lambda st: None, kill_tripped=lambda: False,
             unpark=lambda e, live: box_unpark.append(e.close_position("SGOV")),
-            park=lambda *a: None, alert=lambda *a: None, now=NOV3_OPEN)
+            park=lambda *a: None, alert=lambda *a: None, risk_check=lambda: ALLOW, now=NOV3_OPEN)
 
     run()
     assert box_unpark == [False] and eng.cash >= 0 and eng.pos["SGOV"] == 200
+
+
+def test_governor_refusal_blocks_buys_but_sells_still_run():
+    eng = _legacy_engine()
+    no = {"allowed": False, "reasons": ["kill switch would trip: missing_stop jerome_macro"]}
+    out, box = _run(eng, risk=no)
+    assert ("sell_all", "EPOL", 263) in eng.orders                  # risk-reducing sells ran
+    assert not any(o[0] == "buy" for o in eng.orders)                # no new risk
+    assert "SGOV" in eng.pos                                          # nothing unparked to fund buys
+    assert any("risk governor" in e for e in box["state"]["errors"]) and box["state"]["done"] is False
+    assert eng.stops["SPY"][1] == round(LAST["SPY"] * 0.8, 2)         # held position still re-stopped

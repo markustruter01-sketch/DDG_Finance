@@ -1,4 +1,4 @@
-"""Order-rate watchdog: catches any bot or job that keeps placing orders.
+"""Broker watchdog: runaway ordering, and held funds that can no longer trade.
 
 Read-only. It never blocks, cancels or places anything; it raises a critical
 alert. It reads each Alpaca account's own order history, so it sees every
@@ -10,6 +10,8 @@ Two rules per account, counted on the New York trading day:
 - sustained: SUSTAINED_PER_HOUR or more orders in each of the last
   SUSTAINED_HOURS completed clock hours. A monthly rebalance is one burst;
   a loop keeps going.
+It also flags any held position whose asset Alpaca reports as not tradable
+(halted, delisted): it could not be sold or stopped out.
 """
 
 from __future__ import annotations
@@ -29,6 +31,13 @@ NY = ZoneInfo("America/New_York")
 DAILY_LIMIT = {"oracle": 60, "spy_qqq_trend": 150, "jerome_macro": 30}
 SUSTAINED_PER_HOUR = 4
 SUSTAINED_HOURS = 3
+
+
+_ERROR_TYPE = {"daily": "order_rate_daily", "sustained": "order_rate_sustained",
+               "untradable": "held_asset_not_tradable"}
+_MESSAGE = {"daily": "{bot}: unusual order rate (daily) - possible loop",
+            "sustained": "{bot}: unusual order rate (sustained) - possible loop",
+            "untradable": "{bot}: held fund(s) not tradable at Alpaca: {f[symbols]}"}
 
 
 def evaluate(bot_id: str, submitted_at: Iterable[datetime], now: datetime) -> list[dict[str, Any]]:
@@ -69,12 +78,30 @@ def _today_submissions(bot_id: str, now: datetime) -> list[datetime]:
         after = page[-1].submitted_at
 
 
+def _untradable_holdings(bot_id: str) -> list[str]:
+    """Held symbols whose Alpaca asset is not tradable. A symbol whose asset
+    cannot be looked up is skipped with a warning, not reported."""
+    from execution.reconciliation import _client_for
+
+    client = _client_for(bot_id)
+    out = []
+    for p in client.get_all_positions():
+        try:
+            asset = client.get_asset(p.symbol)
+        except Exception as exc:
+            logger.warning(f"Order watchdog | {bot_id} asset lookup {p.symbol}: {type(exc).__name__}")
+            continue
+        if not getattr(asset, "tradable", False):
+            out.append(str(p.symbol))
+    return sorted(out)
+
+
 def run_watchdog(now: datetime | None = None) -> dict[str, Any]:
     from core.degradation_tracker import mark_resolved, record_degradation
 
     now = now or datetime.now(NY)
     report: dict[str, Any] = {}
-    hits: dict[str, int] = {"daily": 0, "sustained": 0}
+    hits: dict[str, int] = {"daily": 0, "sustained": 0, "untradable": 0}
     unknown = False
     for bot_id in DAILY_LIMIT:
         try:
@@ -84,17 +111,23 @@ def run_watchdog(now: datetime | None = None) -> dict[str, Any]:
             report[bot_id] = {"status": "unknown"}
             unknown = True
             continue
+        try:
+            stuck = _untradable_holdings(bot_id)
+        except Exception as exc:
+            logger.warning(f"Order watchdog | {bot_id} asset check unreadable: {type(exc).__name__}")
+            stuck, unknown = [], True
+        if stuck:
+            findings.append({"bot_id": bot_id, "rule": "untradable", "symbols": stuck})
         report[bot_id] = {"status": "alert" if findings else "ok", "findings": findings}
         for f in findings:
             hits[f["rule"]] += 1
             logger.critical(f"Order watchdog | {bot_id} {f}")
             record_degradation(component="order_watchdog", severity="critical",
-                               error_type=f"order_rate_{f['rule']}", bot_id=bot_id,
-                               message=f"{bot_id}: unusual order rate ({f['rule']}) - possible loop",
-                               detail=str(f))
+                               error_type=_ERROR_TYPE[f["rule"]], bot_id=bot_id,
+                               message=_MESSAGE[f["rule"]].format(bot=bot_id, f=f), detail=str(f))
     # mark_resolved clears every bot's rows for a rule, so only when no bot
     # hits that rule and every account was readable.
     for rule, n in hits.items():
         if n == 0 and not unknown:
-            mark_resolved("order_watchdog", f"order_rate_{rule}", reason="order rate normal")
+            mark_resolved("order_watchdog", _ERROR_TYPE[rule], reason="condition cleared")
     return report

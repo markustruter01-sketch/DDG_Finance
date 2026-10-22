@@ -77,6 +77,17 @@ def run_shadow_council(
         return f"failed: {type(exc).__name__}"
 
 
+def _sync_control_switch() -> str:
+    """Pull DDG Control's Forex AI switch into the stored state. Never raises."""
+    try:
+        from core.forex_ai_kill import sync_from_control
+        status = sync_from_control()
+    except Exception as exc:
+        status = f"failed: {type(exc).__name__}"
+    logger.info(f"FOREX AI switch (DDG Control) | {status}")
+    return status
+
+
 _last_scorecard_day = None
 
 
@@ -184,6 +195,8 @@ def run_forex_cycle(
             )
     for error in sheet["errors"]:
         logger.warning(f"FOREX quant desk | {error}")
+    if council_enabled:
+        _sync_control_switch()
     council_status = (
         run_shadow_council(sheet, positions) if council_enabled else "disabled"
     )

@@ -17,7 +17,7 @@ import { api } from "@/hooks/use-trading-client";
 import { useToast } from "@/hooks/use-toast";
 import { formatBotLabel, useBotIdentity } from "@/lib/bot-identity";
 import FleetSparkline from "@/components/FleetSparkline";
-import ObservatoryHome from "@/components/ObservatoryHome";
+import BrandHome from "@/components/brand/BrandHome";
 import RunnerStatusIndicator from "@/components/RunnerStatusIndicator";
 
 // ── Keyframes (injected once) ─────────────────────────────────────────────────
@@ -857,7 +857,7 @@ export default function HomePage() {
   const regimeColor = regime === "BULL" ? "#16a34a" : "#000000";
 
   if (showObservatory) {
-    return <ObservatoryHome runnerStatus={runnerStatus} runnerStatusError={runnerStatusError} />;
+    return <BrandHome runnerVerdict={runnerStatusError ? "UNKNOWN" : runnerStatus?.verdict ?? "UNKNOWN"} />;
   }
 
   return (

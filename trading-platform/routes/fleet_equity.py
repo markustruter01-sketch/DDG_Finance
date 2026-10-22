@@ -366,3 +366,47 @@ async def fleet_equity_history():
         return {"history": []}
 
 
+
+
+@fleet_equity_router.get("/fleet/bot-history")
+async def fleet_bot_history(days: int = 90):
+    """Per-bot daily series for the dashboard: closing equity, the server's
+    daily return, share deployed and positions held (bot_daily_returns, one
+    row per bot per day). Values are passed through as stored; nothing is
+    derived here. Bots with no rows are omitted."""
+    days = max(1, min(int(days), 400))
+    try:
+        from db.postgres import get_conn, is_pg_available
+        if not is_pg_available():
+            return {"days": days, "bots": {}}
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT bot_id, date::text, equity_close, daily_return, deployed_pct, positions_held
+                    FROM bot_daily_returns
+                    WHERE date >= CURRENT_DATE - %s
+                    ORDER BY bot_id, date
+                    """,
+                    (days,),
+                )
+                rows = cur.fetchall()
+    except Exception as exc:
+        logger.debug(f"fleet_bot_history | error (non-fatal): {exc}")
+        return {"days": days, "bots": {}}
+
+    def num(v):
+        if v is None:
+            return None
+        f = float(v)
+        return f if math.isfinite(f) else None
+
+    bots: dict[str, list[dict]] = {}
+    for bot_id, day, equity, ret, deployed, held in rows:
+        if bot_id not in ACTIVE_BOT_IDS:
+            continue
+        bots.setdefault(bot_id, []).append({
+            "date": day, "equity": num(equity), "daily_return": num(ret),
+            "deployed_pct": num(deployed), "positions": held,
+        })
+    return {"days": days, "bots": bots}

@@ -39,13 +39,12 @@ export function DDGBadge({ style, size = "md" }: DDGBadgeProps) {
         <span style={{ color: "#22d3ee", fontWeight: 700 }}>GROUP</span>
       </span>
       <img
-        src="/ddg-logo.png"
+        src="/ddg-logo-disc-128.png"
         alt="DDG"
         style={{
           height: isSm ? 12 : 15,
           width: isSm ? 12 : 15,
           objectFit: "contain",
-          mixBlendMode: "screen",
           opacity: 0.88,
           flexShrink: 0,
           display: "block",

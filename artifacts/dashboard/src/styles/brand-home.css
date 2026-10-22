@@ -1,0 +1,99 @@
+/* One-screen home: everything fits the viewport on desktop (no page scroll).
+   Rows: nav · KPI strip · main grid; bottom space is kept for the dock. */
+.bh {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 12px;
+  height: 100dvh;
+  padding: 14px 20px 92px;
+}
+
+/* nav */
+.bh-nav {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 56px;
+  padding: 0 12px 0 10px;
+}
+.bh-brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.bh-brand img { width: 36px; height: 36px; display: block; }
+.bh-word { font-family: var(--ddg-font-display); font-weight: 700; font-size: 16px; letter-spacing: 0.06em; text-transform: uppercase; line-height: 1; }
+.bh-sub { margin-top: 4px; font-family: var(--ddg-font-mono); font-weight: 500; font-size: 10px; letter-spacing: 0.3em; color: var(--ddg-text-2); }
+.bh-nav-status { display: flex; align-items: center; gap: 8px; margin-left: auto; flex-wrap: nowrap; overflow: hidden; }
+.bh-nav-actions { display: flex; align-items: center; gap: 6px; }
+.bh-toggle { display: inline-flex; padding: 3px; gap: 2px; border-radius: 999px; border: 1px solid var(--ddg-hairline); background: var(--ddg-glass-soft); }
+.bh-toggle .ddg-btn { height: 26px; border: 0; border-radius: 999px; background: transparent; font-size: 12px; }
+.bh-toggle .ddg-btn[aria-pressed="true"] { background: var(--ddg-button); color: #FFFFFF; }
+
+/* KPI strip: one glass panel, hairline dividers */
+.bh-kpis { display: grid; grid-template-columns: 1.5fr repeat(7, minmax(0, 1fr)); }
+.bh-kpi { min-width: 0; padding: 12px 16px; border-left: 1px solid var(--ddg-hairline); }
+.bh-kpi:first-child { border-left: 0; }
+.bh-kpi .ddg-data { margin-top: 4px; font-size: clamp(18px, 1.5vw, 26px); line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bh-kpi .ddg-small { margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* main */
+.bh-main { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); gap: 12px; min-height: 0; }
+.bh-left { display: grid; grid-template-rows: minmax(0, 0.8fr) minmax(0, 1fr); gap: 12px; min-height: 0; }
+.bh-right { display: grid; grid-template-rows: repeat(3, minmax(0, 1fr)); gap: 12px; min-height: 0; }
+.bh-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; min-height: 0; }
+.bh-engines { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; min-height: 0; }
+
+.bh-panel { display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: 14px 16px 12px; }
+.bh-panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+.bh-panel-head .ddg-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bh-chart { flex: 1; min-height: 0; }
+.bh-empty { display: grid; flex: 1; place-items: center; padding: 8px; text-align: center; }
+
+
+/* engine card */
+.bh-engine { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: 14px 14px 10px; overflow: hidden; }
+.bh-engine::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 3px; background: var(--series); }
+.bh-engine-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; }
+.bh-engine-head .ddg-chip { padding: 0 8px; font-size: clamp(10px, 0.6vw, 11px); }
+.bh-engine-name .ddg-h3 { font-size: clamp(14px, 1.05vw, 17px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bh-engine-name { min-width: 0; }
+.bh-engine-name .ddg-small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bh-engine-eq { display: flex; flex-direction: column; gap: 1px; margin-top: 8px; min-width: 0; }
+.bh-engine-eq .ddg-data { font-size: clamp(18px, 1.45vw, 24px); line-height: 1.15; white-space: nowrap; }
+.bh-engine-eq .ddg-small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bh-engine .bh-chart { margin: 6px -4px 2px; min-height: 40px; }
+.bh-meter { height: 6px; border-radius: 999px; background: var(--ddg-hairline); overflow: hidden; }
+.bh-meter i { display: block; height: 100%; border-radius: inherit; background: var(--series); }
+.bh-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
+.bh-stat { min-width: 0; }
+.bh-stat .ddg-label { display: block; font-size: 9px; letter-spacing: 0.04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bh-stat strong { display: block; margin-top: 2px; font-family: var(--ddg-font-display); font-weight: 700; font-size: clamp(12px, 0.85vw, 14px); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* donut */
+.bh-donut { display: grid; grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); gap: 8px; flex: 1; min-height: 0; align-items: center; }
+.bh-donut-chart { position: relative; height: 100%; min-height: 0; }
+.bh-donut-center { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; pointer-events: none; }
+.bh-donut-center .ddg-data { font-size: clamp(11px, 0.85vw, 15px); }
+.bh-legend { display: grid; gap: 5px; min-width: 0; }
+.bh-legend-row { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; align-items: center; gap: 7px; font-size: clamp(11px, 0.7vw, 12px); }
+.bh-legend-row i { width: 10px; height: 10px; border-radius: 3px; }
+.bh-legend-row span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bh-legend-row strong { font-family: var(--ddg-font-display); font-variant-numeric: tabular-nums; font-size: 12px; }
+
+/* chart text: brand mono with fallbacks (SVG attributes cannot read CSS vars) */
+.bh .recharts-text { font-family: var(--ddg-font-mono); }
+.bh-key { display: inline-flex; gap: 10px; font-family: var(--ddg-font-body); font-size: 11px; text-transform: none; letter-spacing: 0; }
+.bh-key span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.bh-key i { width: 9px; height: 9px; border-radius: 2px; }
+
+/* Smaller or touch screens: keep the design, let the page scroll. */
+@media (max-width: 1099px), (max-height: 680px) {
+  .ddg-shell.bh-shell { height: auto; min-height: 100dvh; overflow: visible; }
+  .bh { height: auto; }
+  .bh-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .bh-kpi:nth-child(5) { border-left: 0; }
+  .bh-main { grid-template-columns: minmax(0, 1fr); }
+  .bh-left { grid-template-rows: 300px auto; }
+  .bh-right { grid-template-rows: repeat(3, 230px); }
+  .bh-engines { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .bh-engine { min-height: 260px; }
+}

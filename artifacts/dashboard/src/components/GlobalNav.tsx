@@ -1,123 +1,39 @@
 import { useLocation } from "wouter";
-import { FlaskConical, LayoutDashboard, Radio, ShieldAlert } from "lucide-react";
+import { FlaskConical, LayoutGrid, Radio, ShieldAlert } from "lucide-react";
+import "@/styles/brand.css";
 
+// Brand dock (guide p10): tiles 84 x 62, radius 16, active = accent outline,
+// every icon paired with a mono label. Outline icons, 1.8 px stroke.
 const NAV_ITEMS = [
-  {
-    id:    "home",
-    label: "Home",
-    path:  "/",
-    icon:  LayoutDashboard,
-    color: "#3b82f6",
-    pulse: false,
-  },
-  {
-    id:    "stream",
-    label: "Stream",
-    path:  "/stream",
-    icon:  Radio,
-    color: "#f43f5e",
-    pulse: false,
-  },
-  {
-    id:    "bench",
-    label: "Bench",
-    path:  "/bench",
-    icon:  FlaskConical,
-    color: "#e9ae57",
-    pulse: false,
-  },
-  {
-    id:    "controls",
-    label: "Controls",
-    path:  "/controls",
-    icon:  ShieldAlert,
-    color: "#ef4444",
-    pulse: false,
-  },
+  { id: "home", label: "Home", path: "/", icon: LayoutGrid },
+  { id: "stream", label: "Stream", path: "/stream", icon: Radio },
+  { id: "bench", label: "Bench", path: "/bench", icon: FlaskConical },
+  { id: "controls", label: "Controls", path: "/controls", icon: ShieldAlert },
 ];
 
 export function GlobalNav() {
   const [location, navigate] = useLocation();
-  const isHomeRoute = location === "/" || location === "" || location === "/home";
-
   return (
-    <nav
-      className={`fixed bottom-5 left-1/2 z-[9999] pointer-events-none ${isHomeRoute ? "home-global-nav" : "production-global-nav"}`}
-      style={{ transform: "translateX(-50%)" }}
-    >
-      <div
-        className="flex items-center gap-2.5 pointer-events-auto"
-      >
-        {NAV_ITEMS.map((item) => {
-          const Icon = item.icon;
-          const isActive =
-            item.path === "/"
-              ? location === "/" || location === "" || location === "/home"
-              : location === item.path || location.startsWith(item.path + "/");
-
-          return (
-            <button
-              key={item.id}
-              data-testid={`button-global-nav-${item.id}`}
-              aria-current={isActive ? "page" : undefined}
-              onClick={() => navigate(item.path)}
-              className="relative flex flex-col items-center justify-center rounded-2xl transition-all duration-300 select-none"
-              style={{
-                minWidth: 62,
-                paddingTop: 10,
-                paddingBottom: 10,
-                paddingLeft: 14,
-                paddingRight: 14,
-                  backdropFilter: isHomeRoute ? "blur(24px)" : "blur(18px)",
-                  WebkitBackdropFilter: isHomeRoute ? "blur(24px)" : "blur(18px)",
-                ...(isActive
-                  ? {
-                      background: `linear-gradient(135deg, ${item.color}26, ${item.color}12)`,
-                      border: `1px solid ${item.color}55`,
-                      boxShadow: `0 4px 24px ${item.color}30, 0 0 0 1px ${item.color}15, inset 0 1px 0 ${item.color}20`,
-                      transform: "translateY(-1px) scale(1.04)",
-                    }
-                  : {
-                      background: isHomeRoute
-                        ? "rgba(255,255,255,0.12)"
-                          : "rgba(255,255,255,0.26)",
-                      border: isHomeRoute
-                        ? "1px solid rgba(100,116,139,0.20)"
-                          : "1px solid rgba(100,116,139,0.24)",
-                      boxShadow: isHomeRoute
-                        ? "0 8px 24px rgba(15,23,42,0.16)"
-                          : "0 8px 24px rgba(15,23,42,0.14), 0 1px 0 rgba(255,255,255,0.22) inset",
-                    }),
-              }}
-            >
-              <span className="relative">
-                <Icon
-                  className="h-5 w-5"
-                  style={{ color: isHomeRoute ? (isActive ? "#16a34a" : "#000000") : isActive ? item.color : "rgba(30,41,59,0.78)" }}
-                />
-                {item.pulse && (
-                  <span
-                    className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full"
-                    style={{
-                      background: item.color,
-                      boxShadow: `0 0 5px ${item.color}`,
-                      animation: "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
-                    }}
-                  />
-                )}
-              </span>
-              <span
-                className="text-[9px] font-black tracking-widest uppercase mt-1"
-                style={{
-                  color: isHomeRoute ? (isActive ? "#16a34a" : "#000000") : isActive ? item.color : "rgba(30,41,59,0.82)",
-                }}
-              >
-                {item.label}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+    <nav className="ddg-dock ddg-glass" aria-label="Main">
+      {NAV_ITEMS.map((item) => {
+        const Icon = item.icon;
+        const active = item.path === "/"
+          ? location === "/" || location === "" || location === "/home"
+          : location === item.path || location.startsWith(item.path + "/");
+        return (
+          <button
+            key={item.id}
+            type="button"
+            className="ddg-dock-tile"
+            data-testid={`button-global-nav-${item.id}`}
+            aria-current={active ? "page" : undefined}
+            onClick={() => navigate(item.path)}
+          >
+            <Icon size={22} strokeWidth={1.8} aria-hidden="true" />
+            <span>{item.label}</span>
+          </button>
+        );
+      })}
     </nav>
   );
 }

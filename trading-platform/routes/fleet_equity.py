@@ -386,6 +386,10 @@ async def fleet_bot_history(days: int = 90):
                     SELECT bot_id, date::text, equity_close, daily_return, deployed_pct, positions_held
                     FROM bot_daily_returns
                     WHERE date >= CURRENT_DATE - %s
+                      -- 1 Sep 2026 rows were saved with the vault left out
+                      -- (a different method from every other day); mixing
+                      -- them in draws a false one-day dip.
+                      AND COALESCE(source, '') <> 'portfolio_with_vault_exclusion'
                     ORDER BY bot_id, date
                     """,
                     (days,),

@@ -164,3 +164,12 @@ openly because it changes a bar after seeing exploration results:
   pass is weaker evidence than a pass under the original bar. Attempts on
   trend timing: at least 11 (10 earlier + GEAR-V1's 4 candidates counted as
   one plan).
+
+## Held-out result: GEAR-V1-G4 (22 Oct 2026, run once, ledger entry)
+2021-01-04..2026-10-15, all costs. G4: CAGR 18.05%, max drawdown -24.50%,
+volatility 20.33%, Sharpe excess T-bills 0.76, 60 round trips, 1 stop hit,
+78.1% of sessions in the aggressive gear. SPY: CAGR 15.18%, max drawdown
+-24.50%, volatility 16.60%, Sharpe 0.74. Bars: (1) beats SPY CAGR PASS;
+(2) >= 10.5% PASS; (3) smaller drawdown than SPY FAIL (equal at the reported
+precision). Verdict: FAIL. No variant is tried. Next (Claude's
+recommendation to Markus): forward shadow test with no orders.

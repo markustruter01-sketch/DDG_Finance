@@ -242,22 +242,6 @@ export function useToggleAutoTrading() {
   });
 }
 
-export function useForceRebalance() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async () => (await api.post("/rebalance")).data,
-    onSuccess: () => qc.invalidateQueries(),
-  });
-}
-
-export function useCloseAndReallocate() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (symbol: string) => (await api.post(`/rebalance/${encodeURIComponent(symbol)}`)).data,
-    onSuccess: () => qc.invalidateQueries(),
-  });
-}
-
 export function useLiquidateAll() {
   const qc = useQueryClient();
   return useMutation<LiquidateResult, Error, void>({

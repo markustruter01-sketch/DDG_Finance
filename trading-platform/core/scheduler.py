@@ -176,7 +176,7 @@ def _kill_switch_enforced() -> bool:
 #      only; manual restart of the Replit workflow is required.
 #
 #   3. There is no cross-process kill switch. A manual trip of the Alpaca
-#      kill switch does NOT stop Kraken bots. Use the /rebalance endpoint
+#      kill switch does NOT stop Kraken bots. Use /emergency/liquidate
 #      or directly pause each Kraken bot via its control file.
 #
 #   4. The math auditor runs in THIS process and cannot reach the Kraken bot

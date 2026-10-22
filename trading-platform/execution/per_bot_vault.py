@@ -548,6 +548,38 @@ def reconcile_deployment_orders() -> dict[str, Any]:
     return {"status": "complete", "updated": updated, "orders": outcomes}
 
 
+# Circuit breaker (Claude's design value, 22 Oct 2026): a normal day needs a
+# handful of vault buys per bot; more than this means something is looping.
+# Counted per process and New York day; a restart resets it, which is fine
+# for a breaker whose job is to stop a runaway within one day.
+DAILY_ORDER_CAP = 10
+_orders_today: dict[tuple[str, str], int] = {}
+
+
+def _ny_day() -> str:
+    from zoneinfo import ZoneInfo
+    return datetime.now(ZoneInfo("America/New_York")).date().isoformat()
+
+
+def _count_order(bot_id: str) -> None:
+    key = (bot_id, _ny_day())
+    _orders_today[key] = _orders_today.get(key, 0) + 1
+
+
+def _order_budget_left(bot_id: str) -> bool:
+    if _orders_today.get((bot_id, _ny_day()), 0) < DAILY_ORDER_CAP:
+        return True
+    logger.critical(f"PerBotVault | {bot_id} hit {DAILY_ORDER_CAP} vault orders today; no more buys until tomorrow")
+    try:
+        from core.degradation_tracker import record_degradation
+        record_degradation(component="per_bot_vault", severity="critical", error_type="daily_order_cap",
+                           message=f"Vault order cap hit ({DAILY_ORDER_CAP} today): possible loop, buys stopped",
+                           bot_id=bot_id)
+    except Exception as exc:
+        logger.warning(f"PerBotVault | cap alert failed: {exc}")
+    return False
+
+
 def run_deployment_cycle(*, market_open: bool, minimum_notional: float = MIN_TRADE_NOTIONAL) -> dict[str, Any]:
     """Deploy queued cash; failures leave the queue untouched for retry."""
     if not vault_enabled():
@@ -611,17 +643,28 @@ def run_deployment_cycle(*, market_open: bool, minimum_notional: float = MIN_TRA
         ):
             if amount < minimum_notional or existing_order:
                 continue
+            if not _order_budget_left(bot_id):
+                results.append({"bot_id": bot_id, "symbol": symbol, "status": "blocked",
+                                "reason": "daily_order_cap"})
+                continue
             try:
                 order = _submit_vault_buy(bot_id, symbol, amount, f"{attempts + 1}-{symbol.lower()}")
+                if order.get("status") != "skipped":
+                    _count_order(bot_id)
                 results.append({"bot_id": bot_id, "symbol": symbol, "status": "submitted", **order})
                 if order.get("status") == "skipped":
                     results[-1]["status"] = "skipped"
                     continue
                 column = "bil_order_id" if symbol == VAULT_BIL_SYMBOL else "voo_order_id"
+                applied_col = "bil_filled_usd" if symbol == VAULT_BIL_SYMBOL else "voo_filled_usd"
+                # The applied amount belongs to the order in the queue. A new
+                # order starts at zero; otherwise its fill is compared with the
+                # previous order's and never recorded, and the same pending
+                # amount is bought again every cycle (oracle, 15-21 Oct 2026).
                 with get_conn() as conn:
                     with conn.cursor() as cur:
                         cur.execute(
-                            f"UPDATE per_bot_vault_deployment_queue SET {column} = %s, status = 'submitted', attempts = attempts + 1, last_error = NULL, updated_at = NOW() WHERE bot_id = %s",
+                            f"UPDATE per_bot_vault_deployment_queue SET {column} = %s, {applied_col} = 0, status = 'submitted', attempts = attempts + 1, last_error = NULL, updated_at = NOW() WHERE bot_id = %s",
                             (order["order_id"], bot_id),
                         )
                 attempts += 1

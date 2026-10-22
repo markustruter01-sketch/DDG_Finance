@@ -1108,9 +1108,18 @@ def is_auto_trading_enabled() -> bool:
     return _auto_trading_enabled
 
 
+# Jobs the auto-trading toggle never pauses: none of them places orders, and
+# monitoring matters most while trading is paused.
 _ALWAYS_ACTIVE_JOBS = {
     "daily_discord_pnl_report",
-    "nightly_walk_forward",  # monitoring job — runs even when trading is disabled
+    "nightly_walk_forward",
+    "standing_invariants",
+    "degradation_resolver",
+    "order_watchdog",
+    "gear_v1_g4_shadow",
+    "daily_benchmark_snapshot",
+    "nightly_fleet_equity_snapshot",
+    "daily_bot_returns_snapshot",
 }
 
 

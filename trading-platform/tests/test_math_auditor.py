@@ -102,6 +102,8 @@ def test_current_price_unavailable_warns_instead_of_failing(monkeypatch):
 
 
 def test_current_price_uses_fresh_latest_alpaca_trade(monkeypatch):
+    monkeypatch.setenv("ALPACA_API_KEY", "test-key")  # the fakes ignore keys, but the code requires some
+    monkeypatch.setenv("ALPACA_SECRET_KEY", "test-secret")
     from alpaca.data import historical, requests
     from alpaca.trading import client
 
@@ -137,6 +139,8 @@ def test_current_price_uses_fresh_latest_alpaca_trade(monkeypatch):
 
 
 def test_current_price_ignores_stale_latest_alpaca_trade(monkeypatch):
+    monkeypatch.setenv("ALPACA_API_KEY", "test-key")  # the fakes ignore keys, but the code requires some
+    monkeypatch.setenv("ALPACA_SECRET_KEY", "test-secret")
     from alpaca.data import historical
     from alpaca.trading import client
 

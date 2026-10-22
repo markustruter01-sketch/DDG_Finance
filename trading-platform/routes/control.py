@@ -1,10 +1,9 @@
-"""Control routes: run, postmortem, rebalance, kill switch, emergency, auto-trading, system restart."""
+"""Control routes: run, postmortem, kill switch, emergency, auto-trading, system restart."""
 
 from __future__ import annotations
 
 import asyncio
 import json as _json
-import os
 from datetime import datetime, timezone
 from pathlib import Path as _Path
 
@@ -25,82 +24,11 @@ from execution.kill_switch import (
 from execution.ratchet_stop import delete_stop
 
 from routes._deps import (
-    VAULT_TICKER,
-    KNOWN_CRYPTO_SYMBOLS,
     VAULT_TICKER_PROTECTED,
     _commentary_cache,
 )
 
 control_router = APIRouter()
-
-def _liquidate_forex_positions() -> dict:
-    closed = []
-    errors = []
-    try:
-        import importlib.util as _ilu
-        import sys as _sys
-        _fx_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "forex-engine")
-        if _fx_path not in _sys.path:
-            _sys.path.insert(0, _fx_path)
-
-        spec_pe = _ilu.spec_from_file_location("paper_engine_fx", os.path.join(_fx_path, "paper_engine.py"))
-        pe = _ilu.module_from_spec(spec_pe)
-        spec_pe.loader.exec_module(pe)
-
-        raw_positions = pe.get_paper_positions()
-        if not raw_positions:
-            return {"closed": [], "errors": []}
-
-        from routes._deps import _get_forex_engine
-        fx = _get_forex_engine()
-        latest_prices = {}
-        if fx:
-            labeled_positions = fx.get_positions()
-            spec_cfg = _ilu.spec_from_file_location("forex_config_liq", os.path.join(_fx_path, "forex_config.py"))
-            cfg = _ilu.module_from_spec(spec_cfg)
-            spec_cfg.loader.exec_module(cfg)
-            label_to_raw = {v: k for k, v in cfg.PAIR_LABELS.items()}
-            for lp in labeled_positions:
-                label = lp["pair"]
-                raw_key = label_to_raw.get(label, label)
-                latest_prices[raw_key] = lp["current_price"]
-
-        for pair, pos in list(raw_positions.items()):
-            current_price = latest_prices.get(pair, pos.get("entry_price", 0))
-            direction = pos.get("direction", "long")
-            try:
-                result = pe.paper_close_position(pair, current_price, "rebalance_liquidation",
-                                                  latest_prices=latest_prices)
-                if result:
-                    closed.append({
-                        "pair": pair,
-                        "direction": direction,
-                        "pnl_usd": round(result.get("pnl_usd", 0), 2),
-                    })
-                    logger.info(
-                        f"Rebalance | Forex closed {direction.upper()} {pair} "
-                        f"@ {current_price:.5f} | P&L: ${result.get('pnl_usd', 0):+,.2f}"
-                    )
-                else:
-                    errors.append({"pair": pair, "error": "close returned None"})
-            except Exception as exc:
-                logger.error(f"Rebalance | Forex failed to close {pair}: {exc}")
-                errors.append({"pair": pair, "error": str(exc)})
-
-    except Exception as exc:
-        logger.error(f"Rebalance | Forex liquidation error: {exc}")
-        errors.append({"pair": "all", "error": str(exc)})
-
-    logger.info(f"Rebalance | Forex: closed {len(closed)} positions, {len(errors)} errors")
-    return {"closed": closed, "errors": errors}
-
-
-def _liquidate_options_positions() -> dict:
-    """Options engine retired — Apex Predator (Bot #5) now runs as Kraken crypto momentum.
-    No options positions to liquidate; returns empty result immediately."""
-    logger.info("Rebalance | Options engine retired — skipping options liquidation")
-    return {"closed": [], "errors": []}
-
 
 class RunRequest(BaseModel):
     dry_run: bool = False
@@ -143,123 +71,6 @@ async def manual_postmortem() -> dict:
     postmortem_result = await run_postmortem()
 
     return postmortem_result
-
-
-@control_router.post("/rebalance", tags=["Control"])
-async def force_rebalance() -> dict:
-    logger.warning("════════════════════════════════════════════════════════════")
-    logger.warning("  FORCE REBALANCE — operator-initiated full liquidation")
-    logger.warning("════════════════════════════════════════════════════════════")
-
-    market_open = is_market_open()
-    positions = get_positions()
-    cancel_all_orders()
-
-    closed = []
-    held = []
-    errors = []
-
-    for pos in positions:
-        sym = pos["symbol"]
-        if sym == VAULT_TICKER:
-            held.append({"symbol": sym, "reason": "vault_protected"})
-            continue
-        is_crypto = sym in KNOWN_CRYPTO_SYMBOLS
-        if not is_crypto and not market_open:
-            held.append({"symbol": sym, "reason": "market_closed"})
-            continue
-        try:
-            order = close_position(sym)
-            closed.append({"symbol": sym, "order": order})
-            try:
-                delete_stop(sym)
-            except Exception:
-                pass
-            try:
-                from analysis.trade_journal import close_trade
-                pnl_pct = float(pos.get("unrealized_plpc", 0) or 0) * 100
-                pnl_usd = float(pos.get("unrealized_pl", 0) or 0)
-                close_trade(
-                    ticker=sym,
-                    pnl_percentage=pnl_pct,
-                    exit_reason="rebalance_liquidation",
-                    realized_pnl=pnl_usd,
-                )
-            except Exception as jexc:
-                logger.debug(f"Rebalance | Journal close_trade for {sym} failed (non-fatal): {jexc}")
-        except Exception as exc:
-            logger.error(f"Rebalance | Failed to close {sym}: {exc}")
-            errors.append({"symbol": sym, "error": str(exc)})
-
-    forex_result = _liquidate_forex_positions()
-    forex_closed = forex_result.get("closed", [])
-    forex_errors = forex_result.get("errors", [])
-
-    options_result = _liquidate_options_positions()
-    options_closed = options_result.get("closed", [])
-    options_errors = options_result.get("errors", [])
-
-    logger.info(
-        f"Rebalance | Alpaca: closed {len(closed)}, held {len(held)}, errors {len(errors)} | "
-        f"Forex: closed {len(forex_closed)}, errors {len(forex_errors)} | "
-        f"Options: closed {len(options_closed)}, errors {len(options_errors)}"
-    )
-
-    crypto_only = not market_open
-    pipeline_result = await run_pipeline(force=True, dry_run=False, crypto_only=crypto_only)
-
-    return {
-        "status": "ok",
-        "closed": closed,
-        "held": held,
-        "errors": errors,
-        "forex_closed": forex_closed,
-        "forex_errors": forex_errors,
-        "options_closed": options_closed,
-        "options_errors": options_errors,
-        "market_open": market_open,
-        "pipeline": pipeline_result,
-    }
-
-
-@control_router.post("/rebalance/{symbol}", tags=["Control"])
-async def force_close_single(symbol: str) -> dict:
-    sym = symbol.upper()
-
-    if sym == VAULT_TICKER:
-        raise HTTPException(status_code=400, detail="JEPQ vault position is protected and cannot be force-closed.")
-
-    market_open = is_market_open()
-    is_crypto = sym in KNOWN_CRYPTO_SYMBOLS
-
-    if not is_crypto and not market_open:
-        raise HTTPException(
-            status_code=409,
-            detail=f"{sym} is a stock/ETF position. Market is currently closed — cannot close until next session.",
-        )
-
-    try:
-        order = close_position(sym)
-    except Exception as exc:
-        logger.error(f"Force-close {sym} | Failed: {exc}")
-        raise HTTPException(status_code=500, detail=f"Failed to close {sym}: {str(exc)}")
-
-    try:
-        delete_stop(sym)
-    except Exception:
-        pass
-
-    logger.info(f"Force-close {sym} | Closed. Running fresh pipeline to reallocate capital.")
-
-    crypto_only = not market_open
-    pipeline_result = await run_pipeline(force=True, dry_run=False, crypto_only=crypto_only)
-
-    return {
-        "status": "ok",
-        "closed": sym,
-        "order": order,
-        "pipeline": pipeline_result,
-    }
 
 
 @control_router.post("/kill", tags=["Risk"])

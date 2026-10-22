@@ -34,6 +34,17 @@ const signedPct = (v: number | null | undefined, digits = 2) =>
   v == null || !Number.isFinite(v) ? null : `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(digits)}%`;
 const tone = (v: number | null | undefined) => (v == null ? "" : v >= 0 ? "ddg-up" : "ddg-down");
 const utcTime = (iso?: string | null) => (iso ? `${new Date(iso).toISOString().slice(11, 16)} UTC` : null);
+/** Insert an empty point where daily records stop for more than a week, so
+ *  the line breaks instead of drawing a straight bridge over missing days. */
+function withGaps<T extends { date: string }>(rows: T[], key: keyof T): Array<T | Record<string, unknown>> {
+  const out: Array<T | Record<string, unknown>> = [];
+  rows.forEach((r, i) => {
+    if (i && Date.parse(r.date) - Date.parse(rows[i - 1].date) > 7 * 86_400_000) out.push({ date: r.date, [key]: null, gap: true });
+    out.push(r);
+  });
+  return out;
+}
+
 const shortDate = (d: string) =>
   new Date(`${d}T00:00:00Z`).toLocaleDateString("en-AU", { day: "numeric", month: "short", timeZone: "UTC" });
 
@@ -129,7 +140,7 @@ function EngineCard({ e, chart, mktOpen }: { e: Engine; chart: Chart; mktOpen: b
       : getBotStatus(e.slice, mktOpen) === "DOWN"
         ? { kind: "bad" as const, word: "Stale" }
         : mktOpen ? { kind: "ok" as const, word: "Running" } : { kind: "" as const, word: "Closed" };
-  const curve = e.history.filter((d) => d.equity != null).map((d) => ({ date: d.date, equity: d.equity as number }));
+  const curve = withGaps(e.history.filter((d) => d.equity != null).map((d) => ({ date: d.date, equity: d.equity as number })), "equity");
   const deployed = latest?.deployed_pct;
   const dayRet = latest?.daily_return == null ? null : latest.daily_return * 100;
   return (
@@ -238,6 +249,13 @@ export default function BrandHome({ runnerVerdict }: { runnerVerdict: "ALIVE" | 
   const holdingsTotal = holdings.reduce((s, d) => s + d.value, 0);
 
   const fleetCurve = (fleetHistory.data?.history ?? []).map((p) => ({ date: p.date, equity: p.total_equity }));
+  // Mark the day an engine's account first appears in the fleet total (the
+  // 6 Oct step is the $100k Forex paper account joining, not a gain).
+  const firsts = engines.map((e) => ({ name: e.name, date: e.history[0]?.date }))
+    .filter((j): j is { name: string; date: string } => !!j.date);
+  const earliest = firsts.reduce((m, j) => (j.date < m ? j.date : m), "9999");
+  const joins = firsts.filter((j) =>
+    j.date > earliest && fleetCurve.length > 1 && j.date > fleetCurve[0].date && j.date <= fleetCurve.at(-1)!.date);
 
   // Daily returns: last 15 sessions, one bar per engine that has a return.
   const returnEngines = engines.filter((e) => !e.paused && e.history.some((d) => d.daily_return));
@@ -354,6 +372,11 @@ export default function BrandHome({ runnerVerdict }: { runnerVerdict: "ALIVE" | 
                       <YAxis domain={["dataMin", "dataMax"]} width={64} tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`}
                         tick={{ fill: chart.text, fontSize: 11 }} axisLine={false} tickLine={false} />
                       <Tooltip {...tip} labelFormatter={shortDate} formatter={(v: number) => [fmtEq(v), "Fleet equity"]} />
+                      {joins.map((j) => (
+                        <ReferenceLine key={j.name} x={fleetCurve.find((p) => p.date >= j.date)?.date} stroke={chart.text}
+                          strokeDasharray="3 4" strokeOpacity={0.7}
+                          label={{ value: `${j.name} paper account added`, position: "insideTopRight", fill: chart.text, fontSize: 11 }} />
+                      ))}
                       <Area type="monotone" dataKey="equity" stroke={chart.series[0]} strokeWidth={2} strokeLinejoin="round"
                         fill="url(#fill-fleet)" isAnimationActive={false} />
                     </AreaChart>

@@ -36,6 +36,7 @@ def test_rows_pass_through_grouped_by_active_bot(monkeypatch):
     monkeypatch.setattr(fe, "ACTIVE_BOT_IDS", {"oracle", "spy_qqq_trend"})
     out = asyncio.run(fe.fleet_bot_history(days=5000))
     assert out["days"] == 400 and seen["params"] == (400,)            # clamped
+    assert "portfolio_with_vault_exclusion" in seen["sql"]             # mixed-method rows left out
     assert list(out["bots"]) == ["oracle"]
     assert out["bots"]["oracle"][1] == {"date": "2026-10-21", "equity": 90017.19, "daily_return": None,
                                         "deployed_pct": 0.38, "positions": 5}

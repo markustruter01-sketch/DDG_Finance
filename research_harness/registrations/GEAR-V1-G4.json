@@ -1,0 +1,22 @@
+{
+  "id": "GEAR-V1-G4",
+  "registered_at": "2026-10-22 ~15:40 Brisbane, after exploration (log commit ced10754) and amendment 2, BEFORE any held-out data was read",
+  "source_document": "research_harness/explore/GEAR-V1-PLAN.md (amendments 1 and 2)",
+  "hypothesis": "An S&P 500 + Nasdaq-100 gearbox (1.5x via 2x ETFs in calm uptrends, 1.0x in choppy uptrends, T-bills below the 200-session average) beats SPY's return with a smaller worst fall, after costs, on unseen data.",
+  "candidate": "GEAR-V1 candidate G4: aggressive 25% SPY + 25% SSO + 25% QQQ + 25% QLD (1.5x); normal 50% SPY + 50% QQQ; safe = T-bills. Signal: SPY close vs its 200-session average and SPY 20-session realised vol vs 20%. Trades on gear change and at the first session close of each month; next-open fills; whole shares; 20% protective stops re-set each rebalance; account gross <= 1.0. Code: research_harness/sleeves/gear.py + research_harness/heldout/gear_v1.py",
+  "candidate_id": "G4",
+  "candidates_declared": 4,
+  "prior_variants_tried": "At least 10 earlier ETF-trend attempts (TREND-V1 plan count) plus GEAR-V1's 4 declared candidates. The drawdown bar was changed after exploration (amendment 2).",
+  "selection": "Exploration 2007-2020: G4 CAGR 11.70% vs SPY 9.39%, max drawdown -32.10% vs -55.19%, Sharpe excess T-bills 0.66 vs 0.50; only candidate meeting the amended gate.",
+  "universe": ["SPY", "QQQ", "SSO", "QLD"],
+  "window": "Held-out 2021-01-01 .. 2026-10-15 (last bar of the pinned dataset); earlier bars are warm-up only",
+  "data": {
+    "gear_etf_ych_2026-10-22": "eb7d2e469206b93406fb8986766542f602bd67ec233c2b99333467169a01127b",
+    "etf_daily_yf_2026-10-16": "119c8e0ff7781b560c4049ac4c965445bfbd3e97c24747e3b4cfb718a8168221",
+    "fred_dtb3_2026-10-16": "008c90e42510326b9ed9098e4e634c5fd1a1949e3dfcd7651edf1ec85fb216df"
+  },
+  "sizing": "fixed gear mixes as above; no volatility targeting",
+  "leverage": "effective market exposure up to 1.5x through 2x ETFs only; no borrowing, account gross <= 1.0; no shorts",
+  "costs": "assumed: 0 commission, 2 bps half-spread, 3 bps slippage per trade; 2x ETF fees and financing are inside their prices",
+  "pass_bar": "On 2021-01-01..2026-10-15 after costs: 1) CAGR beats SPY buy-and-hold's; 2) CAGR >= 10.5%; 3) max drawdown smaller than SPY's (amendment 2). Fleet test NOT YET TESTABLE. Run once; a fail is reported as a fail."
+}

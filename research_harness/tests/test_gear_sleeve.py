@@ -143,7 +143,7 @@ def test_heldout_runs_once_and_reports_the_bars(tmp_path, monkeypatch):
     ledger = tmp_path / "ledger.jsonl"
     out = hg.run("GEAR-V1-T", store, directory=regs, ledger=ledger)
     assert set(out["pass_bar"]) >= {"1_cagr_beats_spy", "2_cagr_at_least_10.5pct",
-                                    "3_max_drawdown_no_worse_than_-20pct"}
+                                    "3_max_drawdown_smaller_than_spy"}
     assert out["verdict"].startswith(("PASS", "FAIL"))
     assert out["summary"]["from"] >= "2021-01-01" and out["summary"]["to"] <= "2026-10-15"
     with pytest.raises(RegistrationError):

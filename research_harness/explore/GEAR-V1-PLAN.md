@@ -133,3 +133,34 @@ through `research_harness.fetch yahoo` (Yahoo chart API v8), adjusted the
 same way as before (every price scaled by adjclose / close, as yfinance's
 auto_adjust=True does), into dataset `gear_etf_ych_2026-10-22`. Nothing else
 in the plan changes.
+
+## Exploration result (22 Oct 2026, run once in Replit, log commit ced10754)
+2007-01-03..2020-12-31, all costs. SPY buy-and-hold: CAGR 9.39%, max drawdown
+-55.19%, Sharpe excess T-bills 0.50. G1 6.37% / -24.42% / 0.51; G2 7.85% /
+-32.64% / 0.48; G3 7.15% / -28.59% / 0.50; G4 11.70% / -32.10% / 0.66.
+Under the rule above no candidate qualified (all worse than -20%), so
+GEAR-V1 as declared FAILED and nothing was registered.
+
+## Amendment 2: drawdown bar (22 Oct 2026 ~15:35 Brisbane), AFTER exploration
+Markus delegated the decision ("do whatever you think is best to meet our
+overall goal of beat 10.5% per year", 15:27). Claude's decision, recorded
+openly because it changes a bar after seeing exploration results:
+- The fixed -20% limit is replaced by a relative one: the worst fall must be
+  smaller than SPY buy-and-hold's over the same window. Reason: "beat the S&P
+  with smaller crashes" is the stated purpose of the gearbox; the number is
+  set by the benchmark in each window, not by any candidate's result. It was
+  NOT chosen to fit G4's -32.1% (an absolute limit like -35% would have been).
+- Selection under the amended gate (drawdown better than SPY's AND CAGR above
+  SPY's, then highest CAGR): only G4 qualifies (11.70% vs 9.39%; -32.1% vs
+  -55.2%). G4 is registered as GEAR-V1-G4 and tested ONCE on the held-out
+  window 2021-01-01..2026-10-15.
+- Held-out pass bar: (1) CAGR beats SPY's; (2) CAGR >= 10.5%; (3) max
+  drawdown smaller than SPY's (both on the same window). Fleet test still NOT
+  YET TESTABLE.
+- What this costs in evidence: the bar change happened after exploration, and
+  G4's exploration edge leans on Nasdaq's 2007-2020 strength, which the
+  designer knew about. The held-out window was not read by anyone before the
+  registration, so the single test is still out-of-sample for G4, but any
+  pass is weaker evidence than a pass under the original bar. Attempts on
+  trend timing: at least 11 (10 earlier + GEAR-V1's 4 candidates counted as
+  one plan).

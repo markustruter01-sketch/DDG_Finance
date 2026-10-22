@@ -23,7 +23,7 @@
 - [Kraken adaptive params retirement](kraken-adaptive-params-retirement.md) — legacy store is gone; Fleet Commander chat compatibility must fail closed without querying or recreating it.
 - [Production paginated export](production-paginated-export.md) — large prod exports need a read-only snapshot plus before/after count verification because rows can arrive mid-export.
 - [Homepage legibility treatment](homepage-legibility.md) — transparent glass stays, but mobile artwork is blurred and homepage text uses dark drop shadows for contrast.
-- [Shared dashboard landscape](dashboard-nature-background.md) — all scenic dashboard pages should use the main dashboard’s nature image.
+- [DDG Finance backgrounds](dashboard-nature-background.md) — use the two user-provided optimized landscape photos across DDG Finance pages; retain the older background on non-DDG routes.
 - [Multi-account position identity](multi-account-position-identity.md) — live position UI keys must include bot/account identity; symbols alone collide when accounts share cash-park ETFs.
 - [NYSE validation calendar](nyse-validation-calendar.md) — equity integrity checks must account for standard and exceptional exchange closures.
 - [Bot 2 earnings source gap](bot2-earnings-source-gap.md) — Alpha Vantage history currently omits a Costco quarterly event in 2020; split-sample validation must stop rather than impute it.

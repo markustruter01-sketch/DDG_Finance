@@ -73,9 +73,31 @@
   pointer-events: none;
 }
 .ddg-photo {
-  background: url("/observatory-home-background.jpg") center / cover no-repeat;
+  overflow: hidden;
   filter: var(--ddg-photo-grade);
   transition: filter var(--ddg-mode) var(--ddg-ease);
+}
+.ddg-photo::before,
+.ddg-photo::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+}
+.ddg-photo::before {
+  background-image: url("/ddg-glacier-background.webp");
+}
+.ddg-photo::after {
+  background-image: url("/ddg-mountain-background.webp");
+  opacity: 0;
+  animation: ddg-background-crossfade 36s ease-in-out infinite;
+}
+@keyframes ddg-background-crossfade {
+  0%, 42% { opacity: 0; }
+  50%, 92% { opacity: 1; }
+  100% { opacity: 0; }
 }
 .ddg-photo-grade {
   background: var(--ddg-photo-overlay);
@@ -239,4 +261,5 @@
 
 @media (prefers-reduced-motion: reduce) {
   .ddg-photo, .ddg-photo-grade, .ddg-glass, .ddg-btn, .ddg-dock-tile { transition: none; }
+  .ddg-photo::after { animation: none; opacity: 0; }
 }

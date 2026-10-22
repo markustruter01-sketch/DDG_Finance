@@ -1,10 +1,10 @@
 ---
-name: Shared dashboard landscape
-description: Visual consistency rule for scenic pages in the trading dashboard.
+name: DDG Finance backgrounds
+description: Background image rule for DDG Finance pages and the older dashboard routes.
 ---
 
-All scenic background pages in the trading dashboard should use the same nature image as the main dashboard. Keep responsive positioning and legibility treatments, but do not introduce a different landscape scene on another scenic page.
+DDG Finance pages use the two user-provided landscape photos as a slow crossfade, with optimized image assets and the existing readability overlay. Older non-DDG dashboard routes retain their shared nature background unless the user changes that scope.
 
-**Why:** The user asked for the main dashboard's landscape to be consistent across every nature-background page.
+**Why:** The user replaced the DDG Finance background direction with these two landscape images.
 
-**How to apply:** Reuse the main dashboard scene for scenic backgrounds across home, streaming, research, and fallback pages while preserving each page's readable overlay and mobile treatment.
+**How to apply:** Reuse the shared DDG background styling for every DDG Finance page and preserve the overlay, responsive positioning, and reduced-motion behavior.

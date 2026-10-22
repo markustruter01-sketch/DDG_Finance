@@ -57,6 +57,27 @@ from core.cash_park import is_cash_park
 
 # ── Yahoo Finance OHLCV fetcher ───────────────────────────────────────────────
 
+# Newest daily bar older than this means the feed has stopped updating
+# (a weekend plus a holiday is at most 4 days). Claude's design value, 22 Oct 2026.
+MAX_BAR_AGE_DAYS = 6
+
+
+def _bars_stale(ticker: str, last_ts: float, now: float | None = None) -> bool:
+    """True (and an alert) when the newest bar is too old to trade on."""
+    import time as _time
+    age_days = ((now if now is not None else _time.time()) - float(last_ts)) / 86400
+    if age_days <= MAX_BAR_AGE_DAYS:
+        return False
+    logger.error(f"EtfEngine | {ticker}: newest Yahoo bar is {age_days:.1f} days old; not using it")
+    try:
+        from core.degradation_tracker import record_degradation
+        record_degradation(component="data_feed", severity="error", error_type="stale_daily_bars",
+                           message=f"{ticker}: newest Yahoo daily bar is {age_days:.1f} days old; signals skipped")
+    except Exception:
+        pass
+    return True
+
+
 def _yahoo_daily_ohlcv(ticker: str, days: int = 250) -> Optional[dict]:
     """
     Fetch daily OHLCV from Yahoo Finance v8 API.
@@ -73,6 +94,9 @@ def _yahoo_daily_ohlcv(ticker: str, days: int = 250) -> Optional[dict]:
         data = resp.json()
         result = data.get("chart", {}).get("result")
         if not result:
+            return None
+        stamps = result[0].get("timestamp") or []
+        if stamps and _bars_stale(ticker, stamps[-1]):
             return None
         quotes = result[0].get("indicators", {}).get("quote", [{}])[0]
         # Strip None entries by zipping all arrays together and filtering

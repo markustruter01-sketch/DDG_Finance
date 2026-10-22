@@ -439,23 +439,26 @@ def run_walk_forward_job(dry_run: bool = False) -> dict[str, dict]:
         }
         results[bot_id] = result
 
-        if status in {"RED", "INSUFFICIENT_DATA"} and not dry_run:
+        # Too few trades is an expected state (recorded in bot_evaluation_history
+        # below), not a fault: as an alert it piled up one unresolved row per bot
+        # per day. Only RED is an alert; old insufficient-data rows are closed.
+        if status == "INSUFFICIENT_DATA":
+            logger.info(f"arc2_wf | {bot_id} INSUFFICIENT_DATA: {m90['trades_count']} trailing-90d trades")
+        if not dry_run:
             try:
-                from core.degradation_tracker import record_degradation
-                record_degradation(
-                    component=f"walk_forward/{bot_id}",
-                    severity="medium" if status == "RED" else "warning",
-                    error_type="wf_red_status" if status == "RED" else "wf_insufficient_data",
-                    message=(
-                        f"{bot_id} {status}: "
-                        + (
-                            f"trailing-90d Sharpe {m90['sharpe']:.3f} below OOS floor "
+                from core.degradation_tracker import mark_resolved, record_degradation
+                mark_resolved(f"walk_forward/{bot_id}", "wf_insufficient_data",
+                              reason="insufficient data is a status, not an alert")
+                if status == "RED":
+                    record_degradation(
+                        component=f"walk_forward/{bot_id}",
+                        severity="medium",
+                        error_type="wf_red_status",
+                        message=(
+                            f"{bot_id} RED: trailing-90d Sharpe {m90['sharpe']:.3f} below OOS floor "
                             f"{oos_floor:.3f} for {consecutive} day(s)"
-                            if status == "RED"
-                            else f"only {m90['trades_count']} trailing-90d trades; comparison unavailable"
-                        )
-                    ),
-                )
+                        ),
+                    )
             except Exception as exc:
                 logger.warning(f"arc2_wf | degradation write ({bot_id}): {exc}")
 

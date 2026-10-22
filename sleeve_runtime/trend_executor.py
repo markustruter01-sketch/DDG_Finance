@@ -15,7 +15,8 @@ an order.
 Order flow uses the engine's existing, tested primitives only:
   1. sells: close_position (full exit, incl. any fractional remainder) or
      close_partial (re-arms the stop at the new level for what is left);
-  2. unpark SGOV, re-read the account, re-plan, then buys (whole shares,
+  2. ask the fleet risk governor (core/risk_governor.py); if it allows new
+     risk: unpark SGOV, re-read the account, re-plan, then buys (whole shares,
      scaled to the cash actually there, market orders while open);
   3. every sleeve holding gets its protective stop at the new level, and
      the result is checked; a missing stop is a critical degradation.
@@ -162,6 +163,7 @@ def execute_rebalance(
     vault: set[str],
     cash_park: set[str],
     unpark: Callable[[Any, list[dict[str, Any]]], Any],
+    risk_check: Callable[[], dict[str, Any]],
 ) -> dict[str, Any]:
     """Carry out one rebalance. Returns a report; never leaves a holding
     without a stop attempt. Raises only on a failure before any order."""
@@ -191,13 +193,17 @@ def execute_rebalance(
     #    actually in the account (parked cash counts once it has been sold).
     #    Step-1 failures are already in errors; any new 1-share drift sells
     #    tp2 shows are left for next month rather than churned.
-    if tp.plan.buys:
+    #    The fleet risk governor may refuse new risk (sells above still ran).
+    risk = risk_check() if tp.plan.buys else {"allowed": True, "reasons": []}
+    if not risk["allowed"]:
+        errors.append(f"buys refused by the risk governor: {risk['reasons']}")
+    elif tp.plan.buys:
         unpark(engine, live)
     live, rows, cap = _fresh(engine, bot_id, vault, cash_park)
     by_row = {r["symbol"]: r for r in rows}
     tp2 = compute_plan(bars=bars, positions=cap.held, equity=cap.equity, cash=cap.broker_cash,
                        signal_day=signal_day, frozen=ledger_frozen(rows, cap.held))
-    for o in tp2.plan.buys:
+    for o in (tp2.plan.buys if risk["allowed"] else []):
         err = _buy(engine, bot_id, o.symbol, o.qty, tp2.stop_for(o.symbol),
                    tp2.prices[o.symbol], by_row.get(o.symbol))
         if err:
@@ -234,6 +240,7 @@ def run_trend_cycle(
     unpark: Callable[[Any, list[dict[str, Any]]], Any],
     park: Callable[[Any, list[dict[str, Any]], float], Any],
     alert: Callable[[str, str], None],
+    risk_check: Callable[[], dict[str, Any]],
     now: datetime | None = None,
 ) -> dict[str, Any]:
     """oracle's whole hourly cycle while the sleeve is live."""
@@ -266,7 +273,8 @@ def run_trend_cycle(
         write_state({**base, "done": False})
         try:
             report = execute_rebalance(engine, bot_id=bot_id, bars=bars, signal_day=signal_day,
-                                       vault=vault, cash_park=cash_park, unpark=unpark)
+                                       vault=vault, cash_park=cash_park, unpark=unpark,
+                                       risk_check=risk_check)
         except Exception as exc:
             # Each buy is protected as it fills, and the next cycle's stop
             # reconciliation re-arms from the ledger; still, a human looks now.

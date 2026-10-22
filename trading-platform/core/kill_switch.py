@@ -868,6 +868,19 @@ def report(snapshot: dict[str, Any]) -> dict[str, Any]:
     result = {"mode": "report_only", "would_trip": bool(triggers), "triggers": triggers, "snapshot": public_snapshot}
     _state["last_snapshot"] = result
     logger.warning(f"Kill switch report-only | would_trip={bool(triggers)} triggers={len(triggers)}")
+    if triggers:
+        # Durable evidence for the arming decision: how often, and why, the
+        # unarmed switch would have tripped. De-duplicated by the tracker.
+        try:
+            from core.degradation_tracker import record_degradation
+            kinds = sorted({str(t.get("kind", t.get("trigger", "unknown"))) for t in triggers})
+            record_degradation(
+                component="kill_switch", severity="warning", error_type="would_trip",
+                message=f"Kill switch (report-only) would trip: {', '.join(kinds)}"[:300],
+                detail=json.dumps(triggers, default=str)[:2000],
+            )
+        except Exception as exc:
+            logger.error(f"Kill switch | would-trip record failed: {type(exc).__name__}")
     for trigger in triggers:
         logger.warning(
             "Kill switch report-only trigger | "

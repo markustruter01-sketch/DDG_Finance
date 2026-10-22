@@ -444,6 +444,7 @@ def _run_trend_sleeve(engine, live_positions: list[dict]) -> None:
     from core import bot_state
     from core.degradation_tracker import record_degradation
     from core.kill_switch import latch_tripped
+    from core.risk_governor import new_risk_check
     from sgov_parking import park_idle_cash, unpark_for_entry
     from sleeve_runtime.trend_executor import STATE_KEY, run_trend_cycle
     from sleeve_runtime.trend_v1b import alpaca_bar_fetcher
@@ -463,6 +464,7 @@ def _run_trend_sleeve(engine, live_positions: list[dict]) -> None:
         alert=lambda severity, msg: record_degradation(
             component=BOT_ID, severity=severity, error_type="trend_v1b_rebalance",
             message=msg[:500], bot_id=BOT_ID),
+        risk_check=new_risk_check,
     )
     logger.info(f"Asia | TREND-V1-B live cycle | {result['status']}")
 

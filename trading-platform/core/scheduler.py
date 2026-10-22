@@ -219,6 +219,10 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
         name="Hourly Broker/Ledger Reconciliation",
         replace_existing=True,
         misfire_grace_time=600,
+        # First run 3 minutes after start, not an hour: otherwise every
+        # publish leaves the last reconciliation older than the 90-minute
+        # freshness check and raises a false critical alert.
+        next_run_time=datetime.now(timezone.utc) + timedelta(minutes=3),
     )
     scheduler.add_job(
         func=_standing_invariants_job,
@@ -485,6 +489,23 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
         misfire_grace_time=300,
     )
     logger.info("Scheduler | Registered: per_bot_vault_deployment (15 min, fail-closed)")
+
+    scheduler.add_job(
+        func=_order_watchdog,
+        trigger=CronTrigger(
+            day_of_week="mon-fri",
+            hour="9-16",
+            minute="5,35",
+            timezone="America/New_York",
+        ),
+        id="order_watchdog",
+        name="Order-rate watchdog (read-only, market hours)",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=300,
+    )
+    logger.info("Scheduler | Registered: order_watchdog (09:05-16:35 NY, every 30 min)")
 
     scheduler.add_job(
         func=_per_bot_vault_quarterly_rebalance,
@@ -1117,6 +1138,17 @@ async def _daily_discord_pnl_report() -> None:
         logger.info("Scheduler | daily_discord_pnl_report: sent successfully")
     except Exception as exc:
         logger.error(f"Scheduler | daily_discord_pnl_report FAILED: {exc}")
+
+
+async def _order_watchdog() -> None:
+    """Alert (never act) when any account keeps placing orders."""
+    try:
+        from core.order_watchdog import run_watchdog
+        report = await asyncio.to_thread(run_watchdog)
+        summary = {b: r["status"] for b, r in report.items()}
+        logger.info(f"Scheduler | order_watchdog: {summary}")
+    except Exception as exc:
+        logger.error(f"Scheduler | order_watchdog FAILED: {exc}")
 
 
 async def _per_bot_vault_deployment() -> None:

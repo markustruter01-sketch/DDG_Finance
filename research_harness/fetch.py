@@ -4,6 +4,7 @@ Run from the repo root in the Replit workspace (needs vendor keys):
     python -m research_harness.fetch fx    --dataset oanda_fx_ba_to_2026-10-10 --to 2026-10-10T00:00:00Z
     python -m research_harness.fetch etf   --dataset etf_daily_yf_2026-10-16 --symbols SPY,TLT,GLD --start 2003-01-01 --end 2026-10-15
     python -m research_harness.fetch tbill --dataset fred_dtb3_2026-10-16 --start 2003-01-01 --end 2026-10-15
+    python -m research_harness.fetch coinbase --dataset crypto_daily_cb_2026-10-22 --symbols BTC-USD,ETH-USD --start 2014-01-01 --end 2026-10-15
 
 Datasets are immutable: a new pull gets a new dataset name.
 """
@@ -68,6 +69,54 @@ def fetch_etf(store: BarStore, dataset: str, symbols: list[str], start: str, end
     )
 
 
+COINBASE_CANDLES = "https://api.exchange.coinbase.com/products/{product}/candles"
+COINBASE_MAX_CANDLES = 300   # the public endpoint returns at most 300 candles per call
+
+
+def parse_coinbase_candles(rows: list) -> list[dict]:
+    """Coinbase rows are [time, low, high, open, close, volume], newest first,
+    time = UTC epoch seconds of the day's start. Returns oldest first."""
+    from datetime import datetime, timezone
+    out = [{"day": datetime.fromtimestamp(int(r[0]), tz=timezone.utc).date(),
+            "open": float(r[3]), "high": float(r[2]), "low": float(r[1]), "close": float(r[4])}
+           for r in rows]
+    return sorted({b["day"]: b for b in out}.values(), key=lambda b: b["day"])
+
+
+def fetch_coinbase(store: BarStore, dataset: str, symbols: list[str], start: str, end: str,
+                   http_get=None, pause: float = 0.25) -> dict:
+    """Daily UTC candles from Coinbase Exchange's free public API (no key)."""
+    import time as _time
+    if http_get is None:
+        import httpx
+        http_get = httpx.get
+    first, last = date.fromisoformat(start), date.fromisoformat(end)
+    data = {}
+    for product in symbols:
+        bars: list[dict] = []
+        lo = first
+        while lo <= last:
+            hi = min(last, lo + timedelta(days=COINBASE_MAX_CANDLES - 1))
+            resp = http_get(COINBASE_CANDLES.format(product=product),
+                            params={"granularity": 86400, "start": f"{lo.isoformat()}T00:00:00Z",
+                                    "end": f"{hi.isoformat()}T23:59:59Z"},
+                            headers={"User-Agent": "ddg-research-harness/1.0"}, timeout=30.0)
+            resp.raise_for_status()
+            bars += parse_coinbase_candles(resp.json())
+            lo = hi + timedelta(days=1)
+            _time.sleep(pause)
+        bars = [b for b in sorted({b["day"]: b for b in bars}.values(), key=lambda b: b["day"])
+                if first <= b["day"] <= last]
+        if not bars:
+            raise RuntimeError(f"no data for {product}")
+        data[product] = bars
+    return store.write_dataset(
+        dataset, source=f"Coinbase Exchange public candles, granularity 86400 (UTC days) {start}..{end}",
+        bars_by_symbol=data,
+        notes="Single-exchange daily OHLC; a product's history starts when Coinbase listed it.",
+    )
+
+
 def parse_fred_csv(text: str) -> list[dict]:
     """FRED's keyless CSV: header row, then 'date,value'; '.' or '' = missing."""
     lines = [ln.strip() for ln in text.strip().splitlines() if ln.strip()]
@@ -103,7 +152,7 @@ def fetch_tbill(store: BarStore, dataset: str, start: str, end: str) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("kind", choices=("fx", "etf", "tbill"))
+    ap.add_argument("kind", choices=("fx", "etf", "tbill", "coinbase"))
     ap.add_argument("--dataset", required=True)
     ap.add_argument("--to")
     ap.add_argument("--symbols")
@@ -115,6 +164,8 @@ def main(argv: list[str] | None = None) -> int:
         m = fetch_fx(store, a.dataset, a.to)
     elif a.kind == "etf":
         m = fetch_etf(store, a.dataset, a.symbols.split(","), a.start, a.end)
+    elif a.kind == "coinbase":
+        m = fetch_coinbase(store, a.dataset, a.symbols.split(","), a.start, a.end)
     else:
         m = fetch_tbill(store, a.dataset, a.start, a.end)
     for sym, e in m["symbols"].items():

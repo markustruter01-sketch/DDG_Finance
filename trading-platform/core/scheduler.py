@@ -219,6 +219,10 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
         name="Hourly Broker/Ledger Reconciliation",
         replace_existing=True,
         misfire_grace_time=600,
+        # First run 3 minutes after start, not an hour: otherwise every
+        # publish leaves the last reconciliation older than the 90-minute
+        # freshness check and raises a false critical alert.
+        next_run_time=datetime.now(timezone.utc) + timedelta(minutes=3),
     )
     scheduler.add_job(
         func=_standing_invariants_job,

@@ -440,6 +440,58 @@ def _mismatches(
     return results
 
 
+# Claude's design value (22 Oct 2026): the vault ledger books each fill in
+# whole cents, so it drifts from the broker by a few cents per fill. A gap
+# above this plus the amount still waiting to be bought is real (the 15-21 Oct
+# re-buy loop reached about $600 per symbol).
+VAULT_TOLERANCE_USD = 5.0
+
+
+def _vault_ledger(bot_id: str) -> tuple[dict[str, float], dict[str, float]]:
+    """(vault ledger qty, USD still pending purchase) per symbol."""
+    from db.postgres import get_conn
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT symbol, qty FROM per_bot_vault_holdings WHERE bot_id = %s", (bot_id,))
+            qty = {canonical_symbol(s): float(q or 0) for s, q in cur.fetchall()}
+            cur.execute("SELECT pending_bil_usd, pending_voo_usd FROM per_bot_vault_deployment_queue "
+                        "WHERE bot_id = %s", (bot_id,))
+            row = cur.fetchone()
+    pending = {"BIL": float(row[0] or 0), "VOO": float(row[1] or 0)} if row else {}
+    return qty, pending
+
+
+def _vault_mismatches(bot_id: str, broker: list[dict[str, Any]],
+                      vault_symbols: set[str]) -> list[dict[str, Any]]:
+    """Broker vault holdings vs the vault ledger. Only quantities go in the
+    finding (no prices), so an unchanged gap repeats identically and the kill
+    switch's repeat count can work."""
+    bot_id = resolve_bot_id(bot_id)
+    try:
+        ledger, pending = _vault_ledger(bot_id)
+    except Exception as exc:
+        logger.warning(f"Reconciliation | vault ledger read failed for {bot_id}: {exc}")
+        return [_reconciliation_check_failed("vault_ledger_read", exc, bot_id)]
+    held = {canonical_symbol(p.get("symbol")): p for p in broker}
+    out = []
+    for symbol in sorted(vault_symbols):
+        p = held.get(symbol)
+        broker_qty = abs(float(p.get("qty") or 0)) if p else 0.0
+        vault_qty = ledger.get(symbol, 0.0)
+        if broker_qty < DUST_QTY and vault_qty < DUST_QTY:
+            continue
+        price = abs(float(p.get("market_value") or 0)) / broker_qty if p and broker_qty else None
+        if price is None:
+            gap_too_big = True                   # ledger says we hold it; broker has none
+        else:
+            gap_too_big = abs(broker_qty - vault_qty) * price > VAULT_TOLERANCE_USD + pending.get(symbol, 0.0)
+        if gap_too_big:
+            out.append({"bot_id": bot_id, "symbol": symbol, "kind": "vault_quantity_mismatch",
+                        "table": "per_bot_vault_holdings",
+                        "broker_qty": round(broker_qty, 6), "vault_qty": round(vault_qty, 6)})
+    return out
+
+
 def _authoritative_quantity_mismatches(
     bot_id: str,
     broker: list[dict[str, Any]],
@@ -777,7 +829,17 @@ def collect_live_snapshot() -> dict[str, Any]:
             "vault_symbols": vault_symbols,
             "_client": client,
         })
-        mismatches.extend(_mismatches(bot_id, positions, ledger))
+        if vault_symbols:
+            # Vault BIL/VOO are bought by the vault job between bot cycles, so
+            # the hourly bot_portfolio mirror lags them. Check them against the
+            # vault's own ledger instead.
+            def _not_vault(p: dict[str, Any]) -> bool:
+                return canonical_symbol(p.get("symbol")) not in vault_symbols
+            mismatches.extend(_mismatches(bot_id, [p for p in positions if _not_vault(p)],
+                                          [p for p in ledger if _not_vault(p)]))
+            mismatches.extend(_vault_mismatches(bot_id, positions, vault_symbols))
+        else:
+            mismatches.extend(_mismatches(bot_id, positions, ledger))
         mismatches.extend(_authoritative_quantity_mismatches(bot_id, positions))
         mismatches.extend(_order_mismatches(bot_id, orders))
         mismatches.extend(_stale_portfolio(bot_id))

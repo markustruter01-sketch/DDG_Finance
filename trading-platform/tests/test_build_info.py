@@ -4,10 +4,11 @@ import core.build_info as bi
 from core import scheduler
 
 
-def test_stamp_file_wins(tmp_path, monkeypatch):
+def test_stamp_is_used_when_git_is_unavailable(tmp_path, monkeypatch):
     (tmp_path / "BUILD_COMMIT").write_text("abc1234def5678\n")
     monkeypatch.setattr(bi, "_REPO_ROOT", str(tmp_path))
-    assert bi.current_commit() == "abc1234def56"
+    monkeypatch.setattr(bi.subprocess, "check_output", lambda *a, **k: (_ for _ in ()).throw(OSError("no git")))
+    assert bi.current_commit() == "abc1234"
 
 
 def test_no_stamp_no_git_is_unknown(tmp_path, monkeypatch):

@@ -1,9 +1,9 @@
 """Which commit is this process running? One source of truth.
 
-Reads BUILD_COMMIT at the repo root if the build stamped one, else asks git,
-else returns "unknown". Published deployments have no .git, so without a stamp
-the answer is "unknown" and callers must treat that as "cannot verify", not as
-a mismatch.
+Asks git first (the workspace), else reads BUILD_COMMIT at the repo root,
+which the dashboard's production build stamps (published deployments have no
+git), else returns "unknown". Callers must treat "unknown" as "cannot
+verify", not as a mismatch.
 """
 
 from __future__ import annotations
@@ -18,16 +18,17 @@ _REPO_ROOT = os.path.dirname(_ROOT)
 
 def current_commit() -> str:
     try:
-        with open(os.path.join(_REPO_ROOT, "BUILD_COMMIT"), encoding="utf-8") as fh:
-            stamp = fh.read().strip()[:12]
-        if stamp:
-            return stamp
-    except OSError:
-        pass
-    try:
-        return subprocess.check_output(
+        head = subprocess.check_output(
             ["git", "rev-parse", "--short", "HEAD"],
             cwd=_ROOT, stderr=subprocess.DEVNULL, timeout=3,
-        ).decode().strip() or UNKNOWN
+        ).decode().strip()
+        if head:
+            return head
     except Exception:
+        pass
+    try:
+        with open(os.path.join(_REPO_ROOT, "BUILD_COMMIT"), encoding="utf-8") as fh:
+            stamp = fh.read().strip()[:7]
+        return stamp or UNKNOWN
+    except OSError:
         return UNKNOWN

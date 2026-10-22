@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from research_harness.explore.gear_v1 import (
-    LOAD_START, MAX_DRAWDOWN_LIMIT_PCT, SYMBOLS, run_candidate, spy_hold, worst_rolling_vs,
+    LOAD_START, SYMBOLS, run_candidate, spy_hold, worst_rolling_vs,
 )
 from research_harness.harness import metrics, registry
 from research_harness.harness.fleet import _aligned, fleet_returns
@@ -78,7 +78,8 @@ def run(reg_id: str, store: BarStore | None = None, *, directory: Path = registr
     bars_ = {
         "1_cagr_beats_spy": cagr is not None and cagr > spy_s["cagr_pct"],
         "2_cagr_at_least_10.5pct": cagr is not None and cagr >= TARGET_CAGR_PCT,
-        "3_max_drawdown_no_worse_than_-20pct": summary["max_drawdown_pct"] >= MAX_DRAWDOWN_LIMIT_PCT,
+        # Amendment 2 (GEAR-V1-PLAN.md): smaller worst fall than SPY's, same window.
+        "3_max_drawdown_smaller_than_spy": summary["max_drawdown_pct"] > spy_s["max_drawdown_pct"],
     }
     passed = all(bars_.values())
     out = {

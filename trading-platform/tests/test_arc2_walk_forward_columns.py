@@ -41,3 +41,19 @@ def test_oracle_and_momentum_queries_use_real_columns(monkeypatch):
         sql = _captured_sql(monkeypatch, bot)
         used = set(re.findall(r"\b(realised_pnl\w*|closed_at|opened_at|exit_reason|status|bot_id)\b", sql))
         assert used <= cols, (bot, used - cols)
+
+
+def test_insufficient_data_is_not_an_alert_and_old_rows_are_closed(monkeypatch):
+    import core.degradation_tracker as dt
+    import db.postgres as pg
+    recorded, resolved = [], []
+    monkeypatch.setattr(dt, "record_degradation", lambda **k: recorded.append(k))
+    monkeypatch.setattr(dt, "mark_resolved", lambda c, e, **k: resolved.append((c, e)))
+    monkeypatch.setattr(pg, "is_pg_available", lambda: False)        # skip the history insert
+    monkeypatch.setattr(wf, "_get_envelope", lambda b: {"worst_window_sharpe": 0.1})
+    monkeypatch.setattr(wf, "_fetch_closed_trades", lambda b, days_back: [])
+    monkeypatch.setattr(wf, "_count_consecutive_below_floor", lambda b, f: 0)
+    out = wf.run_walk_forward_job()
+    assert all(r["status"] == "INSUFFICIENT_DATA" for r in out.values())
+    assert recorded == []
+    assert ("walk_forward/oracle", "wf_insufficient_data") in resolved

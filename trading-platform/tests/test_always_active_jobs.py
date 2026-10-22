@@ -1,0 +1,15 @@
+"""The auto-trading toggle pauses order-placing jobs only; monitoring keeps running."""
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+
+def test_always_active_ids_are_real_jobs_and_exclude_order_placers():
+    import core.scheduler as cs  # imported here: importing it at collection time shadows main.py for other tests
+
+    scheduler = AsyncIOScheduler()
+    cs._register_jobs(scheduler)
+    ids = {job.id for job in scheduler.get_jobs()}
+    assert cs._ALWAYS_ACTIVE_JOBS <= ids
+    for order_job in ("per_bot_vault_deployment", "per_bot_vault_quarterly_rebalance",
+                      "automated_kill_switch", "scheduled_reconciliation"):
+        assert order_job not in cs._ALWAYS_ACTIVE_JOBS
+    assert {"standing_invariants", "order_watchdog", "gear_v1_g4_shadow"} <= cs._ALWAYS_ACTIVE_JOBS

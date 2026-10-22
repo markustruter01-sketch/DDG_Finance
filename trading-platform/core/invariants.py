@@ -42,6 +42,7 @@ from core import kill_switch
 from core.runner_heartbeat import (
     RUNNER_HEARTBEAT_THRESHOLD_SECONDS,
 )
+from core.settling import safe_recent_fill_symbols
 from core.symbols import canonical_symbol, is_crypto_symbol
 from core.cash_park import is_cash_park
 
@@ -90,6 +91,8 @@ class InvariantInputs:
     ledger_positions: dict[str, list[dict[str, Any]]] | None = None
     forex_ai_trades: list[dict[str, Any]] | None = None
     vault_symbols: dict[str, set[str]] | None = None
+    # Symbols with a broker fill the bot has not booked yet (core/settling.py).
+    settling_symbols: dict[str, set[str]] = field(default_factory=dict)
     fleet_equity: float | None = None
     cycle_rows: dict[str, dict[str, Any]] | None = None
     cycle_intervals: dict[str, float] | None = None
@@ -864,6 +867,29 @@ def check_kill_switch_parity(inputs: InvariantInputs) -> dict[str, Any]:
     )
 
 
+def _drop_settling(
+    inputs: InvariantInputs,
+    broker: dict[str, dict[str, Any]],
+    ledger: dict[str, dict[str, Any]],
+) -> list[dict[str, str]]:
+    """Remove symbols with an unbooked broker fill from both maps (in place).
+
+    They are reported, not failed: the bot books them on its next cycle
+    (core/settling.py). A gap still there after the window fails as before.
+    """
+    held: list[dict[str, str]] = []
+    for bot_id, symbols in inputs.settling_symbols.items():
+        for symbol in sorted(symbols):
+            in_broker = broker.get(bot_id, {}).pop(symbol, _MISSING) is not _MISSING
+            in_ledger = ledger.get(bot_id, {}).pop(symbol, _MISSING) is not _MISSING
+            if in_broker or in_ledger:
+                held.append({"bot_id": bot_id, "symbol": symbol})
+    return held
+
+
+_MISSING = object()
+
+
 def check_ledger_broker_presence(inputs: InvariantInputs) -> dict[str, Any]:
     name = "ledger_and_broker_positions_have_matching_symbols"
     expected = {
@@ -904,6 +930,7 @@ def check_ledger_broker_presence(inputs: InvariantInputs) -> dict[str, Any]:
     ledger = _position_presence_maps(
         inputs.ledger_positions, inputs.vault_symbols
     )
+    settling = _drop_settling(inputs, broker, ledger)
     missing_ledger: list[dict[str, Any]] = []
     missing_broker: list[dict[str, Any]] = []
     for bot_id in ACTIVE_BOTS:
@@ -928,6 +955,8 @@ def check_ledger_broker_presence(inputs: InvariantInputs) -> dict[str, Any]:
         "ledger_without_broker": missing_broker,
         "broker_without_ledger": missing_ledger,
     }
+    if settling:
+        actual["settling"] = settling
     if forex_mismatches:
         actual["forex_trade_mismatches"] = forex_mismatches
     unmatched = len(missing_broker) + len(missing_ledger) + len(forex_mismatches)
@@ -973,6 +1002,7 @@ def check_ledger_broker_quantities(inputs: InvariantInputs) -> dict[str, Any]:
 
     broker = _position_maps(inputs.broker_positions, inputs.vault_symbols)
     ledger = _position_maps(inputs.ledger_positions, inputs.vault_symbols)
+    settling = _drop_settling(inputs, broker, ledger)
     mismatches: list[dict[str, Any]] = []
     unknown_quantities: list[dict[str, Any]] = []
     maximum_difference = 0.0
@@ -1021,6 +1051,8 @@ def check_ledger_broker_quantities(inputs: InvariantInputs) -> dict[str, Any]:
         "mismatches": mismatches,
         "quantity_unknown": unknown_quantities,
     }
+    if settling:
+        actual["settling"] = settling
     if mismatches:
         return _failed(
             name,
@@ -1481,10 +1513,12 @@ def read_broker_inputs() -> dict[str, Any]:
 
     positions: dict[str, list[dict[str, Any]]] = {}
     orders: dict[str, list[dict[str, Any]]] = {}
+    settling: dict[str, set[str]] = {}
     fleet_equity = 0.0
     for bot_id in kill_switch.ALPACA_BOTS:
         client = _broker_client(bot_id)
         account = client.get_account()
+        settling[bot_id] = safe_recent_fill_symbols(bot_id, client)
         fleet_equity += float(account.equity)
         positions[bot_id] = [
             {
@@ -1525,6 +1559,7 @@ def read_broker_inputs() -> dict[str, Any]:
     return {
         "broker_positions": positions,
         "broker_orders": orders,
+        "settling_symbols": settling,
         "fleet_equity": fleet_equity,
     }
 

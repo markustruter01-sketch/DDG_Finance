@@ -19,6 +19,7 @@ from core.kill_switch import (
 )
 from config.settings import settings
 from core.bot_registry import resolve_bot_id
+from core.settling import safe_recent_fill_symbols, split_settling
 from core.symbols import canonical_symbol
 
 
@@ -739,6 +740,7 @@ def collect_live_snapshot() -> dict[str, Any]:
     accounts = []
     mismatches = []
     account_findings = []
+    settling_symbols: dict[str, set[str]] = {}
     for bot_id in ACTIVE_BOTS:
         if bot_id == "forex_ai":
             try:
@@ -811,6 +813,7 @@ def collect_live_snapshot() -> dict[str, Any]:
         acct = client.get_account()
         positions = _positions(client)
         orders = _orders(client)
+        settling_symbols[resolve_bot_id(bot_id)] = safe_recent_fill_symbols(bot_id, client)
         ledger = _ledger_positions(bot_id)
         ledger_failures = [
             row
@@ -861,6 +864,8 @@ def collect_live_snapshot() -> dict[str, Any]:
             }
         )
     )
+    # Fills the bots have not booked yet clear by themselves (core/settling.py).
+    mismatches, settling = split_settling(mismatches, settling_symbols)
     fleet_hwm = fleet_equity
     if fleet_equity is not None:
         try:
@@ -884,6 +889,7 @@ def collect_live_snapshot() -> dict[str, Any]:
         "captured_at": datetime.now(timezone.utc).isoformat(),
         "accounts": accounts,
         "mismatches": mismatches,
+        "settling": settling,
         "account_summaries": _account_summaries(accounts, mismatches),
         "account_findings": account_findings,
         "pause_state_disagreements": _pause_state_disagreements(),

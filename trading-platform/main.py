@@ -739,29 +739,8 @@ def _liveness_path() -> str:
     return f"{prefix}/liveness" if prefix else "/liveness"
 
 
-FOREX_AI_KILL_KEY_HEADER = "X-Forex-AI-Kill-Key"
-
-
-def _forex_ai_kill_key_ok(request: StarletteRequest) -> bool:
-    """DDG Control's narrow key: it opens ONLY the Forex AI kill-switch routes
-    (read state, turn AI off, turn AI back on), never the rest of the API.
-    Unset key = this path is closed."""
-    expected = os.getenv("FOREX_AI_KILL_KEY", "").strip()
-    supplied = request.headers.get(FOREX_AI_KILL_KEY_HEADER, "")
-    if not expected or not supplied:
-        return False
-    prefixes = {API_PREFIX.rstrip("/"), "/trading-api"}
-    allowed = {f"{p}/forex-ai/kill" for p in prefixes} | {f"{p}/forex-ai/kill/clear" for p in prefixes}
-    return (
-        request.url.path in allowed
-        and request.method in {"GET", "POST"}
-        and hmac.compare_digest(supplied, expected)
-    )
-
-
 class TradingAPIAuthMiddleware(BaseHTTPMiddleware):
-    """Require the shared API secret for every route except liveness health
-    (and the Forex AI kill-switch routes when DDG Control's narrow key is sent)."""
+    """Require the shared API secret for every route except liveness health."""
 
     async def dispatch(self, request: StarletteRequest, call_next) -> StarletteResponse:
         public_bench_catalog = (
@@ -771,7 +750,7 @@ class TradingAPIAuthMiddleware(BaseHTTPMiddleware):
         if (
             request.url.path in {_health_path(), _liveness_path()}
             or public_bench_catalog
-        ) or _forex_ai_kill_key_ok(request):
+        ):
             return await call_next(request)
 
         expected_secret = os.getenv("TRADING_API_SECRET", "").strip()

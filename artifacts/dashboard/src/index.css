@@ -2,7 +2,7 @@
 @import "tailwindcss";
 
 :root {
-  --dashboard-nature-image: url("/observatory-home-background.jpg");
+  --dashboard-nature-image: url("/platform-background.webp");
   --background: 220 22% 7%;
   --foreground: 210 22% 91%;
   --card: 220 20% 10%;
@@ -270,6 +270,14 @@
     @apply bg-background text-foreground font-sans antialiased selection:bg-primary/30;
     /* Force dark mode always for the trading terminal feel */
     color-scheme: dark;
+    background-color: #06131a;
+    background-image:
+      linear-gradient(rgba(7, 18, 30, 0.32), rgba(7, 18, 30, 0.42)),
+      var(--dashboard-nature-image);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
   }
 }
 

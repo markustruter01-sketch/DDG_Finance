@@ -38,7 +38,7 @@ const CRITICAL_QUERY_KEYS = [
 
 function StreamingLoader() {
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+    <div className="min-h-screen bg-transparent flex items-center justify-center">
       <div className="text-center">
         <div className="h-8 w-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-3" />
         <div className="text-xs text-muted-foreground font-mono">Loading Streaming View...</div>
@@ -77,7 +77,7 @@ function Router() {
 
 function AppCrashFallback() {
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center gap-6 text-center px-6">
+    <div className="min-h-screen bg-transparent flex flex-col items-center justify-center gap-6 text-center px-6">
       <div className="h-12 w-12 rounded-2xl bg-red-500/10 border border-red-500/30 flex items-center justify-center">
         <RefreshCw className="h-6 w-6 text-red-400" />
       </div>

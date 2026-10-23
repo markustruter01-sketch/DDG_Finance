@@ -147,7 +147,7 @@ export default function ControlsPage() {
   });
 
   return (
-    <main className="min-h-screen bg-slate-950 px-4 pb-32 pt-8 text-white">
+    <main className="min-h-screen bg-transparent px-4 pb-32 pt-8 text-white">
       <div className="mx-auto max-w-2xl space-y-5">
         <header className="flex items-center justify-between">
           <div className="flex items-center gap-2">

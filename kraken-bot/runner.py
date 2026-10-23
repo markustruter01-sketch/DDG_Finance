@@ -927,7 +927,12 @@ def _run_bot_loop(bot_id: str, module_name: str, fn_name: str):
                 if bot_id != "forex_ai":
                     _refresh_paused_portfolio(bot_id, profile)
             else:
-                cycle_fn(profile=profile, db_id=db_id)
+                if bot_id == "forex_ai":
+                    # Unpaused on the published runner: the only path where
+                    # Forex may place practice orders (FOREX_TRADING_ENABLED).
+                    cycle_fn(profile=profile, db_id=db_id, trading_allowed=True)
+                else:
+                    cycle_fn(profile=profile, db_id=db_id)
 
                 cycle_duration = time.time() - cycle_start
                 _update_status(bot_id, status="running",

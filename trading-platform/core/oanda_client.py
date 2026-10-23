@@ -220,6 +220,7 @@ class OandaClient:
             "ask": ask,
             "spread": ask - bid,
             "status": quote_data.get("status"),
+            "tradeable": quote_data.get("tradeable") is True,
             "time": quote_data.get("time"),
         }
 

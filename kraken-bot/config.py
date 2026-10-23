@@ -137,9 +137,13 @@ BOT_PROFILES = {
         # APPROVED: aggregate gross-exposure ceiling (registered plan item 4).
         "FOREX_MAX_GROSS":   FOREX_MAX_GROSS,
         # Phase 4 shadow council + ledger: ON (ledger table OK'd 10 Oct 17:50;
-        # line-up recorded in the registered plan; dry run passed 11 Oct). Shadow only:
-        # no order code exists. Set False to stop all AI calls.
+        # line-up recorded in the registered plan; dry run passed 11 Oct).
+        # Set False to stop all AI calls.
         "FOREX_COUNCIL_ENABLED": True,
+        # Phase 5 practice execution (forex_execution.py). Orders only when this
+        # is True AND the bot is unpaused in bots_state on the published runner.
+        # Markus (23 Oct 2026): trade on practice as soon as built and tested.
+        "FOREX_TRADING_ENABLED": True,
     },
 }
 

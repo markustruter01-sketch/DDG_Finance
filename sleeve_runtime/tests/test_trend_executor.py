@@ -45,6 +45,8 @@ class FakeEngine:
         self.fail_close: set[str] = set()
         self.fill_ratio: dict[str, float] = {}
         self.no_stop: set[str] = set()
+        self.stuck_stop: set[str] = set()          # stops whose cancel is never confirmed
+        self.unprefixed: set[str] = set()          # stops findable by order id only (Alpaca re-ids a replaced order)
         self._oid = 0
 
     # broker reads
@@ -100,6 +102,10 @@ class FakeEngine:
         return True
 
     def buy_market(self, symbol, shares):
+        # Like Alpaca: a market buy is always rejected while a sell stop for the symbol is open.
+        if symbol in self.stops:
+            self.orders.append(("buy_rejected_wash_trade", symbol, shares))
+            return None
         self._oid += 1
         filled = int(shares * self.fill_ratio.get(symbol, 1.0))
         cost = filled * self.px[symbol]
@@ -129,7 +135,16 @@ class FakeEngine:
         return "stop"
 
     def _find_owned_stop(self, bot_id, symbol, stop_order_id):
+        if symbol in self.unprefixed and not stop_order_id:
+            return None
         return self.stops.get(symbol)
+
+    def _cancel_owned_stop(self, bot_id, symbol, stop_order_id):
+        if symbol in self.stuck_stop:
+            return False
+        if self.stops.pop(symbol, None) is not None:
+            self.orders.append(("stop_cancelled", symbol))
+        return True
 
 
 def _legacy_engine(**kw):
@@ -324,3 +339,61 @@ def test_governor_refusal_blocks_buys_but_sells_still_run():
     assert "SGOV" in eng.pos                                          # nothing unparked to fund buys
     assert any("risk governor" in e for e in box["state"]["errors"]) and box["state"]["done"] is False
     assert eng.stops["SPY"][1] == round(LAST["SPY"] * 0.8, 2)         # held position still re-stopped
+
+
+# ── Top-ups: Alpaca rejects a market buy while that stock's sell stop is open ──
+
+def _held_with_stop(qty=15, stop=611.17, cash=20_000.0):
+    eng = FakeEngine({"SPY": qty}, cash, [{"symbol": "SPY", "qty": qty, "stop_price": stop, "stop_order_id": "s-SPY"}])
+    eng.stops = {"SPY": (qty, stop)}
+    return eng
+
+
+def test_top_up_lifts_the_stop_buys_and_re_protects_the_whole_position():
+    eng = _held_with_stop()
+    row = eng.rows["SPY"][0]
+    assert te._buy(eng, BOT, "SPY", 11, 600.0, eng.px["SPY"], row) is None
+    assert eng.orders.index(("stop_cancelled", "SPY")) < next(i for i, o in enumerate(eng.orders) if o[0] == "buy")
+    assert eng.pos["SPY"] == 26 and eng.stops["SPY"] == (26, 600.0)     # stop covers old + new shares
+    assert eng.rows["SPY"][0]["qty"] == 26
+
+
+def test_top_up_whose_stop_cannot_be_lifted_sends_no_buy_and_keeps_the_stop():
+    eng = _held_with_stop()
+    eng.stuck_stop = {"SPY"}
+    err = te._buy(eng, BOT, "SPY", 11, 600.0, eng.px["SPY"], eng.rows["SPY"][0])
+    assert err == "SPY: top-up skipped, its stop could not be lifted"
+    assert not any(o[0] == "buy" for o in eng.orders) and eng.stops["SPY"] == (15, 611.17)
+
+
+def test_failed_top_up_still_puts_the_stop_back():
+    eng = _held_with_stop(cash=10.0)          # no cash for even one share
+    err = te._buy(eng, BOT, "SPY", 11, 600.0, eng.px["SPY"], eng.rows["SPY"][0])
+    assert err == "SPY: no cash for even one share"
+    assert eng.stops["SPY"] == (15, 600.0) and eng.pos["SPY"] == 15
+
+
+def test_top_up_that_crashes_mid_buy_still_puts_the_stop_back():
+    eng = _held_with_stop()
+    def boom(*a, **k):
+        raise RuntimeError("broker down")
+    eng.poll_entry_order = boom
+    with pytest.raises(RuntimeError):
+        te._buy(eng, BOT, "SPY", 11, 600.0, eng.px["SPY"], eng.rows["SPY"][0])
+    assert eng.stops["SPY"][0] == eng.pos["SPY"] >= 15                 # whatever is held is covered
+
+
+def test_new_position_never_touches_stops_before_buying():
+    eng = FakeEngine({}, 20_000.0, [])
+    assert te._buy(eng, BOT, "GLD", 10, 80.0, eng.px["GLD"], None) is None
+    assert ("stop_cancelled", "GLD") not in eng.orders and eng.stops["GLD"] == (10, 80.0)
+
+
+def test_a_replaced_stop_found_by_its_order_id_is_not_reported_unprotected():
+    # 23 Oct: SPY's stop was replaced (new client_order_id, no owner prefix) and step 3,
+    # searching by prefix only, raised "positions without a protective stop: ['SPY']".
+    eng = _legacy_engine()
+    eng.unprefixed = set(UP) | {"SPY"}
+    out, box = _run(eng)
+    assert out["status"] == "rebalanced", box
+    assert box["alerts"] == [] and all(eng.stops[s][0] == int(eng.pos[s]) for s in UP)

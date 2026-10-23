@@ -44,6 +44,8 @@ class FakeCursor:
         elif s.startswith("UPDATE bots_state"):
             self.rowcount = 0 if self.db.forex_paused == "missing" else 1
             self.db.pending_forex_paused = True
+        elif s.startswith("SELECT id FROM system_degradations"):
+            self._fetch = [(i,) for i in sorted(self.db.false_spy_rows)]
         elif s.startswith("UPDATE system_degradations"):
             self.rowcount = self.db.update_rowcounts.pop(0) if self.db.update_rowcounts else 0
         else:
@@ -58,7 +60,8 @@ class FakeCursor:
 
 class FakeDB:
     def __init__(self, ratchet=None, applied=(), update_rowcounts=None, forex_paused=True,
-                 stale_reason_bots=("bot2_spy_qqq", "jerome_macro")):
+                 stale_reason_bots=("bot2_spy_qqq", "jerome_macro"), false_spy_rows=(8912, 8915, 8918)):
+        self.false_spy_rows = set(false_spy_rows)
         self.stale_reason_bots = set(stale_reason_bots)
         self.pending_cleared = set()
         self.forex_paused = forex_paused
@@ -114,7 +117,7 @@ def test_skips_everything_outside_production():
 
 
 def test_applies_all_once_in_production():
-    db = FakeDB(update_rowcounts=[330, 13, 14, 68, 33, 1, 1])
+    db = FakeDB(update_rowcounts=[330, 13, 14, 68, 33, 1, 1, 3, 40])
     out = _run(db)
     assert set(out.values()) == {"applied"}
     assert db.ratchet == {}
@@ -228,3 +231,35 @@ def test_m004_guard_fails_when_another_running_bot_has_a_reason():
 def test_m004_guard_fails_when_already_clean():
     db = FakeDB(stale_reason_bots=())
     assert _m004(db)[M004] == "guard-failed"
+
+
+M005 = "2026-10-24-005-resolve-false-spy-stop-alerts"
+
+
+def _m005(db):
+    only = tuple(x for x in m.MIGRATIONS if x.id == M005)
+    return m.apply_pending_migrations(db.get_conn, migrations=only, is_production=lambda: True)
+
+
+def test_m005_resolves_exactly_the_three_rows_and_the_meta_rows():
+    db = FakeDB(update_rowcounts=[3, 40])
+    assert _m005(db)[M005] == "applied"
+    first = next(p for sql, p in db.log if sql.startswith("UPDATE system_degradations"))
+    assert first[1] == [8912, 8915, 8918]
+
+
+def test_m005_guard_fails_when_a_row_is_already_resolved_or_different():
+    db = FakeDB(false_spy_rows=(8912, 8915), update_rowcounts=[3, 40])
+    assert _m005(db)[M005] == "guard-failed"
+    assert not any(sql.startswith("UPDATE system_degradations") for sql, _ in db.log)
+
+
+def test_m005_guard_fails_when_too_many_meta_rows():
+    db = FakeDB(update_rowcounts=[3, 501])
+    assert _m005(db)[M005] == "guard-failed" and M005 not in db.applied
+
+
+def test_m005_skipped_outside_production():
+    db = FakeDB()
+    only = tuple(x for x in m.MIGRATIONS if x.id == M005)
+    assert m.apply_pending_migrations(db.get_conn, migrations=only, is_production=lambda: False)[M005] == "skipped-not-production"

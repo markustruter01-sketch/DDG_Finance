@@ -216,6 +216,53 @@ def _m004_clear_stale_pause_reasons(cur) -> dict:
     return {"cleared": sorted(_STALE_REASON_BOTS), "count": cur.rowcount}
 
 
+# ── 2026-10-24-005: resolve the three false "SPY unprotected" alerts ─────────
+# Read-only on 2026-10-23 ~21:50 UTC: rows 8912, 8915, 8918 (oracle,
+# gear_v1_g4_rebalance) say SPY had no protective stop. At Alpaca SPY is
+# covered: stop ae696f8c (15 sh @ 611.17, the ledger's stop_order_id), a
+# replacement order whose client_order_id lost the owner prefix, so the
+# prefix-only check missed it. Fixed in the same deploy (check by order id).
+# The invariant's own meta rows are resolved too: it re-fires if anything
+# real remains. Approved by Markus 24 Oct 2026.
+
+_FALSE_SPY_ALERT_IDS = (8912, 8915, 8918)
+_M005_REASON = (
+    "migration 2026-10-24-005: false alarm, SPY was protected by replaced stop "
+    "ae696f8c (15 @ 611.17); prefix-only check missed it (fixed same deploy)"
+)
+_M005_MAX_META_ROWS = 500
+
+
+def _m005_resolve_false_spy_stop_alerts(cur) -> dict:
+    ids = list(_FALSE_SPY_ALERT_IDS)
+    cur.execute(
+        "SELECT id FROM system_degradations WHERE id = ANY(%s) AND resolved_at IS NULL "
+        "AND bot_id = 'oracle' AND error_type = 'gear_v1_g4_rebalance' "
+        "AND message LIKE %s FOR UPDATE",
+        (ids, "%without a protective stop%SPY%"),
+    )
+    found = sorted(row[0] for row in cur.fetchall())
+    if found != ids:
+        raise MigrationGuardError(f"expected open rows {ids}, found {found}")
+    cur.execute(
+        "UPDATE system_degradations SET resolved_at = NOW(), resolved_reason = %s "
+        "WHERE resolved_at IS NULL AND id = ANY(%s)",
+        (_M005_REASON, ids),
+    )
+    if cur.rowcount != len(ids):
+        raise MigrationGuardError(f"expected to resolve {len(ids)} rows, resolved {cur.rowcount}")
+    cur.execute(
+        "UPDATE system_degradations SET resolved_at = NOW(), resolved_reason = %s "
+        "WHERE resolved_at IS NULL "
+        "AND error_type = 'zero_unresolved_high_severity_degradations'",
+        (_M005_REASON,),
+    )
+    meta = cur.rowcount
+    if meta > _M005_MAX_META_ROWS:
+        raise MigrationGuardError(f"would resolve {meta} invariant rows, above {_M005_MAX_META_ROWS}")
+    return {"resolved": ids, "invariant_rows": meta}
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(
         id="2026-10-15-001-resolve-stale-degradations",
@@ -236,6 +283,11 @@ MIGRATIONS: tuple[Migration, ...] = (
         id="2026-10-16-004-clear-stale-pause-reasons",
         description="Clear old pause reasons on bots that are running",
         apply=_m004_clear_stale_pause_reasons,
+    ),
+    Migration(
+        id="2026-10-24-005-resolve-false-spy-stop-alerts",
+        description="Resolve the 3 false 'SPY without a protective stop' alerts (and the invariant's meta rows)",
+        apply=_m005_resolve_false_spy_stop_alerts,
     ),
 )
 

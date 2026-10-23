@@ -118,7 +118,27 @@ def _buy(engine, bot_id: str, sym: str, qty: int, stop: float, ref_price: float,
          row: dict | None) -> str | None:
     """One market buy; records the fill. Returns an error string or None.
     Never sends a buy the cash in the account cannot pay for, even if the
-    price opened above the last close (no borrowing, ever)."""
+    price opened above the last close (no borrowing, ever).
+
+    Top-up of a held symbol: Alpaca always rejects a market buy while a sell
+    stop for the same symbol is open (wash-trade protection, see
+    docs.alpaca.markets/us/docs/user-protection). So the stop is lifted
+    (cancel confirmed) first, and put back for the whole position right after,
+    whatever happened to the buy. If the stop can't be lifted, no buy."""
+    lifted = False
+    if row is not None:
+        if not engine._cancel_owned_stop(bot_id, sym, row.get("stop_order_id")):
+            return f"{sym}: top-up skipped, its stop could not be lifted"
+        lifted = True
+    try:
+        return _market_buy(engine, bot_id, sym, qty, stop, ref_price, row)
+    finally:
+        # Protect at once (the lifted stop is gone, so never pass its id); step 3 re-checks every holding.
+        engine.ensure_protective_stop(bot_id, sym, stop, None if lifted else (row or {}).get("stop_order_id"))
+
+
+def _market_buy(engine, bot_id: str, sym: str, qty: int, stop: float, ref_price: float,
+                row: dict | None) -> str | None:
     affordable = int(float(engine.get_account()["cash"]) // (ref_price * (1 + GAP_ALLOWANCE)))
     if affordable < qty:
         if affordable < 1:
@@ -146,8 +166,6 @@ def _buy(engine, bot_id: str, sym: str, qty: int, stop: float, ref_price: float,
     else:
         avg = float(live["entry_price"]) if live else price
         ok = engine.record_resize(bot_id, sym, filled, broker_qty, avg)
-    # Protect at once; step 3 re-checks every holding.
-    engine.ensure_protective_stop(bot_id, sym, stop, (row or {}).get("stop_order_id"))
     notes = [n for n in (qty_note,
                          None if ok else f"{sym}: filled {filled} but ledger write failed",
                          f"{sym}: partial fill {filled}/{qty}" if filled < qty else None) if n]

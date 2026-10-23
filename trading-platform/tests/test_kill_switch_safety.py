@@ -274,7 +274,7 @@ def test_mismatch_must_persist_for_two_checks():
 
 
 def test_fleet_drawdown_trigger():
-    snapshot = {"accounts": [], "fleet_equity": 84, "fleet_hwm": 100}
+    snapshot = {"accounts": [], "fleet_equity": 74, "fleet_hwm": 100}
     assert ks.evaluate_snapshot(snapshot, now=100)[0]["trigger"] == "fleet_drawdown"
 
 
@@ -297,7 +297,7 @@ def test_zero_fleet_equity_triggers_fail_closed():
 
 
 def test_valid_fleet_equity_below_high_water_mark_triggers_drawdown():
-    snapshot = {"accounts": [], "fleet_equity": 84, "fleet_hwm": 100}
+    snapshot = {"accounts": [], "fleet_equity": 74, "fleet_hwm": 100}
 
     triggers = ks.evaluate_snapshot(snapshot, now=100)
     trigger_names = {trigger["trigger"] for trigger in triggers}

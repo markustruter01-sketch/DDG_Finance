@@ -21,6 +21,7 @@ from core.symbols import canonical_symbol, same_symbol
 from core.cash_park import is_cash_park
 from core.bot_config import load_bot_profiles
 from core.bot_registry import active_bot_ids
+from core.risk_limits import HARD_DRAWDOWN
 
 DUST_QTY = 1e-6
 # Alpaca only accepts whole-share GTC stops on equities
@@ -595,7 +596,7 @@ def evaluate_snapshot(snapshot: dict[str, Any], now: float | None = None) -> lis
         })
     else:
         hwm = float(raw_fleet_hwm or current)
-        threshold = float(getattr(settings, "kill_switch_drawdown_pct", 0.15))
+        threshold = HARD_DRAWDOWN
         if hwm > 0 and (hwm - current) / hwm > threshold:
             triggers.append({
                 "trigger": "fleet_drawdown",

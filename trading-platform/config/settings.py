@@ -32,10 +32,7 @@ class Settings(BaseSettings):
         default=0.75,
         description="Minimum LLM conviction score (0-1) required to place a trade",
     )
-    kill_switch_drawdown_pct: float = Field(
-        default=0.15,
-        description="Fleet drawdown fraction from high-water mark that triggers the kill switch",
-    )
+    # Fleet drawdown limits live in core/risk_limits.py (one definition).
     kill_switch_missing_stop_seconds: float = Field(default=60.0)
     kill_switch_check_interval_minutes: int = Field(default=5)
     kill_switch_portfolio_stale_hours: float = Field(default=2.0)

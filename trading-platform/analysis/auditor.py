@@ -595,7 +595,8 @@ def check_phantom_drawdown() -> AuditFinding:
     tripped       = ks_state.get("tripped", False)
     drawdown_pct  = float(ks_state.get("drawdown_pct") or 0.0)
     opening_eq    = ks_state.get("opening_equity")
-    threshold     = float(settings.kill_switch_drawdown_pct)
+    from core.risk_limits import HARD_DRAWDOWN
+    threshold     = HARD_DRAWDOWN
 
     flags:   list[str] = []
     details: dict      = {

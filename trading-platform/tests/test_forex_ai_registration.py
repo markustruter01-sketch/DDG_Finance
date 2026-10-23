@@ -231,6 +231,7 @@ def test_forex_cycle_only_reads_account_and_open_positions_and_writes_usd_state(
     )
     sheet = result.pop("signal_sheet")
     assert result.pop("council") == "disabled"
+    assert result.pop("execution") == "trading off"
     assert result == {
         "bot_id": "forex_ai",
         "currency": "USD",
@@ -259,6 +260,25 @@ def test_forex_cycle_only_reads_account_and_open_positions_and_writes_usd_state(
             "positions": client.positions,
         },
     )
+
+
+@pytest.mark.parametrize(
+    ("trading_allowed", "enabled", "executes"),
+    [(False, True, False), (True, False, False), (True, True, True)],
+)
+def test_forex_orders_need_both_the_runner_and_the_profile_switch(
+    monkeypatch, forex_strategy, trading_allowed, enabled, executes
+):
+    calls, beats = [], []
+    monkeypatch.setattr(forex_strategy, "write_heartbeat", lambda *a, **k: beats.append(k["status"]))
+    monkeypatch.setattr(forex_strategy, "write_portfolio", lambda *a, **k: None)
+    monkeypatch.setattr(forex_strategy, "_maybe_execute", lambda *a: calls.append(a) or "executed")
+    result = forex_strategy.run_forex_cycle(
+        profile={"FOREX_TRADING_ENABLED": enabled, "FOREX_MAX_GROSS": 2.0},
+        client_factory=lambda: _ReadOnlyOanda(), trading_allowed=trading_allowed)
+    assert bool(calls) is executes
+    assert result["execution"] == ("executed" if executes else "trading off")
+    assert beats == ["running" if executes else "paused"]
 
 
 @pytest.mark.parametrize(

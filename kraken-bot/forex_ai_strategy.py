@@ -1,4 +1,5 @@
-"""Paused, read-only OANDA account monitor for Forex AI."""
+"""Forex AI cycle: OANDA account monitor, daily AI council, and (Phase 5)
+practice-account execution when the bot is unpaused and trading is enabled."""
 
 from __future__ import annotations
 
@@ -145,19 +146,55 @@ def _maybe_run_weekly_audit(*, now=None, get_conn=None) -> str:
         return f"failed: {type(exc).__name__}"
 
 
+def _maybe_execute(sheet: dict[str, Any], factory: Callable[[], Any], max_gross: float) -> str:
+    """Phase 5: carry out the day's decision on the practice account. Only
+    called when the runner says this bot may trade (unpaused, published) and
+    FOREX_TRADING_ENABLED is on. Never raises."""
+    try:
+        from core.forex_ai_kill import ai_kill_state
+        from core.kill_switch import latch_tripped, read_oanda_account_snapshot
+        from core.oanda_trader import OandaTrader
+        from db.postgres import get_conn
+        from forex_execution import PgForexStore, run_forex_execution
+
+        if latch_tripped():
+            return "kill switch tripped: no trading"
+        killed = ai_kill_state()
+        if killed["on"]:
+            return f"ai kill switch on: no trading ({killed['reason'] or 'no reason given'})"
+        with factory() as reader, OandaTrader() as trader:
+            report = run_forex_execution(
+                reader=reader, trader=trader, store=PgForexStore(get_conn),
+                snapshot=read_oanda_account_snapshot, sheet_rows=sheet["rows"],
+                max_gross=max_gross)
+        status = str(report.get("status"))
+        if status.startswith("failed") or report.get("errors"):
+            from core.degradation_tracker import record_degradation
+            critical = status.startswith("failed") or any("CRITICAL" in e for e in report.get("errors", []))
+            record_degradation(
+                component="forex_execution", severity="critical" if critical else "error",
+                error_type="forex_execution", message=f"Forex execution: {status}"[:300],
+                detail=json.dumps(report.get("errors") or report, default=str)[:1500], bot_id=BOT_ID)
+        return status
+    except Exception as exc:
+        return f"failed: {type(exc).__name__}"
+
+
 def run_forex_cycle(
     *,
     profile: dict[str, Any] | None = None,
     db_id: int | None = None,
     client_factory: Callable[[], Any] | None = None,
+    trading_allowed: bool = False,
 ) -> dict[str, Any]:
     """Read USD account NAV and open positions, persist portfolio health, build
-    the quant desk's signal sheet, and (only when FOREX_COUNCIL_ENABLED) run the
-    once-a-day shadow AI council into the append-only ledger.
-
-    This strategy intentionally has no order, trade, or position mutation path.
+    the quant desk's signal sheet, run the once-a-day AI council into the
+    append-only ledger (FOREX_COUNCIL_ENABLED), and, only when the runner
+    passes trading_allowed (bot unpaused, published runner) AND the profile sets
+    FOREX_TRADING_ENABLED, execute the day's decision on the practice account.
     """
     del db_id
+    trading = bool(trading_allowed and (profile or {}).get("FOREX_TRADING_ENABLED", False))
     council_enabled = bool((profile or {}).get("FOREX_COUNCIL_ENABLED", False))
     factory = client_factory or OandaClient
     with factory() as client:
@@ -181,7 +218,7 @@ def run_forex_cycle(
         equity=equity,
         cash=cash,
         positions=len(positions),
-        status="paused",
+        status="running" if trading else "paused",
     )
     write_portfolio(BOT_ID, cash=cash, equity=equity, positions=positions)
     for row in sheet["rows"]:
@@ -201,9 +238,13 @@ def run_forex_cycle(
         run_shadow_council(sheet, positions) if council_enabled else "disabled"
     )
     if council_enabled:
-        logger.info(f"FOREX council (shadow) | {council_status}")
+        logger.info(f"FOREX council | {council_status}")
         _maybe_log_weekly_scorecard(factory)
         _maybe_run_weekly_audit()
+    execution_status = "trading off"
+    if trading:
+        execution_status = _maybe_execute(sheet, factory, float((profile or {}).get("FOREX_MAX_GROSS", 2.0)))
+        logger.info(f"FOREX execution | {execution_status}")
     return {
         "bot_id": BOT_ID,
         "currency": "USD",
@@ -212,4 +253,5 @@ def run_forex_cycle(
         "open_positions": len(positions),
         "signal_sheet": sheet,
         "council": council_status,
+        "execution": execution_status,
     }

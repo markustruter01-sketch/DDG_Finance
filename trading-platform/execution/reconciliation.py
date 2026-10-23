@@ -997,7 +997,13 @@ def run_kill_switch_check(report_only: bool = True) -> dict[str, Any]:
         account["deployment_acknowledged"] = (
             f"deployment:{account['bot_id']}" in acknowledgements
         )
+    from core.risk_limits import ENFORCE_DRAWDOWN_LIMITS
+    from core.risk_shadow import record_drawdown_episodes
+    record_drawdown_episodes(snapshot)
     flags = evaluate_snapshot(snapshot)
+    if not ENFORCE_DRAWDOWN_LIMITS:
+        # Record-only drawdown limits (core/risk_limits.py): never trip on them.
+        flags = [f for f in flags if f.get("trigger") != "fleet_drawdown"]
     if report_only or not flags:
         return report(snapshot)
     return trip(flags, snapshot)

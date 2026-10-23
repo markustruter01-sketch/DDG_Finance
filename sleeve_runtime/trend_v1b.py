@@ -96,13 +96,14 @@ class TrendPlan:
     price_day: date
     prices: dict[str, float | None]
     fractional: dict[str, float] = field(default_factory=dict)
+    registration: str = REGISTRATION
 
     def stop_for(self, symbol: str) -> float | None:
         return next((a.stop for a in self.plan.stops if a.symbol == symbol), None)
 
     def summary(self, cap: SleeveCapital | None = None) -> dict[str, Any]:
         out = {
-            "registration": REGISTRATION,
+            "registration": self.registration,
             "signal_day": self.signal_day.isoformat(),
             "price_day": self.price_day.isoformat(),
             "weights": {s: round(w, 4) for s, w in sorted(self.weights.items())},
@@ -142,7 +143,26 @@ def compute_plan(
     view = HistoryView({s: bars[s] for s in UNIVERSE if bars.get(s)})
     view.today = signal_day
     weights = target_weights(view, UNIVERSE, PARAMS)
+    return plan_from_weights(weights=weights, bars=bars, positions=positions, equity=equity,
+                             cash=cash, signal_day=signal_day, price_day=price_day,
+                             frozen=frozen, stop_pct=STOP_PCT, registration=REGISTRATION)
 
+
+def plan_from_weights(
+    *,
+    weights: dict[str, float],
+    bars: dict[str, list[dict[str, Any]]],
+    positions: dict[str, float],
+    equity: float,
+    cash: float,
+    signal_day: date,
+    price_day: date,
+    frozen: dict[str, str] | None,
+    stop_pct: float,
+    registration: str,
+) -> TrendPlan:
+    """Shared by every live sleeve: whole-share plan and stops from the
+    latest bar day's closes, for the given target weights."""
     whole = {s: float(math.floor(q + 1e-9)) for s, q in positions.items()}
     fractional = {s: q - whole[s] for s, q in positions.items() if q - whole[s] > DUST_QTY}
     prices: dict[str, float | None] = {}
@@ -151,9 +171,9 @@ def compute_plan(
         prices[s] = series[-1]["close"] if series and series[-1]["day"] == price_day else None
     plan = plan_rebalance(weights=weights, equity=equity, cash=cash,
                           positions={s: q for s, q in whole.items() if q > 0},
-                          prices=prices, stop_pct=STOP_PCT, cash_buffer_pct=CASH_BUFFER_PCT,
+                          prices=prices, stop_pct=stop_pct, cash_buffer_pct=CASH_BUFFER_PCT,
                           frozen=frozen)
-    return TrendPlan(plan, weights, signal_day, price_day, prices, fractional)
+    return TrendPlan(plan, weights, signal_day, price_day, prices, fractional, registration)
 
 
 def alpaca_bar_fetcher(api) -> BarFetcher:

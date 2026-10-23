@@ -469,6 +469,37 @@ def _run_trend_sleeve(engine, live_positions: list[dict]) -> None:
     logger.info(f"Asia | TREND-V1-B live cycle | {result['status']}")
 
 
+def _run_gear_sleeve(engine, live_positions: list[dict]) -> None:
+    """GEAR_SLEEVE_LIVE: GEAR-V1-G4 owns this account (Markus, 23 Oct 2026).
+    Replaces the legacy exits/entries entirely; same wiring as the trend sleeve."""
+    from core import bot_state
+    from core.degradation_tracker import record_degradation
+    from core.kill_switch import latch_tripped
+    from core.risk_governor import new_risk_check
+    from sgov_parking import park_idle_cash, unpark_for_entry
+    from sleeve_runtime.gear_live import STATE_KEY, run_gear_cycle
+    from sleeve_runtime.trend_v1b import alpaca_bar_fetcher
+
+    vault, parked = _sleeve_exclusions(live_positions)
+    result = run_gear_cycle(
+        engine,
+        bot_id=BOT_ID,
+        fetch_bars=alpaca_bar_fetcher(engine.api),
+        vault=vault,
+        cash_park=parked,
+        read_state=lambda: (bot_state.read_metadata(BOT_ID) or {}).get(STATE_KEY, {}),
+        write_state=lambda st: bot_state.merge_metadata(BOT_ID, {STATE_KEY: st}),
+        kill_tripped=latch_tripped,
+        unpark=lambda e, live: unpark_for_entry(e, "GearG4", live),
+        park=lambda e, live, cash: park_idle_cash(e, "GearG4", live, cash),
+        alert=lambda severity, msg: record_degradation(
+            component=BOT_ID, severity=severity, error_type="gear_v1_g4_rebalance",
+            message=msg[:500], bot_id=BOT_ID),
+        risk_check=new_risk_check,
+    )
+    logger.info(f"Asia | GEAR-V1-G4 live cycle | {result['status']}")
+
+
 # ── Main cycle ─────────────────────────────────────────────────────────────────
 
 def run_asia_cycle(profile: dict, db_id: int) -> None:
@@ -513,6 +544,9 @@ def run_asia_cycle(profile: dict, db_id: int) -> None:
         f"Asia | Positions: {len(live_positions)} live, {len(db_positions)} in DB"
     )
 
+    if profile.get("GEAR_SLEEVE_LIVE", False):
+        _run_gear_sleeve(engine, live_positions)
+        return
     if profile.get("TREND_SLEEVE_LIVE", False):
         _run_trend_sleeve(engine, live_positions)
         return

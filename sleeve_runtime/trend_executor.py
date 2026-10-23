@@ -164,16 +164,21 @@ def execute_rebalance(
     cash_park: set[str],
     unpark: Callable[[Any, list[dict[str, Any]]], Any],
     risk_check: Callable[[], dict[str, Any]],
+    plan_fn: Callable[..., Any] = compute_plan,
+    registration: str = REGISTRATION,
+    exit_reason: str = EXIT_REASON,
 ) -> dict[str, Any]:
     """Carry out one rebalance. Returns a report; never leaves a holding
-    without a stop attempt. Raises only on a failure before any order."""
+    without a stop attempt. Raises only on a failure before any order.
+    plan_fn/registration/exit_reason let another sleeve (GEAR-V1-G4) reuse
+    the same order machinery with its own targets."""
     errors: list[str] = []
 
     # 1. Sells
     live, rows, cap = _fresh(engine, bot_id, vault, cash_park)
     by_row = {r["symbol"]: r for r in rows}
-    tp = compute_plan(bars=bars, positions=cap.held, equity=cap.equity, cash=cap.cash,
-                      signal_day=signal_day, frozen=ledger_frozen(rows, cap.held))
+    tp = plan_fn(bars=bars, positions=cap.held, equity=cap.equity, cash=cap.cash,
+                 signal_day=signal_day, frozen=ledger_frozen(rows, cap.held))
     first = tp.summary(cap)
     for o in tp.plan.sells:
         row = by_row.get(o.symbol) or {}
@@ -181,7 +186,7 @@ def execute_rebalance(
             pnl = next((p.get("unrealised_pnl_usd") for p in live if p["symbol"] == o.symbol), None)
             if engine.close_position(o.symbol, bot_id=bot_id, stop_order_id=row.get("stop_order_id"),
                                      stop_price=row.get("stop_price")):
-                engine.record_close(bot_id, o.symbol, EXIT_REASON, pnl)
+                engine.record_close(bot_id, o.symbol, exit_reason, pnl)
             else:
                 errors.append(f"{o.symbol}: full exit not confirmed")
         elif not engine.close_partial(o.symbol, o.qty, bot_id=bot_id,
@@ -201,8 +206,8 @@ def execute_rebalance(
         unpark(engine, live)
     live, rows, cap = _fresh(engine, bot_id, vault, cash_park)
     by_row = {r["symbol"]: r for r in rows}
-    tp2 = compute_plan(bars=bars, positions=cap.held, equity=cap.equity, cash=cap.broker_cash,
-                       signal_day=signal_day, frozen=ledger_frozen(rows, cap.held))
+    tp2 = plan_fn(bars=bars, positions=cap.held, equity=cap.equity, cash=cap.broker_cash,
+                  signal_day=signal_day, frozen=ledger_frozen(rows, cap.held))
     for o in (tp2.plan.buys if risk["allowed"] else []):
         err = _buy(engine, bot_id, o.symbol, o.qty, tp2.stop_for(o.symbol),
                    tp2.prices[o.symbol], by_row.get(o.symbol))
@@ -223,7 +228,7 @@ def execute_rebalance(
     if unprotected:
         errors.append(f"NO PROTECTIVE STOP: {unprotected}")
 
-    return {"registration": REGISTRATION, "plan": first, "errors": errors,
+    return {"registration": registration, "plan": first, "errors": errors,
             "unprotected": unprotected, "done": not errors}
 
 

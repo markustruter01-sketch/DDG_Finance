@@ -41,7 +41,7 @@ def test_clean_account_has_no_flags():
     [
         ({"cash": -1.0}, "negative_cash"),
         ({"long_market_value": 101.0}, "leverage"),
-        ({"long_market_value": 86.0}, "deployment"),
+        ({"long_market_value": 86.0, "max_deployment": 0.80}, "deployment"),
     ],
 )
 def test_account_triggers(changes, expected):

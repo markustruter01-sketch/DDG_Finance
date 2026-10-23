@@ -30,7 +30,7 @@ BOT_PROFILES = {
         "display_name":      "Global ETF Trend",
         "db_id":             5,
         "strategy_type":     "etf_trend_global",
-        "strategy_label":    "Global ETF Trend (US + Asia-Pacific + Emerging Markets)",
+        "strategy_label":    "Gearbox G4: SPY/QQQ + 2x when calm, T-bills below SPY's 200-day average",
         # ── Alpaca account (oracle's dedicated paper account) ──────────────────
         "ALPACA_API_KEY":    os.environ.get("ALPACA_API_KEY", ""),
         "ALPACA_SECRET_KEY": os.environ.get("ALPACA_SECRET_KEY", ""),
@@ -54,10 +54,14 @@ BOT_PROFILES = {
         "TP1_PCT":           0.06,
         "TP2_PCT":           0.12,
         "MIN_HOLD_DAYS":     5,
-        "MAX_DEPLOYMENT":    0.80,
-        # TREND-V1-B cutover switch (sleeve_runtime/trend_executor.py). Off =
-        # legacy Atlas strategy. Turning it on needs Markus's OK and, in the
-        # same change, MAX_DEPLOYMENT 1.00 (the sleeve can invest ~99%).
+        # GEAR-V1-G4 can invest ~99% of sleeve equity (1% cash buffer); the
+        # kill switch's deployment check must allow it.
+        "MAX_DEPLOYMENT":    1.00,
+        # GEAR-V1-G4 owns this account (sleeve_runtime/gear_live.py), by
+        # Markus's decision 23 Oct 2026; legacy Atlas logic is off.
+        # Rollback: set False (and MAX_DEPLOYMENT back to 0.80) and publish.
+        "GEAR_SLEEVE_LIVE":  True,
+        # TREND-V1-B cutover: cancelled 23 Oct 2026 (G4 took the account).
         "TREND_SLEEVE_LIVE": False,
     },
     "jerome_macro": {

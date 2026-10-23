@@ -173,3 +173,18 @@ volatility 20.33%, Sharpe excess T-bills 0.76, 60 round trips, 1 stop hit,
 (2) >= 10.5% PASS; (3) smaller drawdown than SPY FAIL (equal at the reported
 precision). Verdict: FAIL. No variant is tried. Next (Claude's
 recommendation to Markus): forward shadow test with no orders.
+
+## Decision: G4 goes live in Atlas's account (23 Oct 2026, 09:43 Brisbane)
+Markus decided to run G4 despite the held-out FAIL on bar 3 ("fuck my rule
+about a smaller fall"), exactly as tested (he declined the faster-exit idea
+after Claude explained it could not be tested honestly: the held-out window is
+spent), in Atlas's (oracle's) paper account. The TREND-V1-B cutover planned
+for that account is cancelled (PR #19 closed unmerged).
+- This is an operator decision, not a pass: the ledger entry stays FAIL. G4's
+  only out-of-sample evidence is the one held-out run above (worst fall equal
+  to SPY's, at 1.5x exposure in calm markets).
+- Live rules = the registered candidate (sleeve_runtime/gear_live.py), with
+  two live necessities: a 1% cash buffer, and orders on the first hourly
+  cycle while the market is open rather than exactly at the open.
+- The forward shadow (sleeve_runtime/gear_shadow.py) keeps running as the
+  clean replay of the registered rules to compare the live account against.

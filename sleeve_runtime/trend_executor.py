@@ -240,8 +240,11 @@ def execute_rebalance(
         stop = tp2.stop_for(sym)
         if stop is None or sym in tp2.plan.skipped:
             continue   # frozen or unpriced: its existing stop is left as it was
-        engine.ensure_protective_stop(bot_id, sym, stop, (by_row.get(sym) or {}).get("stop_order_id"))
-        if qty >= 1 and engine._find_owned_stop(bot_id, sym, None) is None:
+        recorded = (by_row.get(sym) or {}).get("stop_order_id")
+        sid = engine.ensure_protective_stop(bot_id, sym, stop, recorded)
+        # Check by order id: a stop Alpaca has replaced gets a new client_order_id, so the
+        # owner-prefix search alone misses it (the false "SPY unprotected" alerts of 23 Oct).
+        if qty >= 1 and engine._find_owned_stop(bot_id, sym, sid or recorded) is None:
             unprotected.append(sym)
     if unprotected:
         errors.append(f"NO PROTECTIVE STOP: {unprotected}")

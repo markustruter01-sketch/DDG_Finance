@@ -46,6 +46,7 @@ class FakeEngine:
         self.fill_ratio: dict[str, float] = {}
         self.no_stop: set[str] = set()
         self.stuck_stop: set[str] = set()          # stops whose cancel is never confirmed
+        self.unprefixed: set[str] = set()          # stops findable by order id only (Alpaca re-ids a replaced order)
         self._oid = 0
 
     # broker reads
@@ -134,6 +135,8 @@ class FakeEngine:
         return "stop"
 
     def _find_owned_stop(self, bot_id, symbol, stop_order_id):
+        if symbol in self.unprefixed and not stop_order_id:
+            return None
         return self.stops.get(symbol)
 
     def _cancel_owned_stop(self, bot_id, symbol, stop_order_id):
@@ -384,3 +387,13 @@ def test_new_position_never_touches_stops_before_buying():
     eng = FakeEngine({}, 20_000.0, [])
     assert te._buy(eng, BOT, "GLD", 10, 80.0, eng.px["GLD"], None) is None
     assert ("stop_cancelled", "GLD") not in eng.orders and eng.stops["GLD"] == (10, 80.0)
+
+
+def test_a_replaced_stop_found_by_its_order_id_is_not_reported_unprotected():
+    # 23 Oct: SPY's stop was replaced (new client_order_id, no owner prefix) and step 3,
+    # searching by prefix only, raised "positions without a protective stop: ['SPY']".
+    eng = _legacy_engine()
+    eng.unprefixed = set(UP) | {"SPY"}
+    out, box = _run(eng)
+    assert out["status"] == "rebalanced", box
+    assert box["alerts"] == [] and all(eng.stops[s][0] == int(eng.pos[s]) for s in UP)

@@ -11,7 +11,15 @@
   min-height: 0 !important;
   overflow: hidden !important;
 }
-.strategy-catalog-page .bench-content { height: 100dvh; min-height: 0 !important; padding-bottom: 0 !important; display: flex; flex-direction: column; }
+.strategy-catalog-page::after {
+  background-image: linear-gradient(135deg, rgba(34, 49, 41, .38), rgba(31, 43, 37, .28)), url("/__mockup/images/platform-background.webp") !important;
+  background-size: cover;
+  background-position: center;
+}
+.strategy-catalog-page::before {
+  background: linear-gradient(180deg, rgba(240, 243, 233, .08), rgba(38, 55, 45, .12)) !important;
+}
+.strategy-catalog-page .bench-content { position: absolute; inset: 0 0 0 218px; width: auto; height: 100dvh; min-height: 0 !important; margin: 0; padding-bottom: 0 !important; display: flex; flex-direction: column; }
 .strategy-catalog-page .bench-rail { padding-bottom: 22px; }
 .strategy-catalog-page .bench-topbar.archive-topbar { flex: 0 0 88px; min-height: 88px; padding: 15px 26px; background: rgba(247,249,241,.3); }
 .strategy-catalog-page .bench-title-group h1 { font-size: 30px; }
@@ -22,6 +30,13 @@
 .archive-kicker { display: block; color: #687c70; font: 600 9px "IBM Plex Mono", monospace; letter-spacing: .1em; }
 .archive-context { flex: 0 0 auto; min-height: 71px; display: flex; align-items: center; gap: 12px; padding: 10px 14px; border: 1px solid rgba(72,91,73,.22); background: rgba(248,249,242,.82); box-shadow: 0 5px 16px rgba(37,52,41,.045); }
 .archive-context-mark { width: 34px; height: 34px; flex: 0 0 34px; display: grid; place-items: center; color: #526b58; border: 1px solid rgba(69,107,91,.23); background: rgba(222,232,217,.65); }
+.archive-rail-nav { display: grid; gap: 7px; margin-top: 20px; }
+.archive-nav-label { margin-bottom: 3px; color: #77857b; font: 8px "IBM Plex Mono", monospace; letter-spacing: .1em; }
+.archive-nav-current,.archive-nav-note { display: flex; align-items: center; gap: 8px; padding: 9px 8px; color: #40594a; font-size: 10px; }
+.archive-nav-current { border: 1px solid rgba(69,107,91,.18); background: rgba(226,235,220,.55); }
+.archive-nav-note { color: #718078; }
+.archive-nav-current span,.archive-nav-note span { flex: 1; }
+.archive-nav-current b,.archive-nav-note b { font: 9px "IBM Plex Mono", monospace; }
 .archive-context-copy { min-width: 0; }
 .archive-context-copy strong { display: block; margin-top: 2px; color: #2b4338; font: 600 15px "Space Grotesk", sans-serif; }
 .archive-context-copy p { margin: 2px 0 0; color: #617268; font-size: 10px; }
@@ -32,13 +47,14 @@
 .archive-retry:disabled { cursor: wait; opacity: .78; }
 .archive-spin { animation: archive-rotate .9s linear infinite; }
 @keyframes archive-rotate { to { transform: rotate(360deg); } }
-.archive-unavailable { flex: 0 0 auto; width: min(840px,100%); min-height: 0; align-self: center; display: grid; grid-template-columns: 34px minmax(0,1fr) auto; align-items: center; column-gap: 14px; row-gap: 14px; padding: 22px 25px; border: 1px solid rgba(130,91,70,.27); background: linear-gradient(112deg, rgba(248,246,237,.94), rgba(243,239,226,.87)); box-shadow: 0 12px 30px rgba(57,52,37,.09); }
+.archive-unavailable { flex: 0 0 auto; width: min(980px,100%); min-height: 0; align-self: center; display: grid; grid-template-columns: 34px minmax(0,1fr) auto; align-items: center; column-gap: 18px; row-gap: 14px; padding: 26px 30px; border: 1px solid rgba(130,91,70,.27); background: linear-gradient(112deg, rgba(248,246,237,.95), rgba(243,239,226,.91)); box-shadow: 0 12px 30px rgba(57,52,37,.09); }
 .archive-unavailable-top { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; padding-bottom: 12px; border-bottom: 1px solid rgba(130,91,70,.18); }
 .archive-unavailable-top .archive-alert-icon { width: 32px; height: 32px; flex-basis: 32px; }
 .archive-offline { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; color: #8c6350; font: 9px "IBM Plex Mono",monospace; letter-spacing: .07em; white-space: nowrap; }
 .archive-offline i { width: 6px; height: 6px; border-radius: 50%; background: #b8755d; }
 .archive-alert-icon { width: 43px; height: 43px; flex: 0 0 43px; display: grid; place-items: center; color: #965c48; border: 1px solid rgba(150,92,72,.25); background: rgba(243,230,223,.75); }
 .archive-alert-copy { min-width: 0; }
+.archive-alert-copy { grid-column: 2 / -1; }
 .archive-alert-copy .archive-kicker { color: #8b6551; }
 .archive-alert-copy h2 { margin: 7px 0 5px; color: #293c36; font: 600 clamp(20px,2.2vw,26px)/1.15 "Space Grotesk",sans-serif; letter-spacing: -.035em; }
 .archive-alert-copy p { max-width: 510px; margin: 0; color: #586c63; font-size: 11px; line-height: 1.55; }

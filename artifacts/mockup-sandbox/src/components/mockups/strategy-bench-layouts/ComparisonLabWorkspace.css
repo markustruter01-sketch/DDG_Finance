@@ -16,7 +16,7 @@
 }
 
 .comparison-lab::after {
-  background-image: radial-gradient(ellipse at 76% 12%, rgba(83, 111, 94, .18), transparent 36rem), linear-gradient(145deg, #111a18, #202b27 58%, #111918) !important;
+  background-image: linear-gradient(135deg, rgba(16, 27, 23, .62), rgba(20, 30, 26, .46)), url("/__mockup/images/platform-background.webp") !important;
   background-size: cover;
   background-position: center;
 }
@@ -24,11 +24,14 @@
 .comparison-lab .bench-rail { z-index: 4; }
 
 .comparison-lab .bench-content {
+  position: absolute;
+  inset: 0 0 0 218px;
   display: flex;
-  width: calc(100% - 218px);
+  width: auto;
   height: 100dvh;
   min-height: 0;
   flex-direction: column;
+  margin: 0;
   padding: 0;
   overflow: hidden;
 }
@@ -195,7 +198,7 @@
   gap: 10px;
   align-self: center;
   margin: auto 0;
-  padding: 28px 0;
+  padding: 18px 0;
 }
 .cl-unavailable-content .cl-status-icon {
   width: 40px; height: 40px; flex-basis: 40px;
@@ -213,7 +216,7 @@
   grid-template-columns: 110px minmax(0, 1fr);
   gap: 9px 12px;
   margin-top: 7px;
-  padding: 13px 14px;
+  padding: 10px 12px;
   border: 1px solid rgba(226, 235, 220, .12);
   background: rgba(8, 16, 13, .24);
 }

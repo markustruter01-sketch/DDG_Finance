@@ -10,49 +10,44 @@
    photo darkening and the text shadow, as before. Both modes share it; night
    ops only grades the photo darker. */
 :root {
-  --ddg-bg-base: #06131A;
-  --ddg-glass: rgba(255, 255, 255, 0.12);
-  --ddg-glass-soft: rgba(255, 255, 255, 0.13);     /* chips, buttons */
-  --ddg-border: rgba(100, 116, 139, 0.22);
-  --ddg-hairline: rgba(184, 239, 225, 0.14);
-  --ddg-text: #F7FBFF;
-  --ddg-text-2: #F7FBFF;
-  --ddg-on-photo: #F7FBFF;
-  --ddg-accent: #00E5FF;
-  --ddg-button: #007A99;
-  --ddg-highlight: #FF2BD6;
-  --ddg-ok: #4FD99A;
-  --ddg-warn: #F5C451;
-  --ddg-bad: #FF5C6E;
-  --ddg-shadow: 0 8px 20px rgba(15, 23, 42, 0.10);
-  --ddg-blur: blur(7.84px) saturate(125%);
-  --ddg-text-shadow: 0 2px 7px rgba(0, 0, 0, 0.58), 0 1px 2px rgba(0, 0, 0, 0.72);
-  /* engine cards: the previous bot-card glass */
-  --ddg-card-glass: rgba(255, 255, 255, 0.14);
-  --ddg-card-border: rgba(232, 255, 247, 0.30);
-  --ddg-card-shadow: 0 14px 34px rgba(2, 17, 22, 0.20), inset 0 1px rgba(255, 255, 255, 0.20);
-  --ddg-card-blur: blur(17px) saturate(135%);
-  /* photo: the previous darkening; night ops grades it further */
+  /* Night Glass (DDG brand v4, Oct 2026): graphite ground, light frosted glass, white type,
+     colour only as thin lines and dots. Dark only: the day/night switch is retired. */
+  --ddg-bg-base: #141518;
+  --ddg-glass: rgba(255, 255, 255, 0.05);
+  --ddg-glass-soft: rgba(255, 255, 255, 0.06);     /* chips, buttons */
+  --ddg-border: rgba(255, 255, 255, 0.10);
+  --ddg-hairline: rgba(255, 255, 255, 0.08);
+  --ddg-text: #FFFFFF;
+  --ddg-text-2: rgba(255, 255, 255, 0.72);
+  --ddg-on-photo: #FFFFFF;
+  --ddg-accent: #7CC9E8;                           /* focus rings only */
+  --ddg-button: rgba(255, 255, 255, 0.10);
+  --ddg-highlight: #3DDC97;                        /* DDG Finance accent (mint) */
+  --ddg-ok: #3DDC97;
+  --ddg-warn: #F5A524;
+  --ddg-bad: #FF6B6B;
+  --ddg-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --ddg-blur: none;
+  --ddg-text-shadow: none;
+  --ddg-card-glass: rgba(255, 255, 255, 0.05);
+  --ddg-card-border: rgba(255, 255, 255, 0.10);
+  --ddg-card-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --ddg-card-blur: none;
   --ddg-photo-grade: none;
-  --ddg-photo-overlay: linear-gradient(rgba(7, 24, 31, 0.34), rgba(7, 24, 31, 0.48));
-  --ddg-tooltip: rgba(11, 31, 42, 0.86);
+  --ddg-photo-overlay: none;
+  --ddg-tooltip: #1b1c20;
 
-  --ddg-font-display: "Space Grotesk", system-ui, sans-serif;
-  --ddg-font-body: "Inter", system-ui, sans-serif;
-  --ddg-font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --ddg-font-display: "Geist", system-ui, sans-serif;
+  --ddg-font-body: "Geist", system-ui, sans-serif;
+  --ddg-font-mono: "Geist Mono", ui-monospace, monospace;
   --ddg-radius-sm: 8px;
   --ddg-radius-button: 12px;
-  --ddg-radius-tile: 16px;
-  --ddg-radius-card: 20px;
+  --ddg-radius-tile: 14px;
+  --ddg-radius-card: 16px;
   --ddg-fast: 150ms;
   --ddg-base: 250ms;
   --ddg-mode: 400ms;
   --ddg-ease: cubic-bezier(.2, .8, .2, 1);
-}
-
-:root[data-theme="dark"] {
-  --ddg-photo-grade: saturate(0.55) brightness(0.6);   /* same photo, night grade */
-  --ddg-photo-overlay: linear-gradient(rgba(6, 19, 26, 0.45), rgba(6, 19, 26, 0.6));
 }
 
 /* ── Page shell ─────────────────────────────────────────────────────────── */
@@ -67,7 +62,8 @@
   text-shadow: var(--ddg-text-shadow);
   -webkit-font-smoothing: antialiased;
 }
-.ddg-photo, .ddg-photo-grade {
+.ddg-photo, .ddg-photo-grade { display: none; }
+.ddg-photo-unused {
   position: fixed;
   inset: 0;
   pointer-events: none;
@@ -87,10 +83,10 @@
   background-repeat: no-repeat;
 }
 .ddg-photo::before {
-  background-image: url("/ddg-glacier-background.webp");
+  background-image: none;
 }
 .ddg-photo::after {
-  background-image: url("/ddg-mountain-background.webp");
+  background-image: none;
   opacity: 0;
   animation: ddg-background-crossfade 36s ease-in-out infinite;
 }
@@ -164,7 +160,7 @@
   height: 24px;
   padding: 0 10px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.30);
+  border: 1px solid rgba(255, 255, 255, 0.16);
   background: var(--ddg-glass-soft);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
@@ -191,8 +187,8 @@
   height: 22px;
   padding: 0 9px;
   border-radius: 999px;
-  background: #B5128F;
-  color: #FFFFFF;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: rgba(255, 255, 255, 0.72);
   font-family: var(--ddg-font-mono);
   font-weight: 600;
   font-size: 10px;
@@ -206,7 +202,7 @@
   height: 32px;
   padding: 0 12px;
   border-radius: var(--ddg-radius-button);
-  border: 1px solid rgba(255, 255, 255, 0.30);
+  border: 1px solid rgba(255, 255, 255, 0.16);
   background: var(--ddg-glass-soft);
   color: var(--ddg-text);
   font-family: var(--ddg-font-body);
@@ -215,8 +211,8 @@
   cursor: pointer;
   transition: border-color var(--ddg-fast) var(--ddg-ease), background var(--ddg-fast) var(--ddg-ease);
 }
-.ddg-btn:hover { border-color: var(--ddg-accent); }
-.ddg-btn[aria-pressed="true"] { background: var(--ddg-button); border-color: var(--ddg-button); color: #FFFFFF; }
+.ddg-btn:hover { background: rgba(255, 255, 255, 0.08); }
+.ddg-btn[aria-pressed="true"] { background: var(--ddg-button); border-color: transparent; color: #FFFFFF; }
 .ddg-btn:focus-visible, .ddg-dock-tile:focus-visible {
   outline: 2px solid var(--ddg-accent);
   outline-offset: 2px;
@@ -250,7 +246,7 @@
   transition: border-color var(--ddg-fast) var(--ddg-ease), background var(--ddg-fast) var(--ddg-ease);
 }
 .ddg-dock-tile:hover { background: var(--ddg-glass-soft); }
-.ddg-dock-tile[aria-current="page"] { border-color: var(--ddg-accent); color: var(--ddg-accent); }
+.ddg-dock-tile[aria-current="page"] { background: rgba(255, 255, 255, 0.10); color: #FFFFFF; }
 .ddg-dock-tile span {
   font-family: var(--ddg-font-mono);
   font-weight: 600;

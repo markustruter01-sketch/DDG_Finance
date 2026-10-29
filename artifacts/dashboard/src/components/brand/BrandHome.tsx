@@ -306,7 +306,7 @@ export default function BrandHome({ runnerVerdict }: { runnerVerdict: "ALIVE" | 
         {/* Nav */}
         <header className="ddg-glass bh-nav">
           <div className="bh-brand">
-            <img src={mode === "dark" ? "/ddg-logo-knockout-256.png" : "/ddg-logo-disc-128.png"} alt="Digital Dynamics" />
+            <img src="/ddg-mark-white-256.png" alt="Digital Dynamics" />
             <div>
               <div className="bh-word">Digital Dynamics</div>
               <div className="bh-sub">DDG · FINANCE</div>

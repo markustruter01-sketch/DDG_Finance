@@ -192,7 +192,7 @@ function ArchitectureNode({ nodeKey, health }: { nodeKey: string; health: NodeHe
       <line x1={pos.x - W/2 + 10} y1={pos.y - 4} x2={pos.x + W/2 - 10} y2={pos.y - 4}
         stroke={colors.wire} strokeWidth={0.5} opacity={0.25} />
       <foreignObject x={pos.x - W/2} y={pos.y - H/2} width={W} height={H}>
-        <div className="w-full h-full flex flex-col items-center justify-center px-3 gap-1" style={{ fontFamily: "'JetBrains Mono', 'Fira Code', monospace" }}>
+        <div className="w-full h-full flex flex-col items-center justify-center px-3 gap-1" style={{ fontFamily: "'Geist Mono', 'Fira Code', monospace" }}>
           <div className="flex items-center justify-center h-6 w-6 rounded-full" style={{ background: colors.fill, border: `1px solid ${colors.stroke}` }}>
             <Icon style={{ height: 12, width: 12, color: colors.wire }} />
           </div>

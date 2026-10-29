@@ -23,12 +23,14 @@ export const CHART = {
     ok: "#187A4B",
     bad: "#C21A30",
   },
+  // Night Glass: white and greys for everything; colour only means something
+  // (mint = gain, coral = loss).
   dark: {
-    series: ["#00E5FF", "#7CC9E8", "#F7FBFF", "#4FD99A"],
-    text: "#F7FBFF",
-    hairline: "rgba(124,201,232,0.14)",
-    ok: "#4FD99A",
-    bad: "#FF5C6E",
+    series: ["#FFFFFF", "#B9BABE", "#808289", "#4D4F55"],
+    text: "rgba(255,255,255,0.72)",
+    hairline: "rgba(255,255,255,0.10)",
+    ok: "#3DDC97",
+    bad: "#FF6B6B",
   },
 } as const;
 

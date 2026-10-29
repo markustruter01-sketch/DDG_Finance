@@ -170,14 +170,14 @@ function EngineCard({ e, chart, mktOpen }: { e: Engine; chart: Chart; mktOpen: b
             <AreaChart data={curve} margin={{ top: 4, right: 4, bottom: 0, left: 4 }}>
               <defs>
                 <linearGradient id={`fill-${e.id}`} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={e.series} stopOpacity={0.28} />
-                  <stop offset="100%" stopColor={e.series} stopOpacity={0} />
+                  <stop offset="0%" stopColor="#FFFFFF" stopOpacity={0.16} />
+                  <stop offset="100%" stopColor="#FFFFFF" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <YAxis hide domain={["dataMin", "dataMax"]} />
               <XAxis dataKey="date" hide />
               <Tooltip {...tooltipStyle(chart)} labelFormatter={shortDate} formatter={(v: number) => [fmtEq(v), "Equity"]} />
-              <Area type="monotone" dataKey="equity" stroke={e.series} strokeWidth={2} strokeLinejoin="round"
+              <Area type="monotone" dataKey="equity" stroke="#FFFFFF" strokeWidth={1.5} strokeLinejoin="round"
                 fill={`url(#fill-${e.id})`} isAnimationActive={false} />
             </AreaChart>
           </ResponsiveContainer>
@@ -363,7 +363,7 @@ export default function BrandHome({ runnerVerdict }: { runnerVerdict: "ALIVE" | 
                     <AreaChart data={fleetCurve} margin={{ top: 10, right: 6, bottom: 0, left: 6 }}>
                       <defs>
                         <linearGradient id="fill-fleet" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor={chart.series[0]} stopOpacity={0.28} />
+                          <stop offset="0%" stopColor={chart.series[0]} stopOpacity={0.16} />
                           <stop offset="100%" stopColor={chart.series[0]} stopOpacity={0} />
                         </linearGradient>
                       </defs>
@@ -377,7 +377,7 @@ export default function BrandHome({ runnerVerdict }: { runnerVerdict: "ALIVE" | 
                           strokeDasharray="3 4" strokeOpacity={0.7}
                           label={{ value: `${j.name} paper account added`, position: "insideTopRight", fill: chart.text, fontSize: 11 }} />
                       ))}
-                      <Area type="monotone" dataKey="equity" stroke={chart.series[0]} strokeWidth={2} strokeLinejoin="round"
+                      <Area type="monotone" dataKey="equity" stroke={chart.series[0]} strokeWidth={1.5} strokeLinejoin="round"
                         fill="url(#fill-fleet)" isAnimationActive={false} />
                     </AreaChart>
                   </ResponsiveContainer>

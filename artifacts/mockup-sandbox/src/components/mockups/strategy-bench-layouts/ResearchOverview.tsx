@@ -1,48 +1,32 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
+  AlertCircle,
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
-  BarChart3,
   BookOpen,
-  CalendarClock,
+  Check,
   ChevronDown,
   Database,
   FlaskConical,
   LockKeyhole,
+  RefreshCw,
 } from "lucide-react";
-import {
-  CartesianGrid,
-  ResponsiveContainer,
-  Scatter,
-  ScatterChart,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import { MOCK_CATALOG } from "./_shared/BenchCatalogFixture";
 import "./_group.css";
 import "./BenchRecord.css";
-import "./ResearchOverview.css";
+import "./CalmEvidenceDesk.css";
 
 type Catalog = typeof MOCK_CATALOG;
-type Experiment = Catalog["experiments"][number];
-type ExplorationRun = Catalog["exploration_runs"][number];
+type Run = Catalog["exploration_runs"][number];
 type SortKey = "sharpe" | "return_pct" | "max_drawdown" | "created_at";
-type ResearchGroup = "Atlas" | "Momentum" | "Bullion" | "Forex" | "Fleet" | "Other";
-type ChartPoint = ExplorationRun & { drawdown: number; group: ResearchGroup };
 
-const GROUPS: ResearchGroup[] = ["Atlas", "Momentum", "Bullion", "Forex", "Fleet", "Other"];
-const GROUP_COLORS: Record<ResearchGroup, string> = {
-  Atlas: "#9a654f",
-  Momentum: "#466b5c",
-  Bullion: "#92773f",
-  Forex: "#74698a",
-  Fleet: "#497d77",
-  Other: "#68715f",
-};
+function familyLabel(family: string) {
+  return family.replace(/^bot(\d+)_/i, "Bot $1 · ").replace(/[_-]+/g, " ")
+    .replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
+}
 
-function formatDate(value?: string) {
+function dateLabel(value?: string) {
   if (!value) return "Not recorded";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
@@ -50,411 +34,387 @@ function formatDate(value?: string) {
     year: "numeric",
     month: "short",
     day: "2-digit",
-    ...(value.includes("T") ? { hour: "2-digit", minute: "2-digit", timeZone: "UTC", timeZoneName: "short" } : {}),
+    ...(value.includes("T") ? { hour: "2-digit", minute: "2-digit", timeZone: "UTC", timeZoneName: "short" as const } : {}),
   }).format(date);
 }
 
-function formatMetric(value: number | null | undefined, digits = 2) {
+function metric(value: number | null | undefined, digits = 2) {
   return typeof value === "number" && Number.isFinite(value) ? value.toFixed(digits) : "—";
 }
 
-function formatPercent(value: number | null | undefined, digits = 1) {
+function percent(value: number | null | undefined, digits = 1) {
   if (typeof value !== "number" || !Number.isFinite(value)) return "—";
   return `${value > 0 ? "+" : ""}${value.toFixed(digits)}%`;
 }
 
-function formatDrawdown(value: number | null | undefined) {
+function drawdown(value: number | null | undefined) {
   if (typeof value !== "number" || !Number.isFinite(value)) return "—";
   return `${value > 0 ? "−" : ""}${Math.abs(value).toFixed(1)}%`;
 }
 
-function formatSummary(value: unknown): string {
+function summary(value: unknown) {
   if (value === null || value === undefined || value === "") return "Not recorded";
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
   try { return JSON.stringify(value, null, 2); } catch { return "Not recorded"; }
 }
 
-function familyLabel(family: string) {
-  return family.replace(/^bot(\d+)_/i, "Bot $1 · ").replace(/[_-]+/g, " ")
-    .replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
-}
-
-function researchGroup(family: string): ResearchGroup {
-  const value = family.toLowerCase();
-  if (value.includes("atlas")) return "Atlas";
-  if (value.includes("momentum")) return "Momentum";
-  if (value.includes("bullion") || value.includes("gold") || value.includes("silver")) return "Bullion";
-  if (/\bforex\b|\bfx\b|foreign[_ -]?exchange|currency|oanda/.test(value)) return "Forex";
-  if (value.includes("fleet")) return "Fleet";
-  return "Other";
-}
-
-function outcomeTone(outcome: string) {
-  const value = outcome.toLowerCase();
-  if (/fail|reject|negative|blocked|not.?pass/.test(value)) return "is-fail";
-  if (/pass|verified|accept|success|ready/.test(value)) return "is-pass";
-  return "is-neutral";
-}
-
-function outcomeLabel(value: string) {
-  return value.replace(/[_-]+/g, " ").replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
-}
-
-function formatPassBar(value: unknown) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return formatSummary(value);
+function passBar(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return summary(value);
   const entries = Object.entries(value as Record<string, unknown>);
   if (!entries.length) return "Not recorded";
   return entries.map(([key, threshold]) => {
     const operator = key.endsWith("_min") ? "≥" : key.endsWith("_max") ? "≤" : "=";
-    return `${key.replace(/_(min|max)$/, "").replace(/_/g, " ")} ${operator} ${formatSummary(threshold)}`;
+    return `${key.replace(/_(min|max)$/, "").replace(/_/g, " ")} ${operator} ${summary(threshold)}`;
   }).join(" · ");
 }
 
-function isPassed(outcome: string) {
-  return /^(pass|passed|verified|accepted|success)$/i.test(outcome.trim());
-}
-
-function isSpyReference(run: ExplorationRun) {
-  const record = run as ExplorationRun & { benchmark_name?: unknown; reference_name?: unknown; record_kind?: unknown; record_type?: unknown };
-  const identity = [run.family, run.source, record.benchmark_name, record.reference_name, record.record_kind, record.record_type]
-    .filter((value): value is string => typeof value === "string").join(" ");
-  return (/\b(?:benchmark|baseline|reference)\b/i.test(identity)
-      || /^spy[_\s-]+buy[\s_-]*(?:and[\s_-]*)?hold$/i.test(run.family.trim()))
-    && /\bspy\b/i.test(identity)
-    && /buy[\s_-]*(?:and[\s_-]*)?hold/i.test(identity);
-}
-
-function RunTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload?: ChartPoint }> }) {
-  const point = payload?.[0]?.payload;
-  if (!active || !point) return null;
-  return (
-    <div className="bench-record-tooltip" role="status">
-      <strong>{familyLabel(point.family)}</strong>
-      <span>Run {point.id} · {point.group}</span>
-      <dl>
-        <div><dt>Sharpe</dt><dd>{formatMetric(point.sharpe, 3)}</dd></div>
-        <div><dt>Maximum drawdown</dt><dd>{formatDrawdown(point.max_drawdown)}</dd></div>
-        <div><dt>Return</dt><dd>{formatPercent(point.return_pct, 2)}</dd></div>
-      </dl>
-      <small>{point.source} · {formatDate(point.created_at)}</small>
-    </div>
-  );
+function outcomeClass(outcome: string) {
+  if (/fail|reject|negative|blocked|not.?pass/i.test(outcome)) return "is-fail";
+  if (/pass|verified|accept|success|ready/i.test(outcome)) return "is-pass";
+  return "is-neutral";
 }
 
 export default function ResearchOverview() {
-  const catalog = MOCK_CATALOG;
-  const experiments = catalog.experiments;
-  const runs = catalog.exploration_runs;
+  const experiments = MOCK_CATALOG.experiments;
+  const runs = MOCK_CATALOG.exploration_runs;
+  const [showSample, setShowSample] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const [retryMessage, setRetryMessage] = useState("");
+  const [selectedExperimentId, setSelectedExperimentId] = useState<string | number>(experiments[0].id);
+  const [selectedRunId, setSelectedRunId] = useState<string | number>(runs[0].id);
   const [familyFilter, setFamilyFilter] = useState("all");
   const [sortKey, setSortKey] = useState<SortKey>("created_at");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
-  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
 
-  const outcomeCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    experiments.forEach((experiment) => {
-      const outcome = experiment.outcome.trim() || "Not recorded";
-      counts.set(outcome.toLowerCase(), (counts.get(outcome.toLowerCase()) ?? 0) + 1);
-    });
-    return [...counts.entries()].sort(([a], [b]) => {
-      const order = ["pass", "fail", "pending", "dissolved"];
-      const rankA = order.indexOf(a);
-      const rankB = order.indexOf(b);
-      return rankA !== -1 || rankB !== -1
-        ? (rankA === -1 ? order.length : rankA) - (rankB === -1 ? order.length : rankB)
-        : a.localeCompare(b);
-    });
-  }, [experiments]);
-  const passedCount = experiments.filter((experiment) => isPassed(experiment.outcome)).length;
+  useEffect(() => {
+    if (!retrying) return undefined;
+    const timer = window.setTimeout(() => {
+      setRetrying(false);
+      setRetryMessage("Read attempt finished. Catalog remains unavailable in this local preview.");
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [retrying]);
+
+  useEffect(() => {
+    document.body.classList.add("calm-evidence-active");
+    document.documentElement.classList.add("calm-evidence-active");
+    const root = document.getElementById("root");
+    root?.classList.add("calm-evidence-active");
+    return () => {
+      document.body.classList.remove("calm-evidence-active");
+      document.documentElement.classList.remove("calm-evidence-active");
+      root?.classList.remove("calm-evidence-active");
+    };
+  }, []);
+
+  const selectedExperiment = experiments.find((item) => String(item.id) === String(selectedExperimentId)) ?? experiments[0];
   const families = useMemo(() => [...new Set(runs.map((run) => run.family))].sort((a, b) => a.localeCompare(b)), [runs]);
-  const chartPoints = useMemo<ChartPoint[]>(() => runs.flatMap((run) => (
-    typeof run.sharpe === "number" && Number.isFinite(run.sharpe)
-      && typeof run.max_drawdown === "number" && Number.isFinite(run.max_drawdown)
-      ? [{ ...run, drawdown: Math.abs(run.max_drawdown), group: researchGroup(run.family) }]
-      : []
-  )), [runs]);
-  const referenceRun = runs.find(isSpyReference) ?? null;
-  const referencePoint = referenceRun
-    ? chartPoints.find((point) => String(point.id) === String(referenceRun.id)) ?? null
-    : null;
-  const selectedRun = selectedRunId ? runs.find((run) => String(run.id) === selectedRunId) ?? null : null;
-  const plottedIds = new Set(chartPoints.map((point) => String(point.id)));
-  const chartGroups = GROUPS.map((group) => ({
-    group,
-    points: chartPoints.filter((point) => point.group === group && String(point.id) !== String(referencePoint?.id)),
-  })).filter(({ points }) => points.length);
-  const experimentGroups = useMemo(() => GROUPS.map((group) => ({
-    group,
-    records: experiments.filter((experiment) => researchGroup(experiment.family) === group),
-  })).filter(({ records }) => records.length > 0), [experiments]);
   const visibleRuns = useMemo(() => {
     const filtered = familyFilter === "all" ? runs : runs.filter((run) => run.family === familyFilter);
     return [...filtered].sort((a, b) => {
       const left = a[sortKey];
       const right = b[sortKey];
-      if (sortKey !== "created_at" && (
-        typeof left !== "number" || !Number.isFinite(left) || typeof right !== "number" || !Number.isFinite(right)
-      )) {
+      if (sortKey !== "created_at" && (typeof left !== "number" || typeof right !== "number")) {
         if (left == null && right != null) return 1;
         if (left != null && right == null) return -1;
-        if (typeof left === "number" && Number.isFinite(left)) return -1;
-        if (typeof right === "number" && Number.isFinite(right)) return 1;
         return 0;
       }
-      const comparison = sortKey === "created_at"
+      const compare = sortKey === "created_at"
         ? new Date(String(left)).getTime() - new Date(String(right)).getTime()
         : Number(left) - Number(right);
-      return comparison * (sortDirection === "asc" ? 1 : -1);
+      return compare * (sortDirection === "asc" ? 1 : -1);
     });
-  }, [familyFilter, runs, sortDirection, sortKey]);
+  }, [familyFilter, sortDirection, sortKey, runs]);
+  const selectedRun = runs.find((run) => String(run.id) === String(selectedRunId)) ?? null;
 
-  const changeSort = (key: SortKey) => {
-    if (sortKey === key) setSortDirection((direction) => direction === "asc" ? "desc" : "asc");
-    else { setSortKey(key); setSortDirection("desc"); }
-  };
-  const renderPoint = (rawProps: unknown) => {
-    const props = rawProps as { cx?: number; cy?: number; fill?: string; payload?: ChartPoint };
-    const point = props.payload;
-    if (typeof props.cx !== "number" || typeof props.cy !== "number" || !point) return <g />;
-    const selectPoint = () => setSelectedRunId(String(point.id));
+  function changeSort(key: SortKey) {
+    if (sortKey === key) setSortDirection((current) => current === "asc" ? "desc" : "asc");
+    else {
+      setSortKey(key);
+      setSortDirection("desc");
+    }
+  }
+
+  if (!showSample) {
     return (
-      <g
-        role="button"
-        tabIndex={0}
-        aria-label={`Inspect run ${point.id}, ${familyLabel(point.family)}, Sharpe ${formatMetric(point.sharpe, 3)}, maximum drawdown ${formatDrawdown(point.max_drawdown)}`}
-        aria-pressed={selectedRunId === String(point.id)}
-        onClick={(event) => { event.stopPropagation(); selectPoint(); }}
-        onFocus={selectPoint}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") { event.preventDefault(); selectPoint(); }
-        }}
-      >
-        <circle cx={props.cx} cy={props.cy} r={12} fill="transparent" />
-        <circle className="bench-record-dot" cx={props.cx} cy={props.cy} r={5.5} fill={props.fill ?? GROUP_COLORS[point.group]} />
-      </g>
+      <main className="bench-shell bench-catalog bench-record-page research-overview calm-evidence" data-testid="page-bench">
+        <aside className="bench-rail" aria-label="Strategy Bench identity and safety status">
+          <div className="bench-rail-brand">
+            <div className="bench-brand-mark"><FlaskConical size={18} /></div>
+            <div><span className="bench-overline">RESEARCH LEDGER</span><strong>Strategy Bench</strong></div>
+          </div>
+          <div className="bench-rail-rule" />
+          <div className="calm-rail-context"><span className="calm-rail-index">01</span><span>Evidence<br />overview</span></div>
+          <div className="bench-rail-spacer" />
+          <div className="bench-rail-note"><span className="bench-status-dot" /><div><strong>READ ONLY</strong><span>NO ORDER PATHS</span></div></div>
+          <div className="bench-rail-meta"><span>Execution</span><code>Separate system</code><span>Record type</span><code>Historical only</code></div>
+        </aside>
+        <section className="bench-content">
+          <header className="bench-topbar calm-topbar">
+            <div className="bench-title-group">
+              <div className="bench-breadcrumb"><BookOpen size={13} /> Research / Bench <span>/</span> Ledger</div>
+              <h1>Strategy Bench</h1>
+            </div>
+            <div className="calm-header-meta">
+              <span className="bench-readonly"><Database size={13} /> Read-only research ledger</span>
+              <span className="calm-safety"><LockKeyhole size={12} /> No execution controls</span>
+            </div>
+          </header>
+          <div className="bench-ledger-body bench-record-body calm-body">
+            <div className="calm-sourcebar is-unavailable" role="status" aria-live="polite">
+              <div className="calm-source-status">
+                <AlertCircle size={16} />
+                <div>
+                  <strong>Catalog unavailable</strong>
+                  <span>{retrying ? "Retrying catalog read locally…" : retryMessage || "Research records could not be read. No research action was submitted."}</span>
+                </div>
+              </div>
+              <div className="calm-source-actions">
+                <button type="button" className="calm-retry" onClick={() => { setRetryMessage(""); setRetrying(true); }} disabled={retrying}>
+                  <RefreshCw size={13} className={retrying ? "is-spinning" : ""} /> {retrying ? "Checking…" : "Retry read"}
+                </button>
+                <button type="button" className="calm-preview-toggle" onClick={() => setShowSample(true)}>Preview local sample</button>
+              </div>
+            </div>
+            <section className="calm-unavailable-layout" aria-label="Unavailable research catalog">
+              <div className="calm-error-record" role="alert">
+                <div className="calm-error-mark"><AlertCircle size={18} /></div>
+                <div className="calm-error-copy">
+                  <span className="calm-eyebrow">RESEARCH CATALOG · STATUS</span>
+                  <h2>{retrying ? "Checking the catalog…" : "Historical records are unavailable"}</h2>
+                  <p>{retrying
+                    ? "This preview is simulating a read attempt. No request is being sent."
+                    : "The catalog could not be read. No research action was submitted, and no order path is available here."}</p>
+                  <div className="calm-error-reference"><span>Catalog source</span><code>Research catalog · read-only GET</code></div>
+                  <div className="calm-error-reference"><span>Execution boundary</span><code>Separate system · no order path</code></div>
+                </div>
+                <div className="calm-error-action">
+                  <span>To inspect the layout with records</span>
+                  <button type="button" className="calm-preview-toggle" onClick={() => setShowSample(true)}>Open static sample preview</button>
+                </div>
+              </div>
+              <aside className="calm-unavailable-note">
+                <span className="calm-eyebrow">READING GUIDE</span>
+                <strong>One ledger. Two record types.</strong>
+                <p>Registered hypotheses preserve the declared test and pass bar. Exploration runs preserve individual historical trials.</p>
+                <div className="calm-guide-line"><i />Hypotheses and recorded outcomes</div>
+                <div className="calm-guide-line"><i />Run-level metrics and provenance</div>
+                <div className="calm-guide-line"><i />Nothing here starts a backtest or places an order</div>
+              </aside>
+            </section>
+          </div>
+        </section>
+      </main>
     );
-  };
+  }
 
   return (
-    <main className="bench-shell bench-catalog bench-record-page research-overview" data-testid="page-bench">
-      <aside className="bench-rail">
+    <main className="bench-shell bench-catalog bench-record-page research-overview calm-evidence" data-testid="page-bench">
+      <aside className="bench-rail" aria-label="Strategy Bench identity and safety status">
         <div className="bench-rail-brand">
           <div className="bench-brand-mark"><FlaskConical size={18} /></div>
           <div><span className="bench-overline">RESEARCH LEDGER</span><strong>Strategy Bench</strong></div>
         </div>
         <div className="bench-rail-rule" />
+        <div className="calm-rail-context"><span className="calm-rail-index">01</span><span>Evidence<br />overview</span></div>
         <div className="bench-rail-spacer" />
         <div className="bench-rail-note"><span className="bench-status-dot" /><div><strong>READ ONLY</strong><span>NO ORDER PATHS</span></div></div>
-        <div className="bench-rail-meta"><span>Record set</span><code>Version {catalog.schema_version}</code><span>Execution</span><code>Separate system</code></div>
+        <div className="bench-rail-meta"><span>Execution</span><code>Separate system</code><span>Record type</span><code>Historical only</code></div>
       </aside>
 
       <section className="bench-content">
-        <header className="bench-topbar">
+        <header className="bench-topbar calm-topbar">
           <div className="bench-title-group">
-            <div className="bench-breadcrumb"><BookOpen size={13} /> Research / Bench</div>
+            <div className="bench-breadcrumb"><BookOpen size={13} /> Research / Bench <span>/</span> Ledger</div>
             <h1>Strategy Bench</h1>
           </div>
-          <span className="bench-readonly"><Database size={13} /> Read-only catalog</span>
+          <div className="calm-header-meta">
+            <span className="bench-readonly"><Database size={13} /> Read-only research ledger</span>
+            <span className="calm-safety"><LockKeyhole size={12} /> No execution controls</span>
+          </div>
         </header>
 
-        <div className="bench-ledger-body bench-record-body">
-          <section className="ro-overview" aria-labelledby="ro-title">
-            <div className="ro-overview-main">
-              <div className="ro-overview-kicker">
-                <div className="bench-record-eyebrow"><BookOpen size={14} /> Research record · Version {catalog.schema_version}</div>
-                <span className="ro-sample"><i /> Static sample records</span>
-              </div>
-              <div className="ro-intro-copy">
-                <h2 id="ro-title">{experiments.length} research ideas recorded. {passedCount} passed.</h2>
-                <p>Historical hypotheses and outcomes for inspection. This page cannot start research or route an order.</p>
-              </div>
-            </div>
-            <div className="ro-metric-strip" role="group" aria-label="Snapshot hypothesis and run counts">
-              <div className="ro-metric-cell">
-                <span>Hypotheses</span><strong>{experiments.length}</strong><small>Registered</small>
-              </div>
-              {outcomeCounts.length > 0 ? outcomeCounts.map(([outcome, count]) => (
-                <div className={`ro-metric-cell ${outcomeTone(outcome)}`} key={outcome}>
-                  <span>{outcomeLabel(outcome)}</span><strong>{count}</strong><small>Of {experiments.length} hypotheses</small>
-                </div>
-              )) : (
-                <div className="ro-metric-cell is-neutral">
-                  <span>Outcomes</span><strong>0</strong><small>No outcomes recorded</small>
-                </div>
-              )}
-              <div className="ro-metric-cell">
-                <span>Exploration runs</span><strong>{runs.length}</strong><small>Historical records</small>
-              </div>
-            </div>
-            <aside className="ro-provenance" aria-label="Catalog snapshot source">
-              <div className="ro-provenance-heading"><Database size={14} /> Snapshot provenance</div>
-              <dl>
-                <div><dt>Source</dt><dd>{catalog.source_label || catalog.source}</dd></div>
-                <div><dt>As of</dt><dd>{formatDate(catalog.snapshot_as_of)}</dd></div>
-                <div><dt>Generated</dt><dd>{formatDate(catalog.generated_at)}</dd></div>
-              </dl>
-              {catalog.source_detail && <p>{catalog.source_detail}</p>}
-            </aside>
-          </section>
-
-          <section className="bench-record-panel bench-record-chart-panel ro-chart-panel" aria-labelledby="bench-chart-title">
-            <div className="bench-record-panel-heading">
+        <div className="bench-ledger-body bench-record-body calm-body">
+          <div className={`calm-sourcebar${showSample ? " is-sample" : " is-unavailable"}`} role="status" aria-live="polite">
+            <div className="calm-source-status">
+              {showSample ? <Check size={16} /> : <AlertCircle size={16} />}
               <div>
-                <span className="bench-record-section-label">01 · Risk and return</span>
-                <h2 id="bench-chart-title">Sharpe vs maximum drawdown</h2>
-                <p>Each point is an exploration run with both chart metrics recorded.</p>
+                <strong>{showSample ? "Local sample preview" : "Catalog unavailable"}</strong>
+                <span>{showSample
+                  ? "Static fixture · sample records only · not live data"
+                  : retrying ? "Retrying catalog read locally…" : retryMessage || "Research records could not be read. No research action was submitted."}</span>
               </div>
-              <span className="bench-record-chart-count">{chartPoints.length} of {runs.length} runs plotted</span>
             </div>
-            <div className="bench-record-chart-layout">
-              <div className="bench-record-chart-column">
-                {chartPoints.length ? (
-                  <div className="bench-record-chart" role="group" aria-label="Sharpe ratio against maximum drawdown. Select a point for run details.">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <ScatterChart margin={{ top: 14, right: 20, bottom: 25, left: 6 }}>
-                        <CartesianGrid stroke="rgba(55, 78, 69, .18)" vertical strokeDasharray="3 5" />
-                        <XAxis type="number" dataKey="sharpe" name="Sharpe" tick={{ fill: "#5d7067", fontSize: 11 }} tickLine={false} axisLine={{ stroke: "rgba(53, 75, 66, .45)" }} tickFormatter={(value: number) => Number(value).toFixed(1)} label={{ value: "Sharpe ratio", position: "insideBottom", offset: -13, fill: "#4f665c", fontSize: 11 }} />
-                        <YAxis type="number" dataKey="drawdown" name="Maximum drawdown" reversed domain={[0, "auto"]} width={52} tick={{ fill: "#5d7067", fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={(value: number) => `−${Math.abs(value).toFixed(0)}%`} />
-                        <Tooltip content={<RunTooltip />} cursor={{ stroke: "rgba(50, 83, 66, .42)", strokeDasharray: "3 4" }} />
-                        {chartGroups.map(({ group, points }) => (
-                          <Scatter key={group} name={group} data={points} fill={GROUP_COLORS[group]} shape={renderPoint} isAnimationActive={false} />
-                        ))}
-                        {referencePoint && <Scatter name="SPY buy-and-hold" data={[referencePoint]} fill="#20332f" shape="diamond" isAnimationActive={false} />}
-                      </ScatterChart>
-                    </ResponsiveContainer>
-                  </div>
-                ) : (
-                  <div className="bench-record-empty-chart"><BarChart3 size={20} /><strong>No runs can be plotted</strong><span>The catalog has no exploration runs with both Sharpe and maximum drawdown values.</span></div>
-                )}
-                {!!chartGroups.length && (
-                  <div className="bench-record-legend" aria-label="Chart groups">
-                    {chartGroups.map(({ group }) => <span key={group}><i style={{ backgroundColor: GROUP_COLORS[group] }} />{group}</span>)}
-                    {referencePoint && <span><i className="is-benchmark" />SPY buy-and-hold</span>}
-                  </div>
-                )}
-              </div>
-              <aside className="bench-record-selection" aria-live="polite" aria-label="Selected exploration run">
-                {selectedRun ? (
-                  <>
-                    <span className="bench-record-selection-label">{plottedIds.has(String(selectedRun.id)) ? "Selected run" : "Selected run · chart metrics incomplete"}</span>
-                    <strong>{familyLabel(selectedRun.family)}</strong>
-                    <span className="bench-record-selection-id">Record {selectedRun.id} · {selectedRun.source}</span>
-                    <dl>
-                      <div><dt>Sharpe</dt><dd>{formatMetric(selectedRun.sharpe, 3)}</dd></div>
-                      <div><dt>Maximum drawdown</dt><dd>{formatDrawdown(selectedRun.max_drawdown)}</dd></div>
-                      <div><dt>Return</dt><dd>{formatPercent(selectedRun.return_pct, 2)}</dd></div>
-                    </dl>
-                    <time>{formatDate(selectedRun.created_at)}</time>
-                  </>
-                ) : <p>Hover over or select a point to inspect its recorded metrics.</p>}
-              </aside>
+            <div className="calm-source-actions">
+              {!showSample && (
+                <button type="button" className="calm-retry" onClick={() => { setRetryMessage(""); setRetrying(true); }} disabled={retrying}>
+                  <RefreshCw size={13} className={retrying ? "is-spinning" : ""} /> {retrying ? "Checking…" : "Retry read"}
+                </button>
+              )}
+              <button type="button" className="calm-preview-toggle" aria-pressed={showSample} onClick={() => {
+                setShowSample((active) => !active);
+                setRetryMessage("");
+              }}>
+                {showSample ? "Return to unavailable state" : "Preview local sample"}
+              </button>
             </div>
-            <div className="bench-record-chart-notes">
-              <span>{runs.length - chartPoints.length} {runs.length - chartPoints.length === 1 ? "run is" : "runs are"} missing one or both chart metrics; all remain in the table below.</span>
-              <span>{referenceRun ? (referencePoint ? "SPY buy-and-hold is marked as a reference point." : "A SPY buy-and-hold record exists but lacks the metrics needed for a reference point.") : "No SPY buy-and-hold reference is recorded in this catalog."}</span>
-            </div>
-          </section>
+          </div>
 
-          <section className="bench-record-experiments" aria-labelledby="bench-experiments-title">
-            <div className="bench-record-section-heading">
-              <div><span className="bench-record-section-label">02 · Registered hypotheses</span><h2 id="bench-experiments-title">Experiments by research family</h2><p>Declared pass bars and recorded outcomes. Parameters and data windows open on demand.</p></div>
-              <span className="bench-record-section-count">{experiments.length} total records</span>
-            </div>
-            <div className="bench-record-groups">
-              {experimentGroups.map(({ group, records }, index) => (
-                <section className={`bench-record-group bench-record-group-${group.toLowerCase()} ro-family-records-${records.length}`} key={group} aria-labelledby={`ro-group-${group.toLowerCase()}`}>
-                  <header><span>{String(index + 1).padStart(2, "0")}</span><h3 id={`ro-group-${group.toLowerCase()}`}>{group}</h3><small>{records.length} {records.length === 1 ? "record" : "records"}</small></header>
-                  <div className="bench-record-group-items">
-                    {records.map((experiment) => <HypothesisRecord key={experiment.id} experiment={experiment} />)}
+          {showSample ? (
+            <>
+              <section className="calm-ledger-intro" aria-label="Static sample catalog summary">
+                <div>
+                  <span className="calm-eyebrow">RECORD SET · VERSION {MOCK_CATALOG.schema_version}</span>
+                  <h2>Two hypotheses. Three historical trials.</h2>
+                  <p>Evidence for inspection, not a launch surface. Recorded outcomes do not imply future performance.</p>
+                </div>
+                <div className="calm-intro-stats">
+                  <div><strong>{experiments.length}</strong><span>Hypotheses</span></div>
+                  <div><strong>{experiments.filter((item) => item.outcome === "PASS").length}</strong><span>Pass</span></div>
+                  <div><strong>{runs.length}</strong><span>Exploration runs</span></div>
+                </div>
+              </section>
+
+              <div className="calm-workspace">
+                <section className="calm-hypothesis-index" aria-labelledby="calm-hypothesis-heading">
+                  <div className="calm-panel-heading">
+                    <div><span className="calm-eyebrow">01 · REGISTERED HYPOTHESES</span><h2 id="calm-hypothesis-heading">Evidence index</h2></div>
+                    <span className="calm-count">{experiments.length} records</span>
                   </div>
+                  <div className="calm-hypothesis-list" role="list" aria-label="Select a hypothesis">
+                    {experiments.map((item) => {
+                      const active = String(selectedExperiment.id) === String(item.id);
+                      return (
+                        <button type="button" role="listitem" key={item.id} className={`calm-hypothesis-choice${active ? " is-active" : ""}`}
+                          aria-pressed={active} onClick={() => setSelectedExperimentId(item.id)}>
+                          <span className="calm-record-number">RECORD {item.id}</span>
+                          <span className="calm-choice-title">{familyLabel(item.family)}</span>
+                          <span className={`calm-verdict ${outcomeClass(item.outcome)}`}>{item.outcome}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="calm-index-foot"><Database size={12} /> Helium research database · read-only export</div>
                 </section>
-              ))}
-            </div>
-          </section>
 
-          <section className="bench-record-panel bench-record-runs" aria-labelledby="bench-runs-title">
-            <div className="bench-record-panel-heading bench-record-runs-heading">
-              <div><span className="bench-record-section-label">03 · Historical search space</span><h2 id="bench-runs-title">Exploration runs</h2><p>Recorded parameter trials and metrics. Filter by family or sort a column.</p></div>
-              <label className="bench-record-filter"><span>Family</span>
-                <select value={familyFilter} onChange={(event) => setFamilyFilter(event.target.value)} aria-label="Filter exploration runs by family">
-                  <option value="all">All families</option>{families.map((family) => <option key={family} value={family}>{familyLabel(family)}</option>)}
-                </select>
-              </label>
-            </div>
-            <div className="bench-record-table-meta"><span>{visibleRuns.length} of {runs.length} runs</span><span>Scroll this table to inspect more records</span></div>
-            <div className="bench-record-table-scroll" role="region" aria-label="Exploration run records" tabIndex={0}>
-              {visibleRuns.length ? (
-                <table className="bench-record-table">
-                  <thead><tr>
-                    <th scope="col">Record</th><th scope="col">Family</th>
+                <article className="calm-primary-record" aria-labelledby="calm-primary-heading">
+                  <header className="calm-record-heading">
+                    <div><span className="calm-eyebrow">PRIMARY RECORD · {selectedExperiment.id}</span><h2 id="calm-primary-heading">{familyLabel(selectedExperiment.family)}</h2></div>
+                    <span className={`calm-verdict ${outcomeClass(selectedExperiment.outcome)}`}>{selectedExperiment.outcome}</span>
+                  </header>
+                  <div className="calm-record-content">
+                    <section className="calm-hypothesis-copy">
+                      <span className="calm-field-label">Hypothesis</span>
+                      <p>{selectedExperiment.hypothesis}</p>
+                    </section>
+                    <div className="calm-evidence-grid">
+                      <section className="calm-passbar"><span className="calm-field-label">Declared pass bar</span><strong>{passBar(selectedExperiment.pass_bar)}</strong></section>
+                      <section className="calm-metrics" aria-label="Recorded outcome metrics">
+                        <span className="calm-field-label">Recorded result</span>
+                        <div>
+                          <span><b>{metric(selectedExperiment.metrics.sharpe, 3)}</b><small>Sharpe</small></span>
+                          <span><b>{percent(selectedExperiment.metrics.return_pct, 2)}</b><small>Return</small></span>
+                          <span><b>{drawdown(selectedExperiment.metrics.max_drawdown_pct)}</b><small>Max drawdown</small></span>
+                        </div>
+                      </section>
+                    </div>
+                    <details className="calm-details">
+                      <summary>Parameters and data window <ChevronDown size={14} /></summary>
+                      <div className="calm-detail-columns">
+                        <section><span>Parameters</span><pre>{summary(selectedExperiment.parameters_summary)}</pre></section>
+                        <section><span>Data window</span><pre>{summary(selectedExperiment.data_window)}</pre></section>
+                      </div>
+                    </details>
+                    <div className="calm-record-foot"><span>Recorded {dateLabel(selectedExperiment.created_at)}</span><span>Historical outcome · not actionable</span></div>
+                  </div>
+                </article>
+
+                <section className="calm-run-ledger" aria-labelledby="calm-run-heading">
+                  <div className="calm-panel-heading calm-run-heading">
+                    <div><span className="calm-eyebrow">02 · HISTORICAL SEARCH SPACE</span><h2 id="calm-run-heading">Exploration runs</h2></div>
+                    <label className="calm-family-filter"><span>Family</span>
+                      <select aria-label="Filter exploration runs by family" value={familyFilter} onChange={(event) => setFamilyFilter(event.target.value)}>
+                        <option value="all">All families</option>
+                        {families.map((family) => <option value={family} key={family}>{familyLabel(family)}</option>)}
+                      </select>
+                    </label>
+                  </div>
+                  <div className="calm-sortbar" role="group" aria-label="Sort exploration runs">
+                    <span>{visibleRuns.length} of {runs.length} records</span>
                     {([
-                      ["sharpe", "Sharpe"], ["return_pct", "Return"], ["max_drawdown", "Max drawdown"], ["created_at", "Recorded"],
+                      ["created_at", "Date"], ["sharpe", "Sharpe"], ["return_pct", "Return"], ["max_drawdown", "Drawdown"],
                     ] as [SortKey, string][]).map(([key, label]) => {
                       const Icon = sortKey === key ? sortDirection === "asc" ? ArrowUp : ArrowDown : ArrowUpDown;
-                      return <th scope="col" key={key}><button type="button" className="bench-record-sort" aria-label={`Sort by ${label.toLowerCase()}`} aria-sort={sortKey === key ? sortDirection === "asc" ? "ascending" : "descending" : "none"} onClick={() => changeSort(key)}>{label}<Icon size={12} aria-hidden="true" /></button></th>;
+                      return <button type="button" key={key} className={sortKey === key ? "is-active" : ""}
+                        aria-label={`Sort by ${label}`} aria-pressed={sortKey === key} onClick={() => changeSort(key)}>{label}<Icon size={11} /></button>;
                     })}
-                    <th scope="col">Source</th><th scope="col">Parameters and window</th>
-                  </tr></thead>
-                  <tbody>{visibleRuns.map((run) => (
-                    <tr key={run.id}>
-                      <td className="bench-record-mono"><button type="button" className="bench-record-run-link" onClick={() => setSelectedRunId(String(run.id))} aria-label={`Inspect exploration run ${run.id}`}>#{run.id}</button></td>
-                      <td><span className="bench-record-family"><i style={{ backgroundColor: GROUP_COLORS[researchGroup(run.family)] }} />{familyLabel(run.family)}</span></td>
-                      <td className="bench-record-mono">{formatMetric(run.sharpe, 3)}</td><td className="bench-record-mono">{formatPercent(run.return_pct, 2)}</td><td className="bench-record-mono">{formatDrawdown(run.max_drawdown)}</td>
-                      <td className="bench-record-mono"><span className="bench-record-date"><CalendarClock size={12} aria-hidden="true" />{formatDate(run.created_at)}</span></td>
-                      <td className="bench-record-mono">{run.source}</td>
-                      <td><RunDetails run={run} /></td>
-                    </tr>
-                  ))}</tbody>
-                </table>
-              ) : <div className="bench-record-empty-runs"><strong>No runs match this family</strong><span>Choose another family to inspect the historical records.</span></div>}
-            </div>
-            <div className="bench-record-table-foot"><span><LockKeyhole size={12} /> Historical records only · no execution controls</span><span>Snapshot {formatDate(catalog.snapshot_as_of)}</span></div>
-          </section>
-
-          <footer className="bench-record-page-foot"><span><LockKeyhole size={12} /> Read-only research ledger · no order paths</span><span>Static sample records · {catalog.row_counts.experiments} hypotheses · {catalog.row_counts.exploration_runs} exploration runs</span></footer>
+                  </div>
+                  <div className="calm-run-list" role="list" aria-label="Historical exploration run records" tabIndex={0}>
+                    {visibleRuns.length ? visibleRuns.map((run) => {
+                      const active = String(run.id) === String(selectedRunId);
+                      return (
+                        <button type="button" role="listitem" key={run.id} className={`calm-run-row${active ? " is-selected" : ""}`}
+                          aria-pressed={active} onClick={() => setSelectedRunId(run.id)}>
+                          <span className="calm-run-row-top"><b>#{run.id}</b><time dateTime={run.created_at}>{dateLabel(run.created_at)}</time></span>
+                          <span className="calm-run-family">{familyLabel(run.family)}</span>
+                          <span className="calm-run-values"><span>Sharpe <b>{metric(run.sharpe, 3)}</b></span><span>Return <b>{percent(run.return_pct, 2)}</b></span></span>
+                        </button>
+                      );
+                    }) : <div className="calm-run-empty">No runs match this family.</div>}
+                  </div>
+                  <div className="calm-run-detail" aria-live="polite">
+                    {selectedRun ? (
+                      <>
+                        <span className="calm-field-label">Selected run · #{selectedRun.id}</span>
+                        <strong>{familyLabel(selectedRun.family)}</strong>
+                        <dl><div><dt>Max drawdown</dt><dd>{drawdown(selectedRun.max_drawdown)}</dd></div><div><dt>Source</dt><dd>{selectedRun.source}</dd></div></dl>
+                        <details className="calm-details calm-run-details">
+                          <summary>Parameters and window <ChevronDown size={13} /></summary>
+                          <div className="calm-detail-columns">
+                            <section><span>Parameters</span><pre>{summary(selectedRun.parameters_summary)}</pre></section>
+                            <section><span>Data window</span><pre>{summary(selectedRun.data_window)}</pre></section>
+                          </div>
+                        </details>
+                      </>
+                    ) : <p>Select a run to inspect its recorded metrics.</p>}
+                  </div>
+                </section>
+              </div>
+              <footer className="calm-footer">
+                <span><LockKeyhole size={12} /> Read-only research ledger · no order paths</span>
+                <span>Static sample records · {MOCK_CATALOG.row_counts.experiments} hypotheses · {MOCK_CATALOG.row_counts.exploration_runs} runs</span>
+              </footer>
+            </>
+          ) : (
+            <section className="calm-unavailable-layout" aria-label="Unavailable research catalog">
+              <div className="calm-error-record" role="alert">
+                <div className="calm-error-mark"><AlertCircle size={18} /></div>
+                <div className="calm-error-copy">
+                  <span className="calm-eyebrow">RESEARCH CATALOG · STATUS</span>
+                  <h2>{retrying ? "Checking the catalog…" : "Historical records are unavailable"}</h2>
+                  <p>{retrying
+                    ? "This preview is simulating a read attempt. No request is being sent."
+                    : "The catalog could not be read. No research action was submitted, and no order path is available here."}</p>
+                  <div className="calm-error-reference"><span>Catalog source</span><code>Research catalog · read-only GET</code></div>
+                  <div className="calm-error-reference"><span>Execution boundary</span><code>Separate system · no order path</code></div>
+                </div>
+                <div className="calm-error-action">
+                  <span>To inspect the layout with records</span>
+                  <button type="button" className="calm-preview-toggle" onClick={() => setShowSample(true)}>Open static sample preview</button>
+                </div>
+              </div>
+              <aside className="calm-unavailable-note">
+                <span className="calm-eyebrow">READING GUIDE</span>
+                <strong>One ledger. Two record types.</strong>
+                <p>Registered hypotheses preserve the declared test and pass bar. Exploration runs preserve individual historical trials.</p>
+                <div className="calm-guide-line"><i />Hypotheses and recorded outcomes</div>
+                <div className="calm-guide-line"><i />Run-level metrics and provenance</div>
+                <div className="calm-guide-line"><i />Nothing here starts a backtest or places an order</div>
+              </aside>
+            </section>
+          )}
         </div>
       </section>
     </main>
-  );
-}
-
-function HypothesisRecord({ experiment }: { experiment: Experiment }) {
-  return (
-    <article className="bench-record-experiment">
-      <div className="bench-record-experiment-top">
-        <div><span>Record {experiment.id}</span><strong>{familyLabel(experiment.family)}</strong></div>
-        <span className={`bench-record-verdict ${outcomeTone(experiment.outcome)}`}>{outcomeLabel(experiment.outcome)}</span>
-      </div>
-      <p className="bench-record-hypothesis" title={experiment.hypothesis}>{experiment.hypothesis || "No hypothesis was recorded."}</p>
-      <div className="bench-record-evidence">
-        <div><span>Pass bar</span><strong>{formatPassBar(experiment.pass_bar)}</strong></div>
-        <div className="bench-record-result"><span>Result</span><div>
-          <span><b>{formatMetric(experiment.metrics?.sharpe, 3)}</b><small>Sharpe</small></span>
-          <span><b>{formatPercent(experiment.metrics?.return_pct, 2)}</b><small>Return</small></span>
-          <span><b>{formatDrawdown(experiment.metrics?.max_drawdown_pct)}</b><small>Max drawdown</small></span>
-        </div></div>
-      </div>
-      <details className="bench-record-disclosure">
-        <summary><span>Parameters and data window</span><ChevronDown size={15} /></summary>
-        <div>
-          <section><span>Parameters</span><pre>{formatSummary(experiment.parameters_summary)}</pre></section>
-          <section><span>Data window</span><pre>{formatSummary(experiment.data_window)}</pre></section>
-          <p>Recorded {formatDate(experiment.created_at)} · outcome is historical, not actionable.</p>
-        </div>
-      </details>
-    </article>
-  );
-}
-
-function RunDetails({ run }: { run: ExplorationRun }) {
-  return (
-    <details className="bench-record-run-details">
-      <summary><span>Inspect</span><ChevronDown size={13} /></summary>
-      <div>
-        <section><span>Parameters</span><pre>{formatSummary(run.parameters_summary)}</pre></section>
-        <section><span>Data window</span><pre>{formatSummary(run.data_window)}</pre></section>
-        <p>Source: {run.source} · recorded {formatDate(run.created_at)}</p>
-      </div>
-    </details>
   );
 }

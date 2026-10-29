@@ -196,7 +196,7 @@ function ArchNodeBox({
       <foreignObject x={nx + 8} y={ny + 6} width={NODE_W - 16} height={NODE_H - 12}>
         <div
           style={{
-            fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+            fontFamily: "'Geist Mono', 'Fira Code', monospace",
             display: "flex",
             flexDirection: "column",
             justifyContent: "center",
@@ -260,7 +260,7 @@ function ColumnHeaders() {
               textAnchor="middle"
               style={{
                 fontSize: 8,
-                fontFamily: "'JetBrains Mono', monospace",
+                fontFamily: "'Geist Mono', monospace",
                 fontWeight: 700,
                 fill: textColor,
                 letterSpacing: "0.18em",
@@ -295,7 +295,7 @@ function NodePopover({ node, onClose }: { node: ArchNode; onClose: () => void })
           boxShadow: "0 12px 30px rgba(0,0,0,.28), inset 0 1px rgba(255,255,255,.12)",
           backdropFilter: "blur(18px)",
           WebkitBackdropFilter: "blur(18px)",
-          fontFamily: "'JetBrains Mono', monospace",
+          fontFamily: "'Geist Mono', monospace",
           position: "relative",
         }}
       >
@@ -363,7 +363,7 @@ function FlowsSidebar({
         <div
           style={{
             fontSize: 8,
-            fontFamily: "'JetBrains Mono', monospace",
+            fontFamily: "'Geist Mono', monospace",
             fontWeight: 700,
             letterSpacing: "0.22em",
             color: "rgba(148,163,184,0.5)",
@@ -411,7 +411,7 @@ function FlowsSidebar({
                   style={{
                     fontSize: 10,
                     fontWeight: 700,
-                    fontFamily: "'JetBrains Mono', monospace",
+                    fontFamily: "'Geist Mono', monospace",
                     color: isActive ? "#e6e9d7" : "rgba(226,235,223,0.7)",
                     marginBottom: 2,
                   }}
@@ -457,7 +457,7 @@ function FlowsSidebar({
             <div
               style={{
                 fontSize: 8,
-                fontFamily: "'JetBrains Mono', monospace",
+                fontFamily: "'Geist Mono', monospace",
                 fontWeight: 700,
                 letterSpacing: "0.2em",
                 color: "rgba(148,163,184,0.45)",
@@ -516,7 +516,7 @@ function FlowsSidebar({
               onClick={onClear}
               style={{
                 fontSize: 8,
-                fontFamily: "'JetBrains Mono', monospace",
+                fontFamily: "'Geist Mono', monospace",
                 fontWeight: 700,
                 letterSpacing: "0.12em",
                 color: "rgba(148,163,184,0.4)",
@@ -609,7 +609,7 @@ export default function StreamingArchitectureScreen() {
         flexDirection: "column",
         background: "transparent",
         overflow: "hidden",
-        fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+        fontFamily: "'Geist Mono', 'Fira Code', monospace",
       }}
     >
       <style>{`

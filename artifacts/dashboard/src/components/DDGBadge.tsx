@@ -36,10 +36,10 @@ export function DDGBadge({ style, size = "md" }: DDGBadgeProps) {
       >
         POWERED BY{" "}
         <span style={{ color: "rgba(241,245,249,0.9)", fontWeight: 700 }}>DIGITAL DYNAMICS</span>{" "}
-        <span style={{ color: "#22d3ee", fontWeight: 700 }}>GROUP</span>
+        <span style={{ color: "rgba(241,245,249,0.9)", fontWeight: 700 }}>GROUP</span>
       </span>
       <img
-        src="/ddg-logo-disc-128.png"
+        src="/ddg-mark-white-256.png"
         alt="DDG"
         style={{
           height: isSm ? 12 : 15,

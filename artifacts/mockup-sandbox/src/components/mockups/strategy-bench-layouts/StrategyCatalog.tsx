@@ -1,439 +1,143 @@
 import { useMemo, useState } from "react";
 import {
-  ArrowDown,
-  ArrowUp,
-  ArrowUpDown,
-  BarChart3,
-  BookOpen,
-  CalendarClock,
-  ChevronDown,
-  Database,
-  FlaskConical,
-  LockKeyhole,
-  ShieldCheck,
+  AlertTriangle, Archive, ArrowDown, ArrowUp, ArrowUpDown, BookOpen, ChevronRight,
+  Database, FlaskConical, LockKeyhole, RefreshCw, Search, ShieldCheck,
 } from "lucide-react";
-import {
-  CartesianGrid,
-  ResponsiveContainer,
-  Scatter,
-  ScatterChart,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import { MOCK_CATALOG } from "./_shared/BenchCatalogFixture";
 import "./_group.css";
-import "./BenchRecord.css";
 import "./StrategyCatalog.css";
 
-type Experiment = (typeof MOCK_CATALOG.experiments)[number];
-type ExplorationRun = (typeof MOCK_CATALOG.exploration_runs)[number];
+type Run = (typeof MOCK_CATALOG.exploration_runs)[number];
 type SortKey = "sharpe" | "return_pct" | "max_drawdown" | "created_at";
-type ResearchGroup = "Atlas" | "Momentum" | "Bullion" | "Forex" | "Fleet" | "Other";
-type ChartPoint = {
-  id: string | number;
-  family: string;
-  sharpe: number;
-  drawdown: number;
-  return_pct: number | null;
-  group: ResearchGroup;
-  run: ExplorationRun;
-};
+const color = "#456b5b";
 
-const GROUPS: ResearchGroup[] = ["Atlas", "Momentum", "Bullion", "Forex", "Fleet", "Other"];
-const GROUP_COLORS: Record<ResearchGroup, string> = {
-  Atlas: "#9a654f",
-  Momentum: "#466b5c",
-  Bullion: "#92773f",
-  Forex: "#74698a",
-  Fleet: "#497d77",
-  Other: "#68715f",
-};
-
-function researchGroup(family: string): ResearchGroup {
-  const value = family.toLowerCase();
-  if (value.includes("atlas")) return "Atlas";
-  if (value.includes("momentum")) return "Momentum";
-  if (value.includes("bullion") || value.includes("gold") || value.includes("silver")) return "Bullion";
-  if (/\bforex\b|\bfx\b|foreign[_ -]?exchange|currency|oanda/.test(value)) return "Forex";
-  if (value.includes("fleet")) return "Fleet";
-  return "Other";
+function familyName(value: string) {
+  return value.replace(/^bot(\d+)_/i, "Bot $1 · ").replace(/[_-]+/g, " ").replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
 }
-
-function familyLabel(family: string) {
-  return family
-    .replace(/^bot(\d+)_/i, "Bot $1 · ")
-    .replace(/[_-]+/g, " ")
-    .replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
+function date(value: string) {
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? value : new Intl.DateTimeFormat("en", { year: "numeric", month: "short", day: "2-digit", ...(value.includes("T") ? { hour: "2-digit", minute: "2-digit", timeZone: "UTC", timeZoneName: "short" as const } : {}) }).format(d);
 }
-
-function formatDate(value: string | undefined) {
-  if (!value) return "Not recorded";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("en", {
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-    ...(value.includes("T")
-      ? { hour: "2-digit", minute: "2-digit", timeZone: "UTC", timeZoneName: "short" as const }
-      : {}),
-  }).format(date);
-}
-
-function formatMetric(value: number | null | undefined, digits = 2) {
+function metric(value: number | null | undefined, digits = 2) {
   return typeof value === "number" && Number.isFinite(value) ? value.toFixed(digits) : "—";
 }
-
-function formatPercent(value: number | null | undefined, digits = 1) {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
-  return `${value > 0 ? "+" : ""}${value.toFixed(digits)}%`;
+function percent(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value) ? `${value > 0 ? "+" : ""}${value.toFixed(2)}%` : "—";
 }
-
-function formatDrawdown(value: number | null | undefined) {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
-  return `${value > 0 ? "−" : ""}${Math.abs(value).toFixed(1)}%`;
+function drawdown(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value) ? `−${Math.abs(value).toFixed(1)}%` : "—";
 }
-
-function formatSummary(value: unknown) {
+function summary(value: unknown) {
   if (value === null || value === undefined || value === "") return "Not recorded";
-  if (typeof value === "string") return value;
-  if (typeof value === "number" || typeof value === "boolean") return String(value);
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return "Not recorded";
-  }
-}
-
-function formatPassBar(value: unknown) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return formatSummary(value);
-  const entries = Object.entries(value as Record<string, unknown>);
-  if (!entries.length) return "Not recorded";
-  return entries.map(([key, threshold]) => {
-    const operator = key.endsWith("_min") ? "≥" : key.endsWith("_max") ? "≤" : "=";
-    return `${key.replace(/_(min|max)$/, "").replace(/_/g, " ")} ${operator} ${formatSummary(threshold)}`;
-  }).join(" · ");
-}
-
-function outcomeTone(outcome: string) {
-  const normalized = outcome.toLowerCase();
-  if (/fail|reject|negative|blocked|not.?pass/.test(normalized)) return "is-fail";
-  if (/pass|verified|accept|success|ready/.test(normalized)) return "is-pass";
-  return "is-neutral";
-}
-
-function outcomeLabel(outcome: string) {
-  return outcome.replace(/[_-]+/g, " ").replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
-}
-
-type TooltipProps = { active?: boolean; payload?: Array<{ payload?: ChartPoint }> };
-
-function RunTooltip({ active, payload }: TooltipProps) {
-  const point = payload?.[0]?.payload;
-  if (!active || !point) return null;
-  return (
-    <div className="bench-record-tooltip" role="status">
-      <strong>{familyLabel(point.family)}</strong>
-      <span>Run {point.id} · {point.group}</span>
-      <dl>
-        <div><dt>Sharpe</dt><dd>{formatMetric(point.sharpe, 3)}</dd></div>
-        <div><dt>Maximum drawdown</dt><dd>{formatDrawdown(point.run.max_drawdown)}</dd></div>
-        <div><dt>Return</dt><dd>{formatPercent(point.return_pct, 2)}</dd></div>
-      </dl>
-      <small>{point.run.source} · {formatDate(point.run.created_at)}</small>
-    </div>
-  );
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
+  try { return JSON.stringify(value, null, 2); } catch { return "Not recorded"; }
 }
 
 export default function StrategyCatalog() {
-  const experiments = MOCK_CATALOG.experiments as Experiment[];
-  const runs = MOCK_CATALOG.exploration_runs as ExplorationRun[];
-  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [preview, setPreview] = useState(false);
+  const [retryState, setRetryState] = useState<"idle" | "loading" | "unavailable">("idle");
   const [familyFilter, setFamilyFilter] = useState("all");
   const [sortKey, setSortKey] = useState<SortKey>("created_at");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
-  const experimentGroups = GROUPS
-    .map((group) => ({ group, items: experiments.filter((item) => researchGroup(item.family) === group) }))
-    .filter(({ items }) => items.length > 0);
-
-  const outcomeCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    experiments.forEach((item) => {
-      const key = item.outcome.trim() || "Not recorded";
-      counts.set(key, (counts.get(key) ?? 0) + 1);
-    });
-    return [...counts.entries()];
-  }, [experiments]);
-  const families = useMemo(() => [...new Set(runs.map((run) => run.family))].sort((a, b) => a.localeCompare(b)), [runs]);
-  const chartPoints = useMemo<ChartPoint[]>(() => runs.flatMap((run) => {
-    if (
-      typeof run.sharpe !== "number" || !Number.isFinite(run.sharpe)
-      || typeof run.max_drawdown !== "number" || !Number.isFinite(run.max_drawdown)
-    ) return [];
-    return [{
-      id: run.id,
-      family: run.family,
-      sharpe: run.sharpe,
-      drawdown: Math.abs(run.max_drawdown),
-      return_pct: run.return_pct,
-      group: researchGroup(run.family),
-      run,
-    }];
-  }), [runs]);
-  const chartGroups = GROUPS.map((group) => ({
-    group,
-    points: chartPoints.filter((point) => point.group === group),
-  })).filter(({ points }) => points.length > 0);
-  const selectedRun = runs.find((run) => String(run.id) === selectedRunId) ?? null;
-  const plottedIds = new Set(chartPoints.map((point) => String(point.id)));
-  const visibleRuns = useMemo(() => {
-    const filtered = familyFilter === "all" ? runs : runs.filter((run) => run.family === familyFilter);
-    return [...filtered].sort((a, b) => {
-      const left = a[sortKey];
-      const right = b[sortKey];
-      if (sortKey !== "created_at" && (typeof left !== "number" || typeof right !== "number")) {
-        if (left == null && right != null) return 1;
-        if (left != null && right == null) return -1;
-        return 0;
-      }
-      const compare = sortKey === "created_at"
-        ? new Date(String(left)).getTime() - new Date(String(right)).getTime()
-        : Number(left) - Number(right);
-      return compare * (sortDirection === "asc" ? 1 : -1);
-    });
-  }, [familyFilter, runs, sortDirection, sortKey]);
-
-  function changeSort(key: SortKey) {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const runs = MOCK_CATALOG.exploration_runs as Run[];
+  const families = useMemo(() => [...new Set(runs.map((run) => run.family))].sort(), [runs]);
+  const visible = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return runs.filter((run) => (familyFilter === "all" || run.family === familyFilter)
+      && (!needle || `${run.id} ${run.family} ${run.source} ${summary(run.parameters_summary)}`.toLowerCase().includes(needle)))
+      .sort((a, b) => {
+        const left = a[sortKey], right = b[sortKey];
+        const diff = sortKey === "created_at" ? new Date(String(left)).getTime() - new Date(String(right)).getTime() : Number(left) - Number(right);
+        return diff * (sortDirection === "asc" ? 1 : -1);
+      });
+  }, [familyFilter, query, runs, sortDirection, sortKey]);
+  const selected = runs.find((run) => String(run.id) === selectedId) ?? null;
+  function sort(key: SortKey) {
     if (sortKey === key) setSortDirection((direction) => direction === "asc" ? "desc" : "asc");
-    else {
-      setSortKey(key);
-      setSortDirection("desc");
-    }
+    else { setSortKey(key); setSortDirection("desc"); }
   }
-
-  const renderPoint = (rawProps: unknown) => {
-    const props = rawProps as { cx?: number; cy?: number; fill?: string; payload?: ChartPoint };
-    const point = props.payload;
-    if (typeof props.cx !== "number" || typeof props.cy !== "number" || !point) return <g />;
-    const select = () => setSelectedRunId(String(point.id));
-    return (
-      <g
-        role="button"
-        tabIndex={0}
-        aria-label={`Inspect run ${point.id}, ${familyLabel(point.family)}, Sharpe ${formatMetric(point.sharpe, 3)}, maximum drawdown ${formatDrawdown(point.run.max_drawdown)}`}
-        aria-pressed={selectedRunId === String(point.id)}
-        onClick={(event) => { event.stopPropagation(); select(); }}
-        onFocus={select}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            select();
-          }
-        }}
-      >
-        <circle cx={props.cx} cy={props.cy} r={12} fill="transparent" />
-        <circle className="bench-record-dot" cx={props.cx} cy={props.cy} r={5.5} fill={props.fill ?? GROUP_COLORS[point.group]} />
-      </g>
-    );
-  };
+  function retry() {
+    setRetryState("loading");
+    window.setTimeout(() => setRetryState("unavailable"), 700);
+  }
 
   return (
     <main className="bench-shell bench-catalog bench-record-page strategy-catalog-page" data-testid="page-bench-catalog">
+      <aside className="bench-rail">
+        <div className="bench-rail-brand"><div className="bench-brand-mark"><FlaskConical size={18} /></div><div><span className="bench-overline">RESEARCH LEDGER</span><strong>Strategy Bench</strong></div></div>
+        <div className="bench-rail-rule" />
+        <div className="archive-rail-nav" aria-label="Archive contents">
+          <span className="archive-nav-label">COLLECTION</span>
+          <div className="archive-nav-current"><Archive size={15} /><span>Historical runs</span><b>{runs.length}</b></div>
+          <div className="archive-nav-note"><BookOpen size={14} /><span>Registered hypotheses</span><b>{MOCK_CATALOG.experiments.length}</b></div>
+        </div>
+        <div className="bench-rail-spacer" />
+        <div className="bench-rail-note"><span className="bench-status-dot" /><div><strong>READ ONLY</strong><span>NO ORDER PATHS</span></div></div>
+        <div className="bench-rail-meta"><span>Record set</span><code>{preview ? `Version ${MOCK_CATALOG.schema_version}` : "Unavailable"}</code><span>Execution</span><code>Separate system</code></div>
+      </aside>
       <section className="bench-content">
-        <header className="bench-topbar strategy-masthead">
-          <div className="strategy-masthead-brand">
-            <div className="bench-brand-mark"><FlaskConical size={18} /></div>
-            <div className="bench-title-group">
-              <div className="bench-breadcrumb"><BookOpen size={13} /> Research / Bench</div>
-              <h1>Strategy Bench</h1>
-            </div>
-          </div>
-          <div className="strategy-masthead-status">
-            <span className="bench-readonly"><Database size={13} /> Read-only catalog</span>
-            <div className="bench-rail-note"><span className="bench-status-dot" /><div><strong>READ ONLY</strong><span>NO ORDER PATHS</span></div></div>
-          </div>
+        <header className="bench-topbar archive-topbar">
+          <div className="bench-title-group"><div className="bench-breadcrumb"><BookOpen size={13} /> Research / Bench / Archive</div><h1>Strategy Bench</h1></div>
+          <div className="archive-top-status"><span className="bench-readonly"><Database size={13} /> Historical research ledger</span><span className="archive-boundary"><LockKeyhole size={13} /> Read only · no order paths</span></div>
         </header>
-
-        <div className="bench-ledger-body bench-record-body strategy-catalog-body">
-          <section className="strategy-meta-strip" aria-label="Snapshot summary and provenance">
-            <div className="strategy-meta-overview">
-              <div className="strategy-meta-kicker"><BookOpen size={13} /><span>Research record · Version {MOCK_CATALOG.schema_version}</span></div>
-              <p>Registered hypotheses and historical outcomes for inspection. This page cannot start research or route an order.</p>
-              <div className="strategy-meta-counts">
-                <div className="strategy-count-block"><strong>{experiments.length}</strong><span>Hypotheses</span></div>
-                {outcomeCounts.length ? outcomeCounts.map(([outcome, count]) => (
-                  <span className={`bench-record-outcome ${outcomeTone(outcome)}`} key={outcome}><b>{count}</b> {outcomeLabel(outcome)}</span>
-                )) : <span className="bench-record-outcome is-neutral">No outcomes recorded</span>}
-                <div className="strategy-count-block strategy-runs-count"><strong>{runs.length}</strong><span>Exploration runs</span></div>
-              </div>
-            </div>
-            <aside className="bench-record-provenance strategy-provenance-strip" aria-label="Catalog snapshot source">
-              <div className="bench-record-provenance-title"><Database size={15} /> Snapshot provenance</div>
-              <dl className="strategy-provenance-values">
-                <div><dt>Source</dt><dd>{MOCK_CATALOG.source_label || MOCK_CATALOG.source}</dd></div>
-                <div><dt>As of</dt><dd>{formatDate(MOCK_CATALOG.snapshot_as_of)}</dd></div>
-                <div><dt>Generated</dt><dd>{formatDate(MOCK_CATALOG.generated_at)}</dd></div>
-              </dl>
-              <p>{MOCK_CATALOG.source_detail}</p>
-            </aside>
-          </section>
-
-          <section className="strategy-hypothesis-board" aria-labelledby="hypothesis-board-title">
-            <header className="strategy-board-heading">
-              <div>
-                <span className="bench-record-section-label">01 · Registered hypotheses</span>
-                <h2 id="hypothesis-board-title">Research evidence board</h2>
-                <p>Compare declared pass bars with recorded outcomes across each research family.</p>
-              </div>
-              <span className="bench-record-section-count">{experiments.length} {experiments.length === 1 ? "record" : "records"}</span>
-            </header>
-            {experimentGroups.length ? (
-              <div className="strategy-family-board">
-                {experimentGroups.map(({ group, items }, index) => (
-                  <section className="strategy-family-section" key={group} aria-labelledby={`strategy-family-${group.toLowerCase()}`}>
-                    <header className="strategy-family-heading">
-                      <span>{String(index + 1).padStart(2, "0")}</span>
-                      <h3 id={`strategy-family-${group.toLowerCase()}`}>{group}</h3>
-                      <small>{items.length} {items.length === 1 ? "record" : "records"}</small>
-                    </header>
-                    <div className="strategy-comparison-grid">
-                      {items.map((experiment) => (
-                        <article className="strategy-compare-card" key={experiment.id} aria-labelledby={`strategy-hypothesis-${experiment.id}`}>
-                          <div className="strategy-card-topline">
-                            <span>Record {experiment.id}</span>
-                            <span className={`bench-record-verdict ${outcomeTone(experiment.outcome)}`} data-testid={`status-outcome-${experiment.id}`}>
-                              {outcomeLabel(experiment.outcome)}
-                            </span>
-                          </div>
-                          <h4 id={`strategy-hypothesis-${experiment.id}`}>{familyLabel(experiment.family)}</h4>
-                          <p className="strategy-hypothesis-copy">{experiment.hypothesis || "No hypothesis was recorded."}</p>
-                          <div className="strategy-compare-evidence">
-                            <section className="strategy-compare-passbar">
-                              <span className="bench-record-field-label">Declared pass bar</span>
-                              <strong>{formatPassBar(experiment.pass_bar)}</strong>
-                            </section>
-                            <section className="strategy-compare-result" aria-label="Recorded outcome metrics">
-                              <span className="bench-record-field-label">Recorded result</span>
-                              <div className="strategy-result-metrics">
-                                <span><b>{formatMetric(experiment.metrics?.sharpe, 3)}</b><small>Sharpe</small></span>
-                                <span><b>{formatPercent(experiment.metrics?.return_pct, 2)}</b><small>Return</small></span>
-                                <span><b>{formatDrawdown(experiment.metrics?.max_drawdown_pct)}</b><small>Max drawdown</small></span>
-                              </div>
-                            </section>
-                          </div>
-                          <div className="strategy-card-foot">
-                            <span>Recorded {formatDate(experiment.created_at)}</span>
-                            <span>Outcome is historical, not actionable.</span>
-                          </div>
-                          <details className="bench-record-disclosure strategy-card-disclosure">
-                            <summary><span>Parameters and data window</span><ChevronDown size={15} /></summary>
-                            <div>
-                              <section><span>Parameters</span><pre>{formatSummary(experiment.parameters_summary)}</pre></section>
-                              <section><span>Data window</span><pre>{formatSummary(experiment.data_window)}</pre></section>
-                            </div>
-                          </details>
-                        </article>
-                      ))}
-                    </div>
-                  </section>
-                ))}
-              </div>
-            ) : (
-              <div className="strategy-board-empty" role="status">
-                <strong>No hypotheses in this snapshot</strong>
-                <span>The current catalog contains no registered experiment records.</span>
-              </div>
-            )}
-          </section>
-
-          <section className="bench-record-panel bench-record-chart-panel strategy-chart-panel" aria-labelledby="bench-chart-title">
-            <div className="bench-record-panel-heading">
-              <div>
-                <span className="bench-record-section-label">02 · Risk and return</span>
-                <h2 id="bench-chart-title">Sharpe vs maximum drawdown</h2>
-                <p>Each point is an exploration run with both chart metrics recorded.</p>
-              </div>
-              <span className="bench-record-chart-count">{chartPoints.length} of {runs.length} runs plotted</span>
-            </div>
-            <div className="bench-record-chart-layout">
-              <div className="bench-record-chart-column">
-                {chartPoints.length ? (
-                  <div className="bench-record-chart" role="group" aria-label="Sharpe ratio against maximum drawdown. Select a point for run details.">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <ScatterChart margin={{ top: 14, right: 20, bottom: 25, left: 6 }}>
-                        <CartesianGrid stroke="rgba(55, 78, 69, .18)" vertical strokeDasharray="3 5" />
-                        <XAxis type="number" dataKey="sharpe" name="Sharpe" tick={{ fill: "#5d7067", fontSize: 11 }} tickLine={false} axisLine={{ stroke: "rgba(53, 75, 66, .45)" }} tickFormatter={(value: number) => Number(value).toFixed(1)} label={{ value: "Sharpe ratio", position: "insideBottom", offset: -13, fill: "#4f665c", fontSize: 11 }} />
-                        <YAxis type="number" dataKey="drawdown" name="Maximum drawdown" reversed domain={[0, "auto"]} width={52} tick={{ fill: "#5d7067", fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={(value: number) => `−${Math.abs(value).toFixed(0)}%`} />
-                        <Tooltip content={<RunTooltip />} cursor={{ stroke: "rgba(50, 83, 66, .42)", strokeDasharray: "3 4" }} />
-                        {chartGroups.map(({ group, points }) => (
-                          <Scatter key={group} name={group} data={points} fill={GROUP_COLORS[group]} shape={renderPoint} isAnimationActive={false} />
-                        ))}
-                      </ScatterChart>
-                    </ResponsiveContainer>
+        <div className={`archive-workspace${preview ? " is-preview" : " is-unavailable"}`}>
+          {preview && <section className="archive-context">
+            <div className="archive-context-mark"><Archive size={17} /></div>
+            <div className="archive-context-copy"><span className="archive-kicker">CATALOG ACCESS</span><strong>Local sample snapshot</strong><p>Static sample records for layout review; not live data.</p></div>
+            <span className="archive-static"><i /> STATIC / SAMPLE</span>
+          </section>}
+          {!preview ? (
+            <section className="archive-unavailable" role="alert" data-testid="status-bench-error">
+              <div className="archive-unavailable-top"><div className="archive-alert-icon"><AlertTriangle size={20} /></div><span className="archive-kicker">READ-ONLY SOURCE · GET</span><span className="archive-offline"><i />{retryState === "loading" ? "CHECKING" : "SOURCE OFFLINE"}</span></div>
+              <div className="archive-alert-copy"><h2>Research records are unavailable</h2><p>{retryState === "loading" ? "Retrying local catalog check…" : retryState === "unavailable" ? "Catalog remains unavailable. The local preview is still available for layout review." : "The catalog could not be read. No research action was submitted."}</p><p className="archive-boundary-copy">This historical ledger is read-only. No research action or order was submitted.</p></div>
+              <div className="archive-alert-actions"><button className="archive-retry" type="button" onClick={retry} disabled={retryState === "loading"} aria-live="polite"><RefreshCw size={14} className={retryState === "loading" ? "archive-spin" : ""} />{retryState === "loading" ? "Checking catalog…" : "Retry catalog read"}</button><button type="button" onClick={() => { setPreview(true); setSelectedId(String(runs[0]?.id ?? "")); }}>Inspect local sample <ChevronRight size={14} /></button></div>
+            </section>
+          ) : (
+            <>
+              <section className="archive-ledger-summary" aria-label="Snapshot summary">
+                <div className="archive-summary-title"><span className="archive-kicker">COLLECTION INDEX</span><strong>Snapshot overview</strong><small>Version {MOCK_CATALOG.schema_version} · as of {date(MOCK_CATALOG.snapshot_as_of)}</small></div>
+                <div><b>{MOCK_CATALOG.experiments.length}</b><span>Hypotheses</span></div><div><b>1</b><span>Pass</span></div><div><b>1</b><span>Fail</span></div><div><b>{runs.length}</b><span>Exploration runs</span></div>
+                <div className="archive-provenance"><Database size={13} /><span>{MOCK_CATALOG.source_label}</span></div>
+              </section>
+              <section className="archive-browser" aria-label="Historical archive">
+                <div className="archive-browser-head">
+                  <div><span className="archive-kicker">01 / RECORD INDEX</span><h2>Exploration runs</h2><p>Browse historical trials by family, metric or recorded date.</p></div>
+                  <div className="archive-controls">
+                    <label className="archive-search"><Search size={14} /><span className="sr-only">Search archive</span><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Find a record…" /></label>
+                    <label className="archive-family"><span>Family</span><select aria-label="Filter runs by family" value={familyFilter} onChange={(e) => setFamilyFilter(e.target.value)}><option value="all">All families</option>{families.map((family) => <option key={family} value={family}>{familyName(family)}</option>)}</select></label>
                   </div>
-                ) : (
-                  <div className="bench-record-empty-chart"><BarChart3 size={20} /><strong>No runs can be plotted</strong><span>The catalog has no exploration runs with both Sharpe and maximum drawdown values.</span></div>
-                )}
-                {chartGroups.length > 0 && <div className="bench-record-legend" aria-label="Chart groups">{chartGroups.map(({ group }) => <span key={group}><i style={{ backgroundColor: GROUP_COLORS[group] }} />{group}</span>)}</div>}
-              </div>
-              <aside className="bench-record-selection" aria-live="polite" aria-label="Selected exploration run">
-                {selectedRun ? (
-                  <>
-                    <span className="bench-record-selection-label">{plottedIds.has(String(selectedRun.id)) ? "Selected run" : "Selected run · chart metrics incomplete"}</span>
-                    <strong>{familyLabel(selectedRun.family)}</strong>
-                    <span className="bench-record-selection-id">Record {selectedRun.id} · {selectedRun.source}</span>
-                    <dl>
-                      <div><dt>Sharpe</dt><dd>{formatMetric(selectedRun.sharpe, 3)}</dd></div>
-                      <div><dt>Maximum drawdown</dt><dd>{formatDrawdown(selectedRun.max_drawdown)}</dd></div>
-                      <div><dt>Return</dt><dd>{formatPercent(selectedRun.return_pct, 2)}</dd></div>
-                    </dl>
-                    <time>{formatDate(selectedRun.created_at)}</time>
-                  </>
-                ) : <p>Select a point or a run below to inspect its recorded metrics.</p>}
-              </aside>
-            </div>
-            <div className="bench-record-chart-notes">
-              <span>{runs.length - chartPoints.length} {runs.length - chartPoints.length === 1 ? "run is" : "runs are"} missing one or both chart metrics; all remain in the table below.</span>
-              <span>No SPY buy-and-hold reference is recorded in this catalog.</span>
-            </div>
-          </section>
-
-          <section className="bench-record-panel bench-record-runs strategy-runs-panel" aria-labelledby="bench-runs-title">
-            <div className="bench-record-panel-heading bench-record-runs-heading">
-              <div><span className="bench-record-section-label">03 · Historical search space</span><h2 id="bench-runs-title">Exploration runs</h2><p>Recorded parameter trials and metrics. Filter by family or sort a column.</p></div>
-              <label className="bench-record-filter"><span>Family</span><select value={familyFilter} onChange={(event) => setFamilyFilter(event.target.value)}><option value="all">All families</option>{families.map((family) => <option key={family} value={family}>{familyLabel(family)}</option>)}</select></label>
-            </div>
-            <div className="bench-record-table-meta"><span>{visibleRuns.length} of {runs.length} runs</span><span>All historical records remain inspectable</span></div>
-            <div className="bench-record-table-scroll" role="region" aria-label="Exploration run records" tabIndex={0}>
-              {visibleRuns.length ? (
-                <table className="bench-record-table">
-                  <thead><tr>
-                    <th scope="col">Record</th><th scope="col">Family</th>
-                    {([["sharpe", "Sharpe"], ["return_pct", "Return"], ["max_drawdown", "Max drawdown"], ["created_at", "Recorded"]] as [SortKey, string][]).map(([key, label]) => {
-                      const SortIcon = sortKey === key ? sortDirection === "asc" ? ArrowUp : ArrowDown : ArrowUpDown;
-                      return <th scope="col" key={key}><button type="button" className="bench-record-sort" aria-label={`Sort by ${label.toLowerCase()}`} aria-sort={sortKey === key ? (sortDirection === "asc" ? "ascending" : "descending") : "none"} onClick={() => changeSort(key)}>{label}<SortIcon size={12} aria-hidden="true" /></button></th>;
-                    })}
-                    <th scope="col">Source</th><th scope="col">Parameters and window</th>
-                  </tr></thead>
-                  <tbody>{visibleRuns.map((run) => (
-                    <tr key={run.id}>
-                      <td className="bench-record-mono"><button type="button" className="bench-record-run-link" onClick={() => setSelectedRunId(String(run.id))} aria-label={`Inspect exploration run ${run.id}`}>#{run.id}</button></td>
-                      <td><span className="bench-record-family"><i style={{ backgroundColor: GROUP_COLORS[researchGroup(run.family)] }} />{familyLabel(run.family)}</span></td>
-                      <td className="bench-record-mono">{formatMetric(run.sharpe, 3)}</td>
-                      <td className="bench-record-mono">{formatPercent(run.return_pct, 2)}</td>
-                      <td className="bench-record-mono">{formatDrawdown(run.max_drawdown)}</td>
-                      <td className="bench-record-mono"><span className="bench-record-date"><CalendarClock size={12} />{formatDate(run.created_at)}</span></td>
-                      <td className="bench-record-mono">{run.source || "Not recorded"}</td>
-                      <td><details className="bench-record-run-details"><summary>Inspect <ChevronDown size={13} /></summary><div><section><span>Parameters</span><pre>{formatSummary(run.parameters_summary)}</pre></section><section><span>Data window</span><pre>{formatSummary(run.data_window)}</pre></section></div></details></td>
-                    </tr>
-                  ))}</tbody>
-                </table>
-              ) : <div className="bench-record-empty-runs"><strong>{runs.length === 0 ? "No exploration runs" : "No runs for this family"}</strong><span>{runs.length === 0 ? "The current catalog contains no exploration records." : "Choose another family to view recorded runs."}</span></div>}
-            </div>
-            <footer className="bench-record-table-foot"><span><LockKeyhole size={13} /> Read-only historical records</span><span>Source: {MOCK_CATALOG.source_label || MOCK_CATALOG.source}</span></footer>
-          </section>
-          <footer className="bench-record-page-foot"><span><ShieldCheck size={14} /> Research records do not represent live positions or execution.</span><span>Snapshot as of {formatDate(MOCK_CATALOG.snapshot_as_of)} <i className="strategy-static-note">Static sample records</i></span></footer>
+                </div>
+                <div className="archive-browser-body">
+                  <div className="archive-list-wrap" role="region" aria-label="Historical run records" tabIndex={0}>
+                    <div className="archive-list-meta"><span>{visible.length} / {runs.length} RECORDS</span><span>SELECT TO INSPECT</span></div>
+                    <table className="archive-list"><thead><tr><th>RECORD</th><th>FAMILY</th>{([["sharpe","SHARPE"],["return_pct","RETURN"],["max_drawdown","DRAWDOWN"],["created_at","RECORDED"]] as [SortKey,string][]).map(([key,label]) => { const Icon = key === sortKey ? sortDirection === "asc" ? ArrowUp : ArrowDown : ArrowUpDown; return <th key={key}><button type="button" aria-label={`Sort by ${label.toLowerCase()}`} aria-sort={sortKey === key ? sortDirection === "asc" ? "ascending" : "descending" : "none"} onClick={() => sort(key)}>{label}<Icon size={11} /></button></th> })}</tr></thead>
+                      <tbody>{visible.map((run) => <tr key={run.id} className={String(run.id) === selectedId ? "is-selected" : ""} onClick={() => setSelectedId(String(run.id))}>
+                        <td><button className="archive-record-id" type="button" onClick={(e) => { e.stopPropagation(); setSelectedId(String(run.id)); }} aria-pressed={String(run.id) === selectedId}>#{run.id}</button></td><td><span className="archive-family-dot" style={{ background: color }} />{familyName(run.family)}</td><td>{metric(run.sharpe,3)}</td><td>{percent(run.return_pct)}</td><td>{drawdown(run.max_drawdown)}</td><td>{date(run.created_at)}</td>
+                      </tr>)}</tbody></table>
+                    {!visible.length && <div className="archive-empty"><strong>No records match</strong><span>Adjust the family or search term.</span></div>}
+                  </div>
+                  <aside className="archive-record-panel" aria-live="polite" aria-label="Selected historical record">
+                    {selected ? <>
+                      <div className="archive-detail-head"><span className="archive-kicker">SELECTED RECORD</span><span className="archive-detail-id">#{selected.id}</span></div>
+                      <h3>{familyName(selected.family)}</h3><p className="archive-detail-date">{date(selected.created_at)}</p>
+                      <div className="archive-detail-metrics"><div><span>SHARPE</span><b>{metric(selected.sharpe,3)}</b></div><div><span>RETURN</span><b>{percent(selected.return_pct)}</b></div><div><span>MAX DRAWDOWN</span><b>{drawdown(selected.max_drawdown)}</b></div></div>
+                      <div className="archive-detail-source"><span>SOURCE</span><b>{selected.source}</b></div>
+                      <details className="archive-detail-disclosure"><summary>Parameters and data window <ChevronRight size={13} /></summary><div><span>Parameters</span><pre>{summary(selected.parameters_summary)}</pre><span>Data window</span><pre>{summary(selected.data_window)}</pre></div></details>
+                      <div className="archive-readonly-note"><ShieldCheck size={14} /><span>Historical record only.<br />Not an instruction or live position.</span></div>
+                    </> : <p className="archive-select-prompt">Select a row to inspect its recorded metrics and source details.</p>}
+                  </aside>
+                </div>
+                <footer className="archive-browser-foot"><span><LockKeyhole size={12} /> No execution controls in this archive</span><span>Parameters and windows are recorded as supplied</span></footer>
+              </section>
+              <section className="archive-hypotheses" aria-label="Registered hypotheses">
+                <div><span className="archive-kicker">02 / RELATED REGISTER</span><strong>Registered hypotheses</strong><small>Declared pass bars and recorded outcomes</small></div>
+                {MOCK_CATALOG.experiments.map((item) => <article key={item.id}><b>#{item.id}</b><span>{familyName(item.family)}</span><em className={item.outcome === "PASS" ? "is-pass" : "is-fail"}>{item.outcome}</em></article>)}
+              </section>
+            </>
+          )}
+          <footer className="archive-page-foot"><span><ShieldCheck size={13} /> Read-only historical research · never an order path</span><span>{preview ? "Static sample data — not live" : "Catalog source unavailable"} <button type="button" onClick={() => { setPreview(!preview); setRetryState("idle"); setSelectedId(null); }}>{preview ? "Return to unavailable state" : "View local sample preview"}</button></span></footer>
         </div>
       </section>
     </main>

@@ -1,10 +1,10 @@
 ---
-name: DDG Finance backgrounds
-description: Background image rule for DDG Finance pages and the older dashboard routes.
+name: Platform background
+description: Shared background image rule for all Trading Platform dashboard pages.
 ---
 
-DDG Finance pages use the two user-provided landscape photos as a slow crossfade, with optimized image assets and the existing readability overlay. Older non-DDG dashboard routes retain their shared nature background unless the user changes that scope.
+All Trading Platform dashboard pages use the user's optimized Iceland mountain photo as the shared background. Preserve dark readability overlays and the soft mobile blur. Do not restore separate DDG and legacy background photos unless the user changes this direction.
 
-**Why:** The user replaced the DDG Finance background direction with these two landscape images.
+**Why:** The user asked to apply this image across every page and reduce its dimensions so it loads faster.
 
-**How to apply:** Reuse the shared DDG background styling for every DDG Finance page and preserve the overlay, responsive positioning, and reduced-motion behavior.
+**How to apply:** Keep dashboard background references pointed at the shared optimized WebP asset; preserve the contrast treatment on each route.

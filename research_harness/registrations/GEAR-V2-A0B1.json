@@ -1,6 +1,6 @@
 {
   "id": "GEAR-V2-A0B1",
-  "registered_at": "2026-10-30 ~10:50 Brisbane, after the GEAR-V2 exploration (exploration_log.jsonl, same commit) and BEFORE any held-out data was read",
+  "registered_at": "2026-10-30 10:40 Brisbane (commit 0757e44), after the GEAR-V2 exploration (exploration_log.jsonl, same commit) and BEFORE any held-out data was read",
   "source_document": "research_harness/explore/GEAR-V2-PLAN.md (committed f03575e, 10:33 Brisbane, before any GEAR-V2 run)",
   "hypothesis": "A fund of 75% GEAR-V1-G4 (T-bills in its safe gear, as registered) plus 25% always-on long/short cross-asset ETF trend earns at least 12.5% a year, beats SPY's return, and has a smaller worst fall and a higher Sharpe than SPY, after costs, on unseen data.",
   "candidate": "Part A = A0 (G4 unchanged: research_harness/sleeves/gear.py, candidate G4, safe gear = T-bills). Part B = B1: 75% the Part A sleeve + 25% the long/short trend slice (TREND-V1 universe, sma_210 trend call, LONG above / SHORT at or below the 210-session average, inverse 63-session volatility weights capped at 0.30, gross <= 1.0, monthly at the first session close, next-open fills). Fund weights constant, rebalanced daily (harness rule). Both sleeves: whole shares, 20% protective stops re-set at each rebalance (buy stops above shorts). Code: research_harness/sleeves/gear_v2.py, research_harness/explore/gear_v2.py, research_harness/heldout/gear_v2.py",

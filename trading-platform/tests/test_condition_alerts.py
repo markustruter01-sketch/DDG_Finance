@@ -80,8 +80,30 @@ def test_stale_cycle_invariant_is_recorded_for_alerting(monkeypatch):
         lambda **kwargs: recorded.append(kwargs),
     )
     monkeypatch.setattr("core.degradation_tracker.mark_resolved", lambda *args, **kwargs: 0)
+    monkeypatch.setattr("core.degradation_tracker.has_recent_open", lambda *args, **kwargs: False)
 
     asyncio.run(scheduler._standing_invariants_job())
 
     assert recorded[0]["error_type"] == "bot_cycle_success_freshness"
     assert recorded[0]["severity"] == "critical"
+
+
+def test_failing_invariant_with_an_open_row_is_not_recorded_again(monkeypatch):
+    recorded = []
+    monkeypatch.setattr(
+        "core.invariants.run_all_invariants",
+        lambda: {
+            "overall": "FAIL",
+            "counts": {"PASS": 0, "DRIFT": 0, "FAIL": 1, "UNKNOWN": 0},
+            "checked_at": "2026-10-31T00:00:00+00:00",
+            "results": [{"name": "zero_unresolved_high_severity_degradations", "status": "FAIL",
+                         "actual": {}, "expected": {}, "difference": {}, "message": "3 remain."}],
+        },
+    )
+    monkeypatch.setattr("core.degradation_tracker.record_degradation", lambda **kwargs: recorded.append(kwargs))
+    monkeypatch.setattr("core.degradation_tracker.mark_resolved", lambda *args, **kwargs: 0)
+    monkeypatch.setattr("core.degradation_tracker.has_recent_open", lambda *args, **kwargs: True)
+
+    asyncio.run(scheduler._standing_invariants_job())
+
+    assert recorded == []

@@ -131,3 +131,26 @@ def test_atlas_unparks_parked_cash_before_candidate_entry(monkeypatch) -> None:
     assert cycle_source.index(
         "_unpark_before_entries(engine, candidates)"
     ) < cycle_source.index("for cand in candidates:")
+
+
+def test_sgov_dust_left_by_a_full_sale_does_not_block_parking() -> None:
+    import sgov_parking
+
+    class Engine:
+        def __init__(self):
+            self.orders = []
+
+        def place_order(self, symbol, side, notional):
+            self.orders.append((symbol, side, notional))
+            return {"order_id": "o1"}
+
+    dust = [{"symbol": "SGOV", "qty": 0.000000004, "market_value": 0.0}]
+    engine = Engine()
+    sgov_parking.park_idle_cash(engine, "GearG4", dust, 12_000.0)
+    assert engine.orders == [("SGOV", "buy", 11_950.0)]
+    assert sgov_parking.unpark_for_entry(engine, "GearG4", dust) == 0.0
+
+    held = [{"symbol": "SGOV", "qty": 434.0, "market_value": 43_716.82}]
+    engine = Engine()
+    sgov_parking.park_idle_cash(engine, "GearG4", held, 12_000.0)
+    assert engine.orders == []                     # a real holding: still skipped, as before

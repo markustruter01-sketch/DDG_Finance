@@ -20,6 +20,7 @@ from core.cash_park import CASH_PARK_SYMBOLS, is_cash_park
 PARK_SYMBOL          = next(iter(CASH_PARK_SYMBOLS))
 PARK_THRESHOLD_USD   = 1_000.0   # minimum idle cash to bother parking
 CASH_BUFFER_USD      = 50.0      # always leave a small liquidity buffer
+DUST_QTY             = 1e-6      # below this a holding is dust (as in AlpacaEtfEngine.close_position)
 
 
 def is_sgov(pos: dict) -> bool:
@@ -37,9 +38,12 @@ def filter_alpha_positions(live_positions: list[dict]) -> list[dict]:
 
 
 def _find_sgov(live_positions: list[dict]) -> dict | None:
-    """Return the SGOV position dict if held, else None."""
+    """Return the SGOV position dict if held, else None. A full SGOV sale can
+    leave ~1e-9 of a share (qty is rounded to 8 decimals); that dust is not
+    "already parked", or idle cash would never be parked again."""
     for p in live_positions:
-        if is_sgov(p):
+        qty = p.get("qty")
+        if is_sgov(p) and (qty is None or abs(float(qty)) >= DUST_QTY):
             return p
     return None
 

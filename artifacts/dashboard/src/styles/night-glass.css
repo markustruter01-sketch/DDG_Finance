@@ -131,12 +131,44 @@ table.ng .money, table.ng th.money { font-family: var(--ng-mono); text-align: ri
 .key span { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ng-text-2); }
 .key i { width: 14px; height: 2px; border-radius: 2px; background: #fff; }
 
+/* ── Screen size ───────────────────────────────────────────────────────────
+   Home fits one screen (no scrolling) only when the screen is big enough for
+   its two-column layout; anything narrower or shorter scrolls normally. */
+@media (max-width: 1100px), (max-height: 700px) {
+  .ng-page.fit { height: auto; overflow: visible; }
+  .ng-page.fit .ng-wrap { height: auto; }
+}
 @media (max-width: 900px) {
   .ng-page.photo { background-attachment: scroll; }
-  .ng-page.fit { height: auto; overflow: visible; }
   .ng-wrap { padding: 12px 14px 18px; }
   .display { font-size: 48px; }
-  .topbar .statuses { width: 100%; }
+  .topbar .statuses { order: 10; width: 100%; }
+  .topbar > .pill { display: none; }        /* the device shows the time */
+}
+/* Phone: logo and page action on one row, the three pages as equal tabs,
+   then status; the phone shows its own clock. */
+@media (max-width: 640px) {
+  .topbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+  .topbar .brand { grid-column: 1; grid-row: 1; justify-self: start; }
+  .topbar > .btn { grid-column: 2; grid-row: 1; }
+  .topbar .nav { grid-column: 1 / -1; }
+  .topbar .nav a { flex: 1; justify-content: center; }
+  .topbar .statuses { grid-column: 1 / -1; padding: 8px 14px; }
+  .topbar .spacer, .topbar > .pill { display: none; }
+  .page-title { font-size: 28px; }
+  .display { font-size: 42px; }
+}
+/* Big screens: use the width and scale the type with it. */
+@media (min-width: 2200px) {
+  .ng-wrap { max-width: 2480px; padding: 20px 36px 24px; gap: 16px; }
+  body { font-size: 15px; }
+  .label { font-size: 12px; }
+  .small, .note { font-size: 13.5px; }
+  .panel-head h2, .card-title { font-size: 17px; }
+  .heading { font-size: 25px; }
+  .display { font-size: 72px; }
+  .num { font-size: 34px; }
+  .num-sm { font-size: 23px; }
 }
 
 /* ── Home ──────────────────────────────────────────────────────────────── */
@@ -175,10 +207,17 @@ table.ng .money, table.ng th.money { font-family: var(--ng-mono); text-align: ri
   .engine-stats .num-sm { font-size: 15px; }
 }
 @media (max-width: 1100px) {
-  .engines { grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
-  .home-main { grid-template-columns: 1fr; }
+  .engines { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .home-main { grid-template-columns: minmax(0, 1fr); }
   .home-right, .home-left { grid-template-rows: none; }
   .home-right .chart, .fleet-panel .chart { min-height: 200px; }
+}
+@media (max-height: 700px) and (min-width: 1101px) {
+  .home-right, .home-left { grid-template-rows: none; }
+  .home-right .chart, .fleet-panel .chart { min-height: 200px; }
+}
+@media (max-width: 560px) {
+  .engines { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 640px) {
   .home-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -204,32 +243,47 @@ table.ng .money, table.ng th.money { font-family: var(--ng-mono); text-align: ri
 .facts > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .facts .wide { grid-column: 1 / -1; }
 .facts dd { margin: 0; overflow-wrap: anywhere; }
-.bench-chart-layout { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 16px; }
-.bench-chart-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-.bench-chart { height: 340px; }
-.bench-selection { display: flex; flex-direction: column; gap: 6px; padding-left: 16px; border-left: 1px solid var(--ng-hairline); }
-.bench-selection .facts { grid-template-columns: 1fr; }
+.bench-main { display: grid; grid-template-columns: minmax(0, 1fr) clamp(300px, 27vw, 440px); gap: 18px; }
+.bench-chart-col { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.bench-chart { height: clamp(320px, 54vh, 640px); }
+.bench-under { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 18px; min-height: 40px; }
+.bench-selection { display: flex; flex-direction: column; min-width: 0; text-align: right; }
+/* Experiments sit beside the chart and never make the row taller: the chart
+   column sets the height (contain: size) and the list scrolls inside it. */
+.bench-exps { contain: size; min-height: 0; display: flex; flex-direction: column; gap: 6px; padding-left: 18px; border-left: 1px solid var(--ng-hairline); }
+.bench-exps-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; padding-right: 6px; }
+.bench-exps-group { padding: 12px 0 2px; }
+.bench-exps-scroll section:first-child .bench-exps-group { padding-top: 0; }
+.list li.bench-exp { display: block; min-height: 0; }
+.bench-exp summary { display: flex; align-items: center; gap: 10px; min-height: 36px; cursor: pointer; list-style: none; font-size: 13px; }
+.bench-exp summary::-webkit-details-marker { display: none; }
+.bench-exp summary > svg { flex: none; color: var(--ng-text-3); }
+.bench-exp details[open] summary > svg { transform: rotate(180deg); }
+.bench-exp summary .status { font-size: 12px; }
+.bench-exp-body { display: flex; flex-direction: column; gap: 6px; padding: 2px 0 12px; }
 .bench-notes { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 18px; margin: 0; }
-.bench-section { display: flex; flex-direction: column; gap: 12px; }
-.bench-groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 12px; align-items: start; }
-.bench-groups .card-title { display: inline-flex; align-items: center; gap: 8px; }
-.list li.bench-experiment { flex-direction: column; align-items: stretch; gap: 8px; padding: 12px 0; }
-.bench-experiment-top { display: flex; align-items: flex-start; gap: 12px; }
-.bench-experiment-top .grow { display: flex; flex-direction: column; gap: 2px; }
 .disclosure summary { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; cursor: pointer; font-size: 12.5px; color: var(--ng-text-2); list-style: none; }
 .disclosure summary::-webkit-details-marker { display: none; }
 .disclosure[open] summary svg { transform: rotate(180deg); }
 .disclosure > div { display: flex; flex-direction: column; gap: 4px; padding: 8px 0 4px; }
-.disclosure pre { margin: 0 0 6px; padding: 8px 10px; border-radius: 10px; background: rgba(255,255,255,0.04); font: 12px/1.5 var(--ng-mono); color: var(--ng-text-2); white-space: pre-wrap; overflow-wrap: anywhere; }
+.disclosure pre, .bench-exp-body pre { margin: 0 0 6px; padding: 8px 10px; border-radius: 10px; background: rgba(255,255,255,0.04); font: 12px/1.5 var(--ng-mono); color: var(--ng-text-2); white-space: pre-wrap; overflow-wrap: anywhere; }
 .bench-table { max-height: 560px; }
 .bench-table thead th { position: sticky; top: 0; background: var(--ng-graphite); }
 .sort { display: inline-flex; align-items: center; gap: 4px; min-height: 28px; padding: 0; border: 0; background: none; cursor: pointer; font: inherit; color: inherit; letter-spacing: inherit; text-transform: inherit; }
 select.input { appearance: auto; }
+@media (max-width: 1100px) {
+  .bench-main { grid-template-columns: minmax(0, 1fr); }
+  .bench-exps { contain: none; padding: 12px 0 0; border-left: 0; border-top: 1px solid var(--ng-hairline); }
+  .bench-exps-scroll { max-height: 440px; }
+}
 @media (max-width: 900px) {
-  .bench-intro, .bench-chart-layout { grid-template-columns: 1fr; }
-  .bench-selection { padding-left: 0; border-left: 0; border-top: 1px solid var(--ng-hairline); padding-top: 12px; }
-  .bench-groups { grid-template-columns: 1fr; }
+  .bench-intro { grid-template-columns: 1fr; }
   .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .panel-head { flex-wrap: wrap; }
+  .bench-chart { height: 300px; }
+  .bench-selection { text-align: left; }
 }
 
 /* ── Crash and not-found ───────────────────────────────────────────────── */

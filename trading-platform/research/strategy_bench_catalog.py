@@ -269,7 +269,7 @@ def build_catalog(
             }
         )
 
-    return {
+    return mark_counted({
         "schema_version": 1,
         "generated_at": stamp,
         "snapshot_as_of": stamp,
@@ -281,7 +281,40 @@ def build_catalog(
         },
         "experiments": clean_experiments,
         "exploration_runs": clean_runs,
-    }
+    })
+
+
+# Records that do not count as evidence. Source: handoff v9 (5 Oct 2026),
+# "Void results" and "Citing experiment 7 or experiment 4 as evidence".
+# Marked when served; the research tables and the committed snapshot stay
+# exactly as recorded.
+_NO_WINDOW = (
+    "Not counted: no data window was recorded and it was never tied to rules "
+    "(handoff v9, 5 Oct 2026)."
+)
+_VOID = "Not counted: listed as a void result in handoff v9 (5 Oct 2026)."
+NOT_COUNTED_EXPERIMENTS = {4: _NO_WINDOW, 7: _NO_WINDOW, 10: _VOID, 13: _VOID, 17: _VOID}
+NOT_COUNTED_RUN_FAMILIES = {
+    "bot2_momentum_rank500_sweep": (
+        "Not counted: the 3 Sept 2026 64-combination sweep, descriptive only "
+        "with no pass bar; listed as void in handoff v9 (5 Oct 2026)."
+    ),
+}
+
+
+def mark_counted(catalog: dict[str, Any]) -> dict[str, Any]:
+    """Add ``counted`` (and ``not_counted_reason`` when false) to every row."""
+    for row in catalog["experiments"]:
+        reason = NOT_COUNTED_EXPERIMENTS.get(row.get("id"))
+        row["counted"] = reason is None
+        if reason:
+            row["not_counted_reason"] = reason
+    for row in catalog["exploration_runs"]:
+        reason = NOT_COUNTED_RUN_FAMILIES.get(str(row.get("family", "")))
+        row["counted"] = reason is None
+        if reason:
+            row["not_counted_reason"] = reason
+    return catalog
 
 
 def _rows_as_dicts(cursor: Any) -> list[dict[str, Any]]:
@@ -333,4 +366,4 @@ def load_snapshot(path: str) -> dict[str, Any]:
         "experiments": len(snapshot["experiments"]),
         "exploration_runs": len(snapshot["exploration_runs"]),
     }
-    return snapshot
+    return mark_counted(snapshot)

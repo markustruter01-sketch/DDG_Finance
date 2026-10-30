@@ -191,3 +191,24 @@ def test_load_snapshot_recomputes_counts_and_labels_as_committed(tmp_path):
     assert snapshot["source"] == "committed_snapshot"
     assert snapshot["snapshot_as_of"] == "2026-10-05T00:00:00Z"
     assert snapshot["row_counts"] == {"experiments": 1, "exploration_runs": 1}
+
+def test_committed_snapshot_marks_void_records_without_changing_them():
+    """Handoff v9's void list: experiments 4, 7, 10, 13, 17 and the 3 Sept sweep."""
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[1] / "data" / "strategy_bench_snapshot.json"
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    served = load_snapshot(str(path))
+
+    not_counted = sorted(e["id"] for e in served["experiments"] if not e["counted"])
+    assert not_counted == [4, 7, 10, 13, 17]
+    sweep = [r for r in served["exploration_runs"] if not r["counted"]]
+    assert len(sweep) == 64
+    assert {r["family"] for r in sweep} == {"bot2_momentum_rank500_sweep"}
+    assert {r["created_at"][:10] for r in sweep} == {"2026-09-03"}
+    assert all(r["not_counted_reason"].startswith("Not counted:") for r in sweep)
+    assert all("not_counted_reason" not in r for r in served["exploration_runs"] if r["counted"])
+    # the recorded outcomes and numbers are served exactly as stored
+    by_id = {e["id"]: e for e in raw["experiments"]}
+    for e in served["experiments"]:
+        assert e["outcome"] == by_id[e["id"]]["outcome"] and e["metrics"] == by_id[e["id"]]["metrics"]

@@ -26,6 +26,8 @@ type Experiment = {
   };
   outcome: string;
   created_at: string;
+  counted?: boolean;              // false = not counted as evidence (served by the API)
+  not_counted_reason?: string;
 };
 
 type ExplorationRun = {
@@ -38,6 +40,8 @@ type ExplorationRun = {
   max_drawdown: number | null;
   source: string;
   created_at: string;
+  counted?: boolean;
+  not_counted_reason?: string;
 };
 
 type Catalog = {
@@ -63,33 +67,32 @@ type ChartPoint = {
   source: string;
   created_at: string;
   group: ResearchGroup;
+  counted: boolean;
   run: ExplorationRun;
 };
 
 const CATALOG_URL = `${import.meta.env.BASE_URL}trading-api/research/strategy-bench/catalog`;
 const RESEARCH_GROUPS: ResearchGroup[] = ["Atlas", "Momentum", "Bullion", "Forex", "Fleet", "Other"];
-// Night Glass: no colour per research group; each group gets its own white glyph.
-type Glyph = "dot" | "ring" | "square" | "triangle" | "cross" | "small";
-const GROUP_GLYPH: Record<ResearchGroup, Glyph> = {
-  Atlas: "dot", Momentum: "ring", Bullion: "square", Forex: "triangle", Fleet: "cross", Other: "small",
-};
+const WHITE = "#FFFFFF";
+const HOLLOW = "rgba(255,255,255,0.62)";
 
-function GlyphMark({ glyph, cx, cy, size = 5.5 }: { glyph: Glyph | "diamond"; cx: number; cy: number; size?: number }) {
-  const s = size;
-  const white = "#FFFFFF";
-  switch (glyph) {
-    case "ring": return <circle cx={cx} cy={cy} r={s - 0.75} fill="none" stroke={white} strokeWidth={1.5} />;
-    case "square": return <rect x={cx - s + 1} y={cy - s + 1} width={2 * s - 2} height={2 * s - 2} fill={white} fillOpacity={0.72} />;
-    case "triangle": return <path d={`M${cx} ${cy - s}L${cx + s} ${cy + s - 1}L${cx - s} ${cy + s - 1}Z`} fill="none" stroke={white} strokeWidth={1.5} />;
-    case "cross": return <path d={`M${cx - s} ${cy}H${cx + s}M${cx} ${cy - s}V${cy + s}`} stroke={white} strokeWidth={1.5} />;
-    case "small": return <circle cx={cx} cy={cy} r={2.5} fill={white} fillOpacity={0.62} />;
-    case "diamond": return <path d={`M${cx} ${cy - s - 1}L${cx + s + 1} ${cy}L${cx} ${cy + s + 1}L${cx - s - 1} ${cy}Z`} fill="none" stroke={white} strokeWidth={1.5} />;
-    default: return <circle cx={cx} cy={cy} r={s - 1} fill={white} />;
+/** Chart mark: a white dot for a counted record, a hollow ring for one not
+ *  counted, a hollow diamond for the SPY buy-and-hold reference. */
+function Mark({ kind, cx, cy }: { kind: "counted" | "not-counted" | "reference"; cx: number; cy: number }) {
+  if (kind === "reference") {
+    return <path d={`M${cx} ${cy - 7}L${cx + 7} ${cy}L${cx} ${cy + 7}L${cx - 7} ${cy}Z`} fill="none" stroke={WHITE} strokeWidth={1.5} />;
   }
+  return kind === "counted"
+    ? <circle cx={cx} cy={cy} r={4.5} fill={WHITE} />
+    : <circle cx={cx} cy={cy} r={4} fill="none" stroke={HOLLOW} strokeWidth={1.25} />;
 }
 
-const GlyphIcon = ({ glyph }: { glyph: Glyph | "diamond" }) => (
-  <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><GlyphMark glyph={glyph} cx={7} cy={7} size={5} /></svg>
+const MarkIcon = ({ kind }: { kind: "counted" | "not-counted" | "reference" }) => (
+  <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+    {kind === "reference"
+      ? <path d="M8 2L14 8L8 14L2 8Z" fill="none" stroke={WHITE} strokeWidth={1.5} />
+      : <Mark kind={kind} cx={8} cy={8} />}
+  </svg>
 );
 
 function formatDate(value: string | undefined) {
@@ -137,14 +140,18 @@ function outcomeTone(outcome: string): "ok" | "problem" | "none" {
   return "none";
 }
 
+// Old family names use bot numbers: bot1 = Atlas (oracle), bot2 = Momentum's
+// account (spy_qqq_trend), bot3 / jerome = Bullion (jerome_macro).
 function researchGroup(family: string): ResearchGroup {
   const value = family.toLowerCase();
-  if (value.includes("atlas")) return "Atlas";
-  if (value.includes("momentum")) return "Momentum";
+  if (value.includes("atlas") || /^bot1[_-]/.test(value)) return "Atlas";
+  if (value.includes("momentum") || /^bot2[_-]/.test(value)) return "Momentum";
   if (
     value.includes("bullion")
     || value.includes("gold")
     || value.includes("silver")
+    || /^bot3[_-]/.test(value)
+    || value.startsWith("jerome")
   ) return "Bullion";
   if (/\bforex\b|\bfx\b|foreign[_ -]?exchange|currency|oanda/.test(value)) return "Forex";
   if (value.includes("fleet")) return "Fleet";
@@ -172,6 +179,8 @@ function formatPassBar(value: unknown) {
 function isPassedOutcome(outcome: string) {
   return /^(pass|passed|verified|accepted|success)$/i.test(outcome.trim());
 }
+
+const isCounted = (row: { counted?: boolean }) => row.counted !== false;
 
 function isSpyBuyAndHold(run: ExplorationRun) {
   const row = run as ExplorationRun & {
@@ -206,7 +215,7 @@ function RunTooltip({ active, payload }: RunTooltipProps) {
   if (!active || !point) return null;
   return (
     <div className="chart-tip" role="status">
-      <span className="label">Run {point.id} · {point.group}</span>
+      <span className="label">Run {point.id} · {point.group}{point.counted ? "" : " · not counted"}</span>
       <strong>{familyLabel(point.family)}</strong>
       <div className="tab">Sharpe {formatMetric(point.sharpe, 3)} · worst fall {formatDrawdown(point.run.max_drawdown)} · return {formatPercent(point.return_pct, 2)}</div>
       <div className="note">{point.source} · {formatDate(point.created_at)}</div>
@@ -263,9 +272,10 @@ export default function BenchPage() {
 
   const experiments = catalog?.experiments ?? [];
   const runs = catalog?.exploration_runs ?? [];
+  const notCountedExperiments = experiments.filter((experiment) => !isCounted(experiment)).length;
   const outcomeCounts = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const experiment of experiments) {
+    for (const experiment of experiments.filter(isCounted)) {
       const outcome = experiment.outcome.trim() || "Not recorded";
       const key = outcome.toLowerCase();
       counts.set(key, (counts.get(key) ?? 0) + 1);
@@ -281,7 +291,7 @@ export default function BenchPage() {
       return left.localeCompare(right);
     });
   }, [experiments]);
-  const passedCount = experiments.filter((experiment) => isPassedOutcome(experiment.outcome)).length;
+  const passedCount = experiments.filter((experiment) => isCounted(experiment) && isPassedOutcome(experiment.outcome)).length;
   const families = useMemo(
     () => [...new Set(runs.map((run) => run.family))].sort((a, b) => a.localeCompare(b)),
     [runs],
@@ -303,6 +313,7 @@ export default function BenchPage() {
       source: run.source,
       created_at: run.created_at,
       group,
+      counted: isCounted(run),
       run,
     }];
   }), [runs]);
@@ -314,10 +325,13 @@ export default function BenchPage() {
     ? runs.find((run) => String(run.id) === selectedRunId) ?? null
     : null;
   const plottedRunIds = new Set(chartPoints.map((point) => String(point.id)));
-  const chartGroups = RESEARCH_GROUPS.map((group) => ({
+  const plotted = chartPoints.filter((point) => String(point.id) !== String(spyBenchmark?.id));
+  const countedPoints = plotted.filter((point) => point.counted);
+  const notCountedPoints = plotted.filter((point) => !point.counted);
+  const experimentGroups = RESEARCH_GROUPS.map((group) => ({
     group,
-    points: chartPoints.filter((point) => point.group === group && String(point.id) !== String(spyBenchmark?.id)),
-  })).filter(({ points }) => points.length > 0);
+    items: experiments.filter((experiment) => researchGroup(experiment.family) === group),
+  })).filter(({ items }) => items.length > 0);
   const visibleRuns = useMemo(() => {
     const filtered = familyFilter === "all" ? runs : runs.filter((run) => run.family === familyFilter);
     return [...filtered].sort((a, b) => {
@@ -352,7 +366,8 @@ export default function BenchPage() {
 
   const headline = experiments.length === 0
     ? "No research ideas recorded yet."
-    : `${experiments.length} research idea${experiments.length === 1 ? "" : "s"} recorded. ${passedCount} passed.`;
+    : `${experiments.length} research idea${experiments.length === 1 ? "" : "s"} recorded. ${passedCount} passed${
+      notCountedExperiments ? `; ${notCountedExperiments} not counted` : ""}.`;
 
   const renderPoint = (rawProps: unknown) => {
     const props = rawProps as { cx?: number; cy?: number; payload?: ChartPoint };
@@ -378,12 +393,13 @@ export default function BenchPage() {
       >
         <circle cx={props.cx} cy={props.cy} r={12} fill="transparent" />
         {selected && <circle cx={props.cx} cy={props.cy} r={10} fill="none" stroke="#7CC9E8" strokeWidth={1.5} />}
-        <GlyphMark glyph={GROUP_GLYPH[point.group]} cx={props.cx} cy={props.cy} />
+        <Mark kind={point.counted ? "counted" : "not-counted"} cx={props.cx} cy={props.cy} />
       </g>
     );
   };
 
   const outcomeLabel = (outcome: string) => outcome
+    .toLowerCase()
     .replace(/[_-]+/g, " ")
     .replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
 
@@ -419,6 +435,7 @@ export default function BenchPage() {
                   {outcomeCounts.length > 0 ? outcomeCounts.map(([outcome, count]) => (
                     <Status key={outcome} tone={outcomeTone(outcome)} word={`${count} ${outcomeLabel(outcome)}`} />
                   )) : <Status tone="none" word="No outcomes recorded" />}
+                  {notCountedExperiments > 0 && <Status tone="none" word={`${notCountedExperiments} Not counted`} />}
                 </div>
               </section>
               <aside className="glass panel" aria-label="Catalog snapshot source">
@@ -437,11 +454,10 @@ export default function BenchPage() {
                 <div>
                   <span className="label">01 · Risk and return</span>
                   <h2 id="bench-chart-title" className="heading">Sharpe vs worst fall</h2>
-                  <p className="small" style={{ margin: 0 }}>Each mark is an exploration run with both chart numbers recorded.</p>
                 </div>
                 <span className="label" data-testid="text-plotted-run-count">{chartPoints.length} of {runs.length} runs plotted</span>
               </div>
-              <div className="bench-chart-layout">
+              <div className="bench-main">
                 <div className="bench-chart-col">
                   {chartPoints.length > 0 ? (
                     <div className="bench-chart" role="group" aria-label="Sharpe ratio against maximum drawdown. Select a point for run details.">
@@ -453,17 +469,20 @@ export default function BenchPage() {
                             label={{ value: "Sharpe ratio", position: "insideBottom", offset: -13, fill: AXIS, fontSize: 11 }} />
                           <YAxis type="number" dataKey="drawdown" name="Maximum drawdown" reversed domain={[0, "auto"]} width={52}
                             tick={{ fill: AXIS, fontSize: 10 }} tickLine={false} axisLine={false}
-                            tickFormatter={(value: number) => `−${Math.abs(value).toFixed(0)}%`} />
+                            tickFormatter={(value: number) => (Math.abs(value) < 0.5 ? "0%" : `−${Math.abs(value).toFixed(0)}%`)} />
                           <Tooltip content={<RunTooltip />} cursor={{ stroke: "rgba(255,255,255,0.2)", strokeDasharray: "3 4" }} />
-                          {chartGroups.map(({ group, points }) => (
-                            <Scatter key={group} name={group} data={points} shape={renderPoint} isAnimationActive={false} />
-                          ))}
+                          {notCountedPoints.length > 0 && (
+                            <Scatter name="Not counted" data={notCountedPoints} shape={renderPoint} isAnimationActive={false} />
+                          )}
+                          {countedPoints.length > 0 && (
+                            <Scatter name="Counted" data={countedPoints} shape={renderPoint} isAnimationActive={false} />
+                          )}
                           {spyBenchmark && (
                             <Scatter name="SPY buy-and-hold" data={[spyBenchmark]} isAnimationActive={false}
                               shape={(p: unknown) => {
                                 const q = p as { cx?: number; cy?: number };
                                 return typeof q.cx === "number" && typeof q.cy === "number"
-                                  ? <GlyphMark glyph="diamond" cx={q.cx} cy={q.cy} size={6} /> : <g />;
+                                  ? <Mark kind="reference" cx={q.cx} cy={q.cy} /> : <g />;
                               }} />
                           )}
                         </ScatterChart>
@@ -474,31 +493,81 @@ export default function BenchPage() {
                       No runs can be plotted. The catalog has no exploration runs with both Sharpe and worst-fall values.
                     </div>
                   )}
-                  {chartGroups.length > 0 && (
-                    <div className="key" aria-label="Chart groups">
-                      {chartGroups.map(({ group }) => <span key={group}><GlyphIcon glyph={GROUP_GLYPH[group]} />{group}</span>)}
-                      {spyBenchmark && <span><GlyphIcon glyph="diamond" />SPY buy-and-hold</span>}
+                  <div className="bench-under">
+                    {chartPoints.length > 0 && (
+                      <div className="key" aria-label="Chart key">
+                        <span><MarkIcon kind="counted" />Counted ({countedPoints.length})</span>
+                        <span><MarkIcon kind="not-counted" />Not counted ({notCountedPoints.length})</span>
+                        {spyBenchmark && <span><MarkIcon kind="reference" />SPY buy-and-hold</span>}
+                      </div>
+                    )}
+                    <div className="bench-selection" aria-live="polite" aria-label="Selected exploration run">
+                      {selectedRun ? (
+                        <>
+                          <span className="small"><b>#{selectedRun.id}</b> {familyLabel(selectedRun.family)}{isCounted(selectedRun) ? "" : " · not counted"}</span>
+                          <span className="small tab">
+                            Sharpe {formatMetric(selectedRun.sharpe, 3)} · worst fall {formatDrawdown(selectedRun.max_drawdown)} · return {formatPercent(selectedRun.return_pct, 2)}
+                            {plottedRunIds.has(String(selectedRun.id)) ? "" : " · chart numbers incomplete"}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="note">Hover over or select a mark to see its numbers.</span>
+                      )}
                     </div>
-                  )}
+                  </div>
                 </div>
-                <aside className="bench-selection" aria-live="polite" aria-label="Selected exploration run">
-                  {selectedRun ? (
-                    <>
-                      <span className="label">
-                        {plottedRunIds.has(String(selectedRun.id)) ? "Selected run" : "Selected run · chart numbers incomplete"}
-                      </span>
-                      <strong className="card-title">{familyLabel(selectedRun.family)}</strong>
-                      <span className="note mono">Record {selectedRun.id} · {selectedRun.source}</span>
-                      <dl className="facts">
-                        <div><dt className="label">Sharpe</dt><dd className="tab">{formatMetric(selectedRun.sharpe, 3)}</dd></div>
-                        <div><dt className="label">Worst fall</dt><dd className="tab">{formatDrawdown(selectedRun.max_drawdown)}</dd></div>
-                        <div><dt className="label">Return</dt><dd className="tab">{formatPercent(selectedRun.return_pct, 2)}</dd></div>
-                      </dl>
-                      <time className="note">{formatDate(selectedRun.created_at)}</time>
-                    </>
-                  ) : (
-                    <p className="note" style={{ margin: 0 }}>Hover over or select a mark to see its recorded numbers.</p>
-                  )}
+
+                <aside className="bench-exps" aria-labelledby="bench-experiments-title" data-testid="panel-experiments">
+                  <div className="panel-head">
+                    <h3 id="bench-experiments-title" className="card-title">Registered experiments</h3>
+                    <span className="label" data-testid="value-experiment-count">{experiments.length} total</span>
+                  </div>
+                  <div className="bench-exps-scroll" tabIndex={0} aria-label="Experiments by research family">
+                    {experimentGroups.map(({ group, items }) => (
+                      <section key={group} aria-label={group} data-testid={`group-${group.toLowerCase()}`}>
+                        <div className="label bench-exps-group">{group} · {items.length}</div>
+                        <ul className="list">
+                          {items.map((experiment) => (
+                            <li className="bench-exp" key={experiment.id} data-testid={`row-experiment-${experiment.id}`}>
+                              <details>
+                                <summary>
+                                  <span className="grow clamp" title={familyLabel(experiment.family)}>
+                                    <span className="mono note">#{experiment.id}</span> {familyLabel(experiment.family)}
+                                  </span>
+                                  <span data-testid={`status-outcome-${experiment.id}`}>
+                                    {isCounted(experiment)
+                                      ? <Status tone={outcomeTone(experiment.outcome)} word={outcomeLabel(experiment.outcome)} />
+                                      : <Status tone="none" word="Not counted" />}
+                                  </span>
+                                  <ChevronDown size={13} aria-hidden="true" />
+                                </summary>
+                                <div className="bench-exp-body">
+                                  {!isCounted(experiment) && (
+                                    <p className="small" style={{ margin: 0 }}>
+                                      {experiment.not_counted_reason ?? "Not counted as evidence."} Recorded outcome: {outcomeLabel(experiment.outcome)}.
+                                    </p>
+                                  )}
+                                  <p className="small" style={{ margin: 0 }}>{experiment.hypothesis || "No hypothesis was recorded."}</p>
+                                  <dl className="facts">
+                                    <div className="wide"><dt className="label">Pass bar</dt><dd className="small">{formatPassBar(experiment.pass_bar)}</dd></div>
+                                    <div><dt className="label">Sharpe</dt><dd className="tab">{formatMetric(experiment.metrics?.sharpe, 3)}</dd></div>
+                                    <div><dt className="label">Return</dt><dd className="tab">{formatPercent(experiment.metrics?.return_pct, 2)}</dd></div>
+                                    <div><dt className="label">Worst fall</dt><dd className="tab">{formatDrawdown(experiment.metrics?.max_drawdown_pct)}</dd></div>
+                                  </dl>
+                                  <span className="label">Parameters</span><pre>{formatSummary(experiment.parameters_summary)}</pre>
+                                  <span className="label">Data window</span><pre>{formatSummary(experiment.data_window)}</pre>
+                                  <p className="note" style={{ margin: 0 }}>Recorded {formatDate(experiment.created_at)} · historical, not actionable.</p>
+                                </div>
+                              </details>
+                            </li>
+                          ))}
+                        </ul>
+                      </section>
+                    ))}
+                    {experiments.length === 0 && (
+                      <p className="note" data-testid="status-experiments-empty">The current catalog contains no experiment records.</p>
+                    )}
+                  </div>
                 </aside>
               </div>
               <div className="note bench-notes">
@@ -513,71 +582,10 @@ export default function BenchPage() {
               </div>
             </section>
 
-            <section aria-labelledby="bench-experiments-title" className="bench-section">
-              <div className="page-head">
-                <div>
-                  <span className="label">02 · Registered hypotheses</span>
-                  <h2 id="bench-experiments-title" className="heading">Experiments by research family</h2>
-                  <p className="small" style={{ margin: 0 }}>Declared pass bars and recorded outcomes. Parameters and data windows open on demand.</p>
-                </div>
-                <span className="label" data-testid="value-experiment-count">{experiments.length} total records</span>
-              </div>
-              <div className="bench-groups">
-                {RESEARCH_GROUPS.map((group) => {
-                  const groupExperiments = experiments.filter((experiment) => researchGroup(experiment.family) === group);
-                  return (
-                    <section className="glass panel" key={group} aria-labelledby={`bench-group-${group.toLowerCase()}`} data-testid={`group-${group.toLowerCase()}`}>
-                      <div className="panel-head">
-                        <h3 id={`bench-group-${group.toLowerCase()}`} className="card-title"><GlyphIcon glyph={GROUP_GLYPH[group]} /> {group}</h3>
-                        <span className="label">{groupExperiments.length} {groupExperiments.length === 1 ? "record" : "records"}</span>
-                      </div>
-                      {groupExperiments.length > 0 ? (
-                        <ul className="list">
-                          {groupExperiments.map((experiment) => (
-                            <li className="bench-experiment" key={experiment.id} data-testid={`row-experiment-${experiment.id}`}>
-                              <div className="bench-experiment-top">
-                                <div className="grow">
-                                  <span className="label">Record {experiment.id}</span>
-                                  <strong className="card-title">{familyLabel(experiment.family)}</strong>
-                                </div>
-                                <span data-testid={`status-outcome-${experiment.id}`}>
-                                  <Status tone={outcomeTone(experiment.outcome)} word={outcomeLabel(experiment.outcome)} />
-                                </span>
-                              </div>
-                              <p className="small" style={{ margin: 0 }} title={experiment.hypothesis}>{experiment.hypothesis || "No hypothesis was recorded."}</p>
-                              <dl className="facts">
-                                <div className="wide"><dt className="label">Pass bar</dt><dd className="small">{formatPassBar(experiment.pass_bar)}</dd></div>
-                                <div><dt className="label">Sharpe</dt><dd className="tab">{formatMetric(experiment.metrics?.sharpe, 3)}</dd></div>
-                                <div><dt className="label">Return</dt><dd className="tab">{formatPercent(experiment.metrics?.return_pct, 2)}</dd></div>
-                                <div><dt className="label">Worst fall</dt><dd className="tab">{formatDrawdown(experiment.metrics?.max_drawdown_pct)}</dd></div>
-                              </dl>
-                              <details className="disclosure">
-                                <summary>Parameters and data window <ChevronDown size={14} aria-hidden="true" /></summary>
-                                <div>
-                                  <span className="label">Parameters</span><pre>{formatSummary(experiment.parameters_summary)}</pre>
-                                  <span className="label">Data window</span><pre>{formatSummary(experiment.data_window)}</pre>
-                                  <p className="note">Recorded {formatDate(experiment.created_at)} · outcome is historical, not actionable.</p>
-                                </div>
-                              </details>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="note" style={{ margin: 0 }}>No registered experiments in this snapshot.</p>
-                      )}
-                    </section>
-                  );
-                })}
-              </div>
-              {experiments.length === 0 && (
-                <p className="note" data-testid="status-experiments-empty">The current catalog contains no experiment records.</p>
-              )}
-            </section>
-
             <section className="glass panel" aria-labelledby="bench-runs-title">
               <div className="panel-head">
                 <div>
-                  <span className="label">03 · Historical search space</span>
+                  <span className="label">02 · Historical search space</span>
                   <h2 id="bench-runs-title" className="heading">Exploration runs</h2>
                   <p className="small" style={{ margin: 0 }}>Recorded parameter trials and their numbers. Filter by family or sort a column.</p>
                 </div>
@@ -624,7 +632,11 @@ export default function BenchPage() {
                               #{run.id}
                             </button>
                           </td>
-                          <td><span className="status"><GlyphIcon glyph={GROUP_GLYPH[researchGroup(run.family)]} />{familyLabel(run.family)}</span></td>
+                          <td>
+                            <span className="status" title={run.not_counted_reason}>
+                              <MarkIcon kind={isCounted(run) ? "counted" : "not-counted"} />{familyLabel(run.family)}
+                            </span>
+                          </td>
                           <td className="money">{formatMetric(run.sharpe, 3)}</td>
                           <td className="money">{formatPercent(run.return_pct, 2)}</td>
                           <td className="money">{formatDrawdown(run.max_drawdown)}</td>

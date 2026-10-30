@@ -50,6 +50,25 @@ def fleet_returns(rets: dict[str, list[float]], weights: dict[str, float]) -> li
     return [sum(weights[n] / total * rets[n][i] for n in rets) for i in range(n_days)]
 
 
+def fleet_curve(
+    curves: dict[str, Sequence[CurvePoint]],
+    weights: dict[str, float],
+    start_equity: float = 100_000.0,
+) -> list[CurvePoint]:
+    """The fund's own equity curve: constant weights, rebalanced daily (as
+    fleet_returns). Gross on each day = the weighted gross of the sleeves."""
+    days, rets = _aligned(curves)
+    gross = {n: {d: g for d, _, g in c} for n, c in curves.items()}
+    total = sum(weights[n] for n in curves)
+    r = fleet_returns(rets, weights)
+    first = sorted(set.intersection(*(set(g) for g in gross.values())))[0]
+    out: list[CurvePoint] = [(first, start_equity,
+                              sum(weights[n] / total * gross[n][first] for n in curves))]
+    for d, x in zip(days, r):
+        out.append((d, out[-1][1] * (1 + x), sum(weights[n] / total * gross[n][d] for n in curves)))
+    return out
+
+
 def _stats(days: list[date], r: list[float], rf_annual: dict[date, float] | None) -> dict[str, Any]:
     vals = [1.0]
     for x in r:

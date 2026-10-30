@@ -212,3 +212,31 @@ def test_committed_snapshot_marks_void_records_without_changing_them():
     by_id = {e["id"]: e for e in raw["experiments"]}
     for e in served["experiments"]:
         assert e["outcome"] == by_id[e["id"]]["outcome"] and e["metrics"] == by_id[e["id"]]["metrics"]
+
+
+def test_harness_ledger_rows_become_counted_experiments(tmp_path):
+    import json
+    from research.strategy_bench_catalog import with_harness_ledger
+
+    ledger = tmp_path / "ledger.jsonl"
+    ledger.write_text("\n".join(json.dumps(row) for row in [
+        {"registration_id": "GEAR-V1-G4", "kind": "holdout_test", "ran_at": "2026-10-22T05:32:30+00:00",
+         "result": {"verdict": "FAIL: 3_max_drawdown_smaller_than_spy", "pass_bar": {"1_cagr_beats_spy": True},
+                    "summary": {"sharpe_excess_tbill": 0.76, "total_return_pct": 160.82,
+                                "max_drawdown_pct": -24.5, "from": "2021-01-04", "to": "2026-10-15"}}},
+        {"registration_id": "FX-BT1", "kind": "replication", "ran_at": "2026-10-15T18:49:34+00:00",
+         "result": {"reproduced": True, "summary": {"sharpe_daily_rf0": -0.02, "total_return_pct": -17.62,
+                                                    "max_drawdown_pct": -33.88}}},
+    ]) + "\n", encoding="utf-8")
+    catalog = {"experiments": [{"id": 1}], "exploration_runs": [], "row_counts": {"experiments": 1, "exploration_runs": 0},
+               "source_label": "Committed Helium research snapshot"}
+
+    served = with_harness_ledger(catalog, str(ledger))
+
+    gear, fx = served["experiments"][1:]
+    assert (gear["id"], gear["outcome"], gear["counted"]) == ("GEAR-V1-G4", "FAIL", True)
+    assert gear["metrics"] == {"sharpe": 0.76, "return_pct": 160.82, "max_drawdown_pct": -24.5}
+    assert gear["family"].startswith("atlas")
+    assert (fx["outcome"], fx["metrics"]["sharpe"]) == ("REPRODUCED", -0.02)
+    assert served["row_counts"]["experiments"] == 3
+    assert served["source_label"].endswith("research harness ledger")

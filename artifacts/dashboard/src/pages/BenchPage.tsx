@@ -49,6 +49,7 @@ type Catalog = {
   schema_version: string | number;
   generated_at: string;
   snapshot_as_of: string;
+  harness_as_of?: string | null;   // newest research-harness ledger test
   source: string;
   source_label: string;
   source_detail?: string;
@@ -449,7 +450,7 @@ export default function BenchPage() {
                 <h2 className="card-title">Snapshot source</h2>
                 <dl className="facts">
                   <div><dt className="label">Source</dt><dd data-testid="text-bench-source">{catalog.source_label || catalog.source}</dd></div>
-                  <div><dt className="label">As of</dt><dd data-testid="text-bench-as-of">{formatDate(catalog.snapshot_as_of)}</dd></div>
+                  <div><dt className="label">As of</dt><dd data-testid="text-bench-as-of">{formatDate(catalog.harness_as_of || catalog.snapshot_as_of)}</dd></div>
                   <div><dt className="label">Generated</dt><dd>{formatDate(catalog.generated_at)}</dd></div>
                 </dl>
                 {catalog.source_detail && <p className="note" style={{ margin: 0 }}>{catalog.source_detail}</p>}
@@ -676,7 +677,7 @@ export default function BenchPage() {
 
             <p className="note bench-notes">
               <span>Research records do not represent live positions or execution.</span>
-              <span>Snapshot as of {formatDate(catalog.snapshot_as_of)}</span>
+              <span>Helium snapshot {formatDate(catalog.snapshot_as_of)}{catalog.harness_as_of ? ` · latest registered test ${formatDate(catalog.harness_as_of)}` : ""}</span>
             </p>
           </>
         ) : null}

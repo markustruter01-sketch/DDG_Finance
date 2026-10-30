@@ -1,6 +1,6 @@
 # G4-STRESS-1985: G4 through the 1987 crash and the 2000-02 dot-com crash (information only)
 
-Written by Claude (Opus 5.5), Fri 30 Oct 2026 ~11:10 Brisbane, BEFORE any index or
+Written by Claude (Opus 5.5), Fri 30 Oct 2026 ~11:03 Brisbane (commit 170898b), BEFORE any index or
 pre-1990 rate data was pulled. Nothing here can change G4 or any registration:
 it is a stress test of the live strategy, reported for information.
 

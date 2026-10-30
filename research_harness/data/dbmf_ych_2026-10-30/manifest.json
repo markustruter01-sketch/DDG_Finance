@@ -1,0 +1,21 @@
+{
+  "dataset": "dbmf_ych_2026-10-30",
+  "fetched_at": "2026-10-30T00:41:14.865585+00:00",
+  "fields": [
+    "day",
+    "open",
+    "high",
+    "low",
+    "close"
+  ],
+  "notes": "Dividend/split-adjusted OHLC (total-return proxy). The vendor revises adjusted history, so a later pull can differ; the manifest hash pins this one.",
+  "source": "Yahoo chart API v8, adjusted by adjclose/close (as yfinance auto_adjust=True) 2019-01-01..2026-10-15",
+  "symbols": {
+    "DBMF": {
+      "first": "2019-05-08",
+      "last": "2026-10-15",
+      "rows": 1871,
+      "sha256": "b1562cffae1a0fa3fe8ae31b38e5ff4f159e74cc33f727c864468d21f4b46b0a"
+    }
+  }
+}

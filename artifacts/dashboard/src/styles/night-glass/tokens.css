@@ -1,0 +1,25 @@
+/* Copied unchanged from DDG-Control artifacts/ddg-control/src/tokens.css (commit 8517d56).
+   Keep identical: Night Glass v5 is one brand across DDG Control, the website and DDG Finance. */
+/* Night Glass colour and font tokens — shared by DDG Control and the public website. */
+:root {
+  --ng-night: #07080b;
+  --ng-graphite: #141518;
+  --ng-glass-photo: rgba(16, 18, 24, 0.52);
+  --ng-glass-plain: rgba(255, 255, 255, 0.05);
+  --ng-edge: rgba(255, 255, 255, 0.10);
+  --ng-hairline: rgba(255, 255, 255, 0.08);
+  --ng-text: #ffffff;
+  --ng-text-2: rgba(255, 255, 255, 0.72);
+  --ng-text-3: rgba(255, 255, 255, 0.62);
+  --ng-ice: #7cc9e8;
+  --ng-mint: #3ddc97;
+  --ng-amber: #f5a524;
+  --ng-volt: #d4ff3f;
+  --ng-violet: #a78bfa;
+  --ng-problem: #ff6b6b;
+  --ng-sans: Geist, system-ui, sans-serif;
+  --ng-mono: 'Geist Mono', ui-monospace, monospace;
+  /* The one landscape photo: full on home pages, blurred "dusk" at the top of every other page. */
+  --ng-photo: url('/backgrounds/david-becker.webp');
+  color-scheme: dark;
+}

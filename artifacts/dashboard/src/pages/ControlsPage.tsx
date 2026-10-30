@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { OctagonX, Pause, Play, RefreshCw, ShieldAlert } from "lucide-react";
+import { OctagonX, Pause, Play, RefreshCw } from "lucide-react";
 import { api } from "@/hooks/use-trading-client";
 import { formatBotLabel, useBotIdentity } from "@/lib/bot-identity";
+import { Shell, Status, bneTime } from "@/components/Shell";
 
 // Controls for the live platform. bots_state.paused is the only pause switch;
 // the runner treats a missing or unreadable row as paused.
@@ -24,14 +25,9 @@ function errorText(err: unknown): string {
   return e?.response?.data?.detail ?? e?.message ?? "request failed";
 }
 
-function StatusPill({ paused }: { paused: boolean | null }) {
-  const [label, cls] =
-    paused === null
-      ? ["UNKNOWN · treated as paused", "border-amber-500/40 bg-amber-500/10 text-amber-300"]
-      : paused
-        ? ["PAUSED", "border-amber-500/40 bg-amber-500/10 text-amber-300"]
-        : ["RUNNING", "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"];
-  return <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold tracking-widest ${cls}`}>{label}</span>;
+function PauseStatus({ paused }: { paused: boolean | null }) {
+  if (paused === null) return <Status tone="late" word="Unknown, treated as paused" />;
+  return paused ? <Status tone="late" word="Paused" /> : <Status tone="ok" word="Running" />;
 }
 
 function BotRow({ row }: { row: PauseRow }) {
@@ -47,45 +43,35 @@ function BotRow({ row }: { row: PauseRow }) {
   });
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4" data-testid={`row-bot-${row.bot_id}`}>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="text-sm font-semibold text-white">{identity.icon} {formatBotLabel(identity)}</div>
-          <div className="font-mono text-[11px] text-slate-500">{row.bot_id}</div>
-        </div>
-        <StatusPill paused={row.paused} />
+    <li className="control-row" data-testid={`row-bot-${row.bot_id}`}>
+      <div className="grow">
+        <div className="card-title">{formatBotLabel(identity)}</div>
+        <div className="label">{row.bot_id}</div>
+        {row.pause_reason && row.paused !== false && (
+          <div className="note">Reason: {row.pause_reason}{row.paused_at ? ` · since ${bneTime(row.paused_at)}` : ""}</div>
+        )}
+        {toggle.isError && <div className="note"><span className="loss">Not changed: {errorText(toggle.error)}</span></div>}
       </div>
-      {row.pause_reason && row.paused !== false && (
-        <div className="mt-2 text-xs text-slate-400">Reason: {row.pause_reason}</div>
-      )}
-      <div className="mt-3 flex flex-wrap items-center gap-2">
+      <PauseStatus paused={row.paused} />
+      <div className="control-actions">
         {action === "pause" && (
-          <input
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            placeholder="Reason (optional)"
-            className="min-w-0 flex-1 rounded-lg border border-white/10 bg-slate-900 px-3 py-1.5 text-xs text-white placeholder:text-slate-600"
-          />
+          <input className="input" value={reason} onChange={(e) => setReason(e.target.value)}
+            placeholder="Reason (optional)" aria-label={`Pause reason for ${identity.displayName}`} />
         )}
         <button
+          className="btn"
           data-testid={`button-${action}-${row.bot_id}`}
           disabled={toggle.isPending}
           onClick={() => {
             const verb = action === "pause" ? "Pause" : "Resume";
             if (window.confirm(`${verb} ${identity.displayName}?`)) toggle.mutate();
           }}
-          className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50 ${
-            action === "pause"
-              ? "border-amber-500/40 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20"
-              : "border-emerald-500/40 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20"
-          }`}
         >
-          {action === "pause" ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+          {action === "pause" ? <Pause size={15} aria-hidden="true" /> : <Play size={15} aria-hidden="true" />}
           {toggle.isPending ? "Saving…" : action === "pause" ? "Pause" : "Resume"}
         </button>
       </div>
-      {toggle.isError && <div className="mt-2 text-xs text-red-400">Not changed: {errorText(toggle.error)}</div>}
-    </div>
+    </li>
   );
 }
 
@@ -101,41 +87,32 @@ function EmergencyStop({ tripped }: { tripped: boolean }) {
   });
 
   return (
-    <div className="rounded-2xl border border-red-500/30 bg-red-500/[0.04] p-5">
-      <div className="flex items-center gap-2 text-sm font-bold text-red-300">
-        <OctagonX className="h-4 w-4" /> Emergency stop
+    <section className="glass panel stop-panel" aria-label="Emergency stop">
+      <div className="panel-head">
+        <h2><OctagonX size={16} aria-hidden="true" style={{ verticalAlign: "-3px", marginRight: 8 }} />Emergency stop</h2>
+        <Status tone={tripped ? "problem" : "ok"} word={tripped ? "Kill switch tripped" : "Kill switch not tripped"} />
       </div>
-      <p className="mt-2 text-xs leading-relaxed text-slate-400">
-        Pauses every bot, then cancels pending buy/sell orders at the brokers. Protective stops are
+      <p className="body" style={{ margin: 0 }}>
+        Pauses every bot, then cancels pending buy and sell orders at the brokers. Protective stops are
         kept, and nothing is sold. Resume bots one by one above when it is safe.
       </p>
-      <div className="mt-2 text-xs text-slate-400">
-        Kill switch: <span className={tripped ? "font-semibold text-red-300" : "text-slate-300"}>{tripped ? "TRIPPED" : "not tripped"}</span>
-      </div>
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <input
-          value={typed}
-          onChange={(e) => setTyped(e.target.value)}
-          placeholder={`Type ${STOP_WORD} to enable`}
-          className="w-40 rounded-lg border border-red-500/30 bg-slate-900 px-3 py-1.5 text-xs text-white placeholder:text-slate-600"
-          data-testid="input-emergency-confirm"
-        />
+      <div className="control-actions">
+        <input className="input" value={typed} onChange={(e) => setTyped(e.target.value)}
+          placeholder={`Type ${STOP_WORD} to enable`} aria-label="Confirmation word" data-testid="input-emergency-confirm" />
         <button
+          className="btn danger"
           data-testid="button-emergency-stop"
           disabled={typed !== STOP_WORD || trip.isPending}
           onClick={() => trip.mutate()}
-          className="rounded-lg border border-red-500/50 bg-red-500/20 px-4 py-1.5 text-xs font-bold text-red-100 transition hover:bg-red-500/30 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {trip.isPending ? "Stopping…" : "Stop everything"}
         </button>
       </div>
       {trip.isSuccess && (
-        <div className="mt-2 text-xs text-emerald-300">
-          Done. Pending orders cancelled: {trip.data?.cancelled_orders ?? 0}. {trip.data?.action}
-        </div>
+        <div className="small">Done. Pending orders cancelled: {trip.data?.cancelled_orders ?? 0}. {trip.data?.action}</div>
       )}
-      {trip.isError && <div className="mt-2 text-xs text-red-400">Failed: {errorText(trip.error)}</div>}
-    </div>
+      {trip.isError && <div className="small"><span className="loss">Failed: {errorText(trip.error)}</span></div>}
+    </section>
   );
 }
 
@@ -147,36 +124,32 @@ export default function ControlsPage() {
   });
 
   return (
-    <main className="min-h-screen bg-transparent px-4 pb-32 pt-8 text-white">
-      <div className="mx-auto max-w-2xl space-y-5">
-        <header className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <ShieldAlert className="h-5 w-5 text-slate-300" />
-            <h1 className="text-lg font-bold">Controls</h1>
-          </div>
-          <button
-            onClick={() => state.refetch()}
-            className="flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-slate-300 hover:bg-white/5"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${state.isFetching ? "animate-spin" : ""}`} /> Refresh
+    <Shell>
+      <main className="controls">
+        <div className="page-head">
+          <h1 className="page-title">Controls</h1>
+          <button className="btn" onClick={() => state.refetch()}>
+            <RefreshCw size={15} aria-hidden="true" /> {state.isFetching ? "Refreshing" : "Refresh"}
           </button>
-        </header>
+        </div>
 
-        {state.isLoading && <div className="text-xs text-slate-500">Reading pause state…</div>}
+        {state.isLoading && <div className="note">Reading pause state…</div>}
         {state.isError && (
-          <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300">
-            Pause state unreadable: {errorText(state.error)}. The runner treats unreadable state as paused.
+          <div className="glass panel" role="alert">
+            <Status tone="problem" word="Pause state unreadable" />
+            <div className="small">{errorText(state.error)}. The runner treats unreadable state as paused.</div>
           </div>
         )}
         {state.data && (
           <>
-            <section className="space-y-3">
-              {state.data.bots.map((row) => <BotRow key={row.bot_id} row={row} />)}
+            <section className="glass panel" aria-label="Bots">
+              <div className="panel-head"><h2>Bots</h2><span className="label">{state.data.bots.length} bots</span></div>
+              <ul className="list">{state.data.bots.map((row) => <BotRow key={row.bot_id} row={row} />)}</ul>
             </section>
             <EmergencyStop tripped={state.data.kill_switch_tripped} />
           </>
         )}
-      </div>
-    </main>
+      </main>
+    </Shell>
   );
 }

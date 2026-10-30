@@ -42,3 +42,9 @@ worst fall, Sharpe over T-bills, time in each gear, stops hit; the same for the
 sub-windows; the fidelity gap on 2007-2020. No pass bar: a bad result is a risk
 finding for Markus, not a reason to tune G4 (any change would be a new,
 untested strategy).
+
+## Amendment 1 (30 Oct ~11:15 Brisbane, before any data arrived)
+Shares are fractional, not whole. The reconstructed series are index levels
+(the S&P 500 index is in the thousands by 2007-2020), so whole-share rounding
+would leave parts of each position uninvested and distort the test in a way
+the real ETFs do not. Everything else is unchanged.

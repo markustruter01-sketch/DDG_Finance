@@ -581,7 +581,7 @@ async def _standing_invariants_job() -> None:
     """Run read-only invariants and alert failures through the shared policy."""
     logger.info("Scheduler | JOB STARTING: standing_invariants")
     try:
-        from core.degradation_tracker import mark_resolved, record_degradation
+        from core.degradation_tracker import has_recent_open, mark_resolved, record_degradation
         from core.invariants import format_report, run_all_invariants
 
         report = await asyncio.to_thread(run_all_invariants)
@@ -592,6 +592,10 @@ async def _standing_invariants_job() -> None:
             name = str(result["name"])
             status = str(result["status"])
             if status in {"FAIL", "UNKNOWN"}:
+                # A failing invariant keeps one open row (renewed daily) instead
+                # of a new row every 15 minutes; it is resolved when it passes.
+                if has_recent_open("invariant", name):
+                    continue
                 record_degradation(
                     component="invariant",
                     severity="critical" if status == "FAIL" else "error",

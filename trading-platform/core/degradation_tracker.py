@@ -273,6 +273,32 @@ def mark_resolved(
     return resolved_count
 
 
+def has_recent_open(component: str, error_type: str, hours: int = 24) -> bool:
+    """True when an unresolved row for this component/error_type was recorded in
+    the last ``hours``. Lets a check that keeps failing leave one open row (a
+    daily reminder) instead of a new row every run. False if the database
+    cannot be read, so the caller records as before."""
+    try:
+        from db.postgres import get_conn, is_pg_available
+        if not is_pg_available():
+            return False
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT 1 FROM system_degradations
+                    WHERE resolved_at IS NULL AND component = %s AND error_type = %s
+                      AND ts > NOW() - make_interval(hours => %s)
+                    LIMIT 1
+                    """,
+                    (component, error_type, hours),
+                )
+                return cur.fetchone() is not None
+    except Exception as exc:
+        logger.debug(f"[DEGRADATION] has_recent_open read failed: {type(exc).__name__}")
+        return False
+
+
 # ── Queries ──────────────────────────────────────────────────────────────────
 
 def get_recent_events(

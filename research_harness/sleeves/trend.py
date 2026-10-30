@@ -8,6 +8,8 @@ in cash (earning T-bills). Long only, no leverage: gross weight <= 1.
 Inverse-vol base weight for ETF i = (1/vol_i) / sum over ALL eligible ETFs of
 (1/vol_j), so the sleeve is fully invested only when every ETF is trending.
 Each weight is capped at ``max_weight``; anything cut by the cap stays cash.
+With ``short_when_off`` (GEAR-V2 candidate A3), an "off" ETF is held SHORT at
+the same size instead of in cash; gross stays <= 1.
 """
 
 from __future__ import annotations
@@ -26,6 +28,7 @@ class TrendParams:
     rule: str                 # "tsmom_252", "sma_210", or "blend_63_126_252"
     vol_lookback: int = 63
     max_weight: float = 0.30
+    short_when_off: bool = False  # GEAR-V2 A3: short "off" ETFs instead of holding cash
 
     def __post_init__(self) -> None:
         if self.rule not in RULES:
@@ -86,7 +89,8 @@ def target_weights(view: HistoryView, universe: list[str], p: TrendParams) -> di
     total = sum(inv_vol.values())
     if total == 0:
         return {}
-    return {s: min(p.max_weight, iv / total) for s, iv in inv_vol.items() if on[s]}
+    return {s: (1.0 if on[s] else -1.0) * min(p.max_weight, iv / total)
+            for s, iv in inv_vol.items() if on[s] or p.short_when_off}
 
 
 def make_strategy(universe: list[str], p: TrendParams):

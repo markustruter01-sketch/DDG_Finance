@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import math
 from datetime import date
-from typing import Any
+from typing import Any, Callable
 
 from research_harness.harness.portfolio import HistoryView
 
@@ -52,9 +52,11 @@ def gear_for(closes: list[float]) -> str | None:
     return "aggressive" if vol <= VOL_LINE else "normal"
 
 
-def make_strategy(cid: str, log: list[tuple[date, str]] | None = None):
+def make_strategy(cid: str, log: list[tuple[date, str]] | None = None,
+                  safe: Callable[[HistoryView], dict[str, float]] | None = None):
     """Strategy for the portfolio simulator. ``log`` (if given) receives
-    (day, gear) for every session once the signal exists."""
+    (day, gear) for every session once the signal exists. ``safe`` (GEAR-V2)
+    gives the safe gear's weights; None = T-bills, as registered for G4."""
     mixes = CANDIDATES[cid]
     state: dict[str, Any] = {"gear": None, "month": None}
 
@@ -74,7 +76,9 @@ def make_strategy(cid: str, log: list[tuple[date, str]] | None = None):
         state["gear"], state["month"] = gear, month
         if not (changed or new_month):
             return None
-        return {} if gear == "safe" else dict(mixes[gear])
+        if gear == "safe":
+            return safe(view) if safe is not None else {}
+        return dict(mixes[gear])
 
     return strategy
 

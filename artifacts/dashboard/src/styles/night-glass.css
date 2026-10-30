@@ -54,10 +54,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .empty { display: grid; place-items: center; min-height: 64px; padding: 8px; text-align: center; font-size: 12.5px; color: var(--ng-text-3); }
 
 /* Number block: mono label above, light number below; a 2 px line under the
-   number marks a gain (mint) or a loss (amber). Text stays white. */
+   number marks a loss (amber); gains stay plain (Markus 31 Oct: Mint is Bullion's
+   colour here). Text stays white. */
 .stat { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .stat .label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.gain, .loss { display: inline-block; padding-bottom: 3px; border-bottom: 2px solid var(--ng-mint); }
+.gain, .loss { display: inline-block; padding-bottom: 3px; border-bottom: 2px solid transparent; }
 .loss { border-bottom-color: var(--ng-problem); }
 
 /* ── Status: always a dot plus a word ──────────────────────────────────── */
@@ -66,7 +67,6 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .dot.late { background: transparent; box-shadow: inset 0 0 0 1.5px var(--ng-amber); }
 .dot.problem { background: var(--ng-problem); }
 .dot.none { background: transparent; box-shadow: inset 0 0 0 1.5px rgba(255,255,255,0.62); }
-.dot.mint { background: var(--ng-mint); }
 
 /* ── Buttons, pills, nav ───────────────────────────────────────────────── */
 .btn {

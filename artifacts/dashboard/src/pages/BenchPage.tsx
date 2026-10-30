@@ -11,6 +11,7 @@ import {
 } from "recharts";
 import { parseCatalogResponse } from "@/lib/benchApi";
 import { Shell, Status } from "@/components/Shell";
+import { botColor } from "@/lib/bot-identity";
 
 type Experiment = {
   id: string | number;
@@ -75,16 +76,22 @@ const CATALOG_URL = `${import.meta.env.BASE_URL}trading-api/research/strategy-be
 const RESEARCH_GROUPS: ResearchGroup[] = ["Atlas", "Momentum", "Bullion", "Forex", "Fleet", "Other"];
 const WHITE = "#FFFFFF";
 const HOLLOW = "rgba(255,255,255,0.62)";
+// Research groups wear their account's colour (lib/bot-identity); Fleet and Other stay grey.
+const GROUP_COLOR: Record<ResearchGroup, string> = {
+  Atlas: botColor("oracle"), Momentum: botColor("spy_qqq_trend"), Bullion: botColor("jerome_macro"),
+  Forex: botColor("forex_ai"), Fleet: HOLLOW, Other: HOLLOW,
+};
 
-/** Chart mark: a white dot for a counted record, a hollow ring for one not
- *  counted, a hollow diamond for the SPY buy-and-hold reference. */
-function Mark({ kind, cx, cy }: { kind: "counted" | "not-counted" | "reference"; cx: number; cy: number }) {
+/** Chart mark: a filled dot for a counted record, a hollow ring for one not
+ *  counted (both in the group's colour), a hollow white diamond for the SPY
+ *  buy-and-hold reference. */
+function Mark({ kind, cx, cy, color = WHITE }: { kind: "counted" | "not-counted" | "reference"; cx: number; cy: number; color?: string }) {
   if (kind === "reference") {
     return <path d={`M${cx} ${cy - 7}L${cx + 7} ${cy}L${cx} ${cy + 7}L${cx - 7} ${cy}Z`} fill="none" stroke={WHITE} strokeWidth={1.5} />;
   }
   return kind === "counted"
-    ? <circle cx={cx} cy={cy} r={4.5} fill={WHITE} />
-    : <circle cx={cx} cy={cy} r={4} fill="none" stroke={HOLLOW} strokeWidth={1.25} />;
+    ? <circle cx={cx} cy={cy} r={4.5} fill={color} />
+    : <circle cx={cx} cy={cy} r={4} fill="none" stroke={color === WHITE ? HOLLOW : color} strokeOpacity={0.8} strokeWidth={1.25} />;
 }
 
 const MarkIcon = ({ kind }: { kind: "counted" | "not-counted" | "reference" }) => (
@@ -392,8 +399,8 @@ export default function BenchPage() {
         }}
       >
         <circle cx={props.cx} cy={props.cy} r={12} fill="transparent" />
-        {selected && <circle cx={props.cx} cy={props.cy} r={10} fill="none" stroke="#7CC9E8" strokeWidth={1.5} />}
-        <Mark kind={point.counted ? "counted" : "not-counted"} cx={props.cx} cy={props.cy} />
+        {selected && <circle cx={props.cx} cy={props.cy} r={10} fill="none" stroke={WHITE} strokeWidth={1.5} />}
+        <Mark kind={point.counted ? "counted" : "not-counted"} cx={props.cx} cy={props.cy} color={GROUP_COLOR[point.group]} />
       </g>
     );
   };
@@ -525,7 +532,7 @@ export default function BenchPage() {
                   <div className="bench-exps-scroll" tabIndex={0} aria-label="Experiments by research family">
                     {experimentGroups.map(({ group, items }) => (
                       <section key={group} aria-label={group} data-testid={`group-${group.toLowerCase()}`}>
-                        <div className="label bench-exps-group">{group} · {items.length}</div>
+                        <div className="label bench-exps-group"><span className="dot" style={{ background: GROUP_COLOR[group], marginRight: 8 }} aria-hidden="true" />{group} · {items.length}</div>
                         <ul className="list">
                           {items.map((experiment) => (
                             <li className="bench-exp" key={experiment.id} data-testid={`row-experiment-${experiment.id}`}>

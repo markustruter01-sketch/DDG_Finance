@@ -17,16 +17,17 @@ import { useRiskMetrics } from "@/hooks/use-performance";
 import { useRecentTrades } from "@/hooks/use-journal";
 import { useExportReport } from "@/hooks/use-report";
 import { useBotHistory, type BotDay } from "@/hooks/use-bot-history";
+import { botColor } from "@/lib/bot-identity";
 
 // Chart colours = the brand four (same values as styles/night-glass/tokens.css).
-// Mint = gains and the fleet line; Amber = losses; never a fill. Accounts and slices
-// take Ice, Violet, White in a fixed order (Mint and Amber are kept for gain / loss),
-// then fading whites. Charts need real colour values, so they are repeated here.
-const MINT = "#3DDC97";
+// Each account has its own colour (lib/bot-identity BOT_COLORS). Only losses get a
+// status colour (amber, a thin line, never a fill); gains stay plain. The fleet
+// total is white. Holdings mix (not accounts) uses fading whites.
+const FLEET = "#FFFFFF";
 const PROBLEM = "#F5A524";
 const AXIS = "rgba(255,255,255,0.62)";
 const HAIRLINE = "rgba(255,255,255,0.10)";
-const SHADES = ["#6CC7F0", "#A78BFA", "#FFFFFF", "rgba(255,255,255,0.5)", "rgba(255,255,255,0.3)", "rgba(255,255,255,0.18)"];
+const NEUTRALS = [1, 0.62, 0.38, 0.22, 0.14].map((a) => `rgba(255,255,255,${a})`);
 
 // ── Formatting (display only) ────────────────────────────────────────────────
 const money = (v: number | null | undefined) => (v == null ? null : fmtEq(v));
@@ -92,8 +93,8 @@ function Tip({ active, payload, label, fmt, title }: {
   );
 }
 
-/** A white bar with a thin mint (gain) or amber (loss) line at its end. */
-function CapBar(props: { x?: number; y?: number; width?: number; height?: number; value?: number | number[]; horizontal?: boolean }) {
+/** A bar in its account's colour; a loss also gets a thin amber line at its end. */
+function CapBar(props: { x?: number; y?: number; width?: number; height?: number; value?: number | number[]; horizontal?: boolean; payload?: { color?: string } }) {
   const { x = 0, y = 0, width = 0, height = 0, horizontal = false } = props;
   const v = Array.isArray(props.value) ? props.value[1] : props.value ?? 0;
   const rx = Math.min(x, x + width), ry = Math.min(y, y + height);
@@ -105,13 +106,13 @@ function CapBar(props: { x?: number; y?: number; width?: number; height?: number
     : { x: rx, y: up ? ry : ry + h - 2, width: w, height: 2 };
   return (
     <g>
-      <rect x={rx} y={ry} width={w} height={h} fill="rgba(255,255,255,0.28)" />
-      <rect {...cap} fill={up ? MINT : PROBLEM} />
+      <rect x={rx} y={ry} width={w} height={h} fill={props.payload?.color ?? "#FFFFFF"} fillOpacity={0.55} />
+      {!up && <rect {...cap} fill={PROBLEM} />}
     </g>
   );
 }
 
-function Donut({ data, center, total }: { data: { name: string; value: number }[]; center: ReactNode; total: number }) {
+function Donut({ data, center, total }: { data: { name: string; value: number; color: string }[]; center: ReactNode; total: number }) {
   return (
     <div className="donut">
       <div className="donut-chart">
@@ -119,7 +120,7 @@ function Donut({ data, center, total }: { data: { name: string; value: number }[
           <PieChart>
             <Pie data={data} dataKey="value" nameKey="name" innerRadius="70%" outerRadius="96%"
               paddingAngle={2} stroke="none" isAnimationActive={false}>
-              {data.map((d, i) => <Cell key={d.name} fill={SHADES[i % SHADES.length]} />)}
+              {data.map((d) => <Cell key={d.name} fill={d.color} />)}
             </Pie>
             <Tooltip content={<Tip fmt={(v, r) => `${r.name}: ${fmtEq(v)}`} />} />
           </PieChart>
@@ -127,9 +128,9 @@ function Donut({ data, center, total }: { data: { name: string; value: number }[
         <div className="donut-center">{center}</div>
       </div>
       <ul className="list donut-legend">
-        {data.map((d, i) => (
+        {data.map((d) => (
           <li key={d.name}>
-            <i style={{ background: SHADES[i % SHADES.length] }} aria-hidden="true" />
+            <i style={{ background: d.color }} aria-hidden="true" />
             <span className="grow small">{d.name}</span>
             <span className="tab">{total > 0 ? `${((d.value / total) * 100).toFixed(0)}%` : "—"}</span>
           </li>
@@ -158,7 +159,7 @@ function EngineCard({ e, mktOpen }: { e: Engine; mktOpen: boolean }) {
     <article className="glass panel engine" aria-label={`${e.name} engine`}>
       <div className="panel-head">
         <div className="engine-name">
-          <h3 className="card-title">{e.name}</h3>
+          <h3 className="card-title"><span className="dot" style={{ background: e.shade, marginRight: 8, verticalAlign: "middle" }} aria-hidden="true" />{e.name}</h3>
           <div className="note clamp" title={e.subtitle}>{e.subtitle}</div>
         </div>
         <Status tone={status.tone} word={status.word} />
@@ -180,7 +181,7 @@ function EngineCard({ e, mktOpen }: { e: Engine; mktOpen: boolean }) {
               <YAxis hide domain={["dataMin", "dataMax"]} />
               <XAxis dataKey="date" hide />
               <Tooltip content={<Tip title={shortDate} fmt={(v) => fmtEq(v)} />} cursor={{ stroke: HAIRLINE }} />
-              <Area type="monotone" dataKey="equity" stroke="#FFFFFF" strokeWidth={1.5} fill="none" isAnimationActive={false} />
+              <Area type="monotone" dataKey="equity" stroke={e.shade} strokeWidth={1.5} fill="none" isAnimationActive={false} />
             </AreaChart>
           </ResponsiveContainer>
         ) : <Empty>Daily history starts after the first daily close.</Empty>}
@@ -191,7 +192,7 @@ function EngineCard({ e, mktOpen }: { e: Engine; mktOpen: boolean }) {
       </div>
       <div className="meter" role="meter" aria-label="Share invested" aria-valuemin={0} aria-valuemax={100}
         aria-valuenow={deployed == null ? undefined : Math.round(deployed * 100)}>
-        <i style={{ width: `${Math.max(0, Math.min(1, deployed ?? 0)) * 100}%` }} />
+        <i style={{ width: `${Math.max(0, Math.min(1, deployed ?? 0)) * 100}%`, background: e.shade }} />
       </div>
       <div className="engine-stats">
         <Stat label="Positions" value={String(e.strategyCount ?? e.slice?.positions ?? latest?.positions ?? "—")} />
@@ -224,11 +225,11 @@ export default function HomePage() {
     const bots = (registry.data?.bots ?? [])
       .filter((b) => b.status !== "retired")
       .sort((a, b) => a.display_order - b.display_order);
-    return bots.map((b, i) => ({
+    return bots.map((b) => ({
       id: b.id,
       name: b.display_name,
       subtitle: b.subtitle || b.strategy_label,
-      shade: SHADES[i % SHADES.length],
+      shade: botColor(b.id),
       paused: b.status === "paused",
       slice: (fleet as Record<string, BotSlice | undefined> | undefined)?.[b.id],
       history: botHistory.data?.bots?.[b.id] ?? [],
@@ -238,11 +239,12 @@ export default function HomePage() {
 
   const allocation = engines
     .filter((e) => e.slice?.equity != null && e.slice.equity > 0)
-    .map((e) => ({ name: e.name, value: e.slice!.equity }));
+    .map((e) => ({ name: e.name, value: e.slice!.equity, color: e.shade }));
   const allocTotal = allocation.reduce((s, d) => s + d.value, 0);
 
-  const holdings = HOLDING_GROUPS.map((name) => ({
+  const holdings = HOLDING_GROUPS.map((name, i) => ({
     name,
+    color: NEUTRALS[i % NEUTRALS.length],
     value: allPos.filter((p) => holdingGroup(p) === name).reduce((s, p) => s + Math.abs(p.market_value ?? 0), 0),
   })).filter((d) => d.value > 0);
   const holdingsTotal = holdings.reduce((s, d) => s + d.value, 0);
@@ -272,12 +274,12 @@ export default function HomePage() {
     .filter((p) => p.symbol !== "SGOV" && p.symbol !== "BIL" && p.symbol !== "VOO")
     .sort((a, b) => Math.abs(b.unrealized_pl) - Math.abs(a.unrealized_pl))
     .slice(0, 8)
-    .map((p) => ({ symbol: p.symbol, pl: p.unrealized_pl }));
+    .map((p) => ({ symbol: p.symbol, pl: p.unrealized_pl, color: botColor(p.bot_id) }));
   const closed = (trades.data?.trades ?? [])
     .filter((t) => t.pnl_usd != null)
     .slice(0, 10)
     .reverse()
-    .map((t) => ({ label: t.symbol, pl: t.pnl_usd as number, when: t.closed_at }));
+    .map((t) => ({ label: t.symbol, pl: t.pnl_usd as number, when: t.closed_at }));  // trade rows carry no account: white
 
   const r = risk.data;
   const downloadReport = async () => {
@@ -340,7 +342,7 @@ export default function HomePage() {
                       <ReferenceLine key={j.name} x={fleetCurve.find((p) => p.date >= j.date)?.date} stroke={AXIS}
                         strokeDasharray="3 4" label={{ value: `${j.name} account added`, position: "insideTopRight", fill: AXIS, fontSize: 11 }} />
                     ))}
-                    <Area type="monotone" dataKey="equity" stroke={MINT} strokeWidth={1.5} fill="none" isAnimationActive={false} />
+                    <Area type="monotone" dataKey="equity" stroke={FLEET} strokeWidth={1.5} fill="none" isAnimationActive={false} />
                   </AreaChart>
                 </ResponsiveContainer>
               ) : <Empty>No fleet history yet. The first point is saved at tonight's close.</Empty>}

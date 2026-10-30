@@ -93,3 +93,7 @@ kraken-bot/blackbeard_control.json
 kraken-bot/davy-jones_control.json
 listing-pump/listing_paper_portfolio.json
 BUILD_COMMIT
+
+# Python bytecode
+__pycache__/
+*.pyc

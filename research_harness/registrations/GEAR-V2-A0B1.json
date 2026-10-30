@@ -1,0 +1,24 @@
+{
+  "id": "GEAR-V2-A0B1",
+  "registered_at": "2026-10-30 10:40 Brisbane (commit 0757e44), after the GEAR-V2 exploration (exploration_log.jsonl, same commit) and BEFORE any held-out data was read",
+  "source_document": "research_harness/explore/GEAR-V2-PLAN.md (committed f03575e, 10:33 Brisbane, before any GEAR-V2 run)",
+  "hypothesis": "A fund of 75% GEAR-V1-G4 (T-bills in its safe gear, as registered) plus 25% always-on long/short cross-asset ETF trend earns at least 12.5% a year, beats SPY's return, and has a smaller worst fall and a higher Sharpe than SPY, after costs, on unseen data.",
+  "candidate": "Part A = A0 (G4 unchanged: research_harness/sleeves/gear.py, candidate G4, safe gear = T-bills). Part B = B1: 75% the Part A sleeve + 25% the long/short trend slice (TREND-V1 universe, sma_210 trend call, LONG above / SHORT at or below the 210-session average, inverse 63-session volatility weights capped at 0.30, gross <= 1.0, monthly at the first session close, next-open fills). Fund weights constant, rebalanced daily (harness rule). Both sleeves: whole shares, 20% protective stops re-set at each rebalance (buy stops above shorts). Code: research_harness/sleeves/gear_v2.py, research_harness/explore/gear_v2.py, research_harness/heldout/gear_v2.py",
+  "part_a": "A0",
+  "part_b": "B1",
+  "candidates_declared": 4,
+  "prior_variants_tried": "Trend family: at least 11 attempts before GEAR-V2 (GEAR-V1 plan count) plus GEAR-V2's 4 declared candidates (A1, A2, A3, B1) = at least 15. Crypto booster (BOOST-V1, 3 candidates) failed exploration separately. No rule was changed after the GEAR-V2 exploration.",
+  "selection": "Exploration 2007-01-03..2020-12-31, all costs. A0 reproduced the logged G4 result exactly (CAGR 11.70%, max drawdown -32.10%, Sharpe excess T-bills 0.66). A1 (50% GLD + 50% IEF): 13.31% / -32.83% / 0.70, excluded because its drawdown was worse than A0's (plan rule). A3 (long/short trend in the safe gear): 10.40% / -34.54% / 0.58, excluded. A2 (DBMF) not selectable (data starts May 2019). Part A therefore = A0. Part B: the slice alone 3.32% / -13.11% / 0.40; sleeve test passed (beats T-bills; fund Sharpe 0.658 -> 0.681; correlation to the core 0.261); B1 fund 9.86% / -25.41% / 0.68 vs B0 11.70% / -32.10%, smaller drawdown, so B1. SPY same window: 9.39% / -55.19% / 0.50.",
+  "universe": ["SPY", "QQQ", "SSO", "QLD", "IWM", "EFA", "EEM", "VNQ", "TLT", "IEF", "LQD", "TIP", "GLD", "DBC"],
+  "window": "Held-out 2021-01-01 .. 2026-10-15 (last bar of the pinned datasets); earlier bars are warm-up only",
+  "data": {
+    "gear_etf_ych_2026-10-22": "eb7d2e469206b93406fb8986766542f602bd67ec233c2b99333467169a01127b",
+    "etf_daily_yf_2026-10-16": "119c8e0ff7781b560c4049ac4c965445bfbd3e97c24747e3b4cfb718a8168221",
+    "fred_dtb3_2026-10-16": "008c90e42510326b9ed9098e4e634c5fd1a1949e3dfcd7651edf1ec85fb216df"
+  },
+  "data_information_only": "DBMF (A2) is pulled after this registration through research_harness.fetch yahoo; its manifest hash is recorded in the ledger entry. It does not affect the verdict.",
+  "sizing": "Fund: 75% core / 25% slice, constant, rebalanced daily (harness rule; live, separate accounts would drift between rebalances). Core: G4's fixed gear mixes. Slice: inverse-volatility weights capped at 0.30.",
+  "leverage": "Core: market exposure up to 1.5x through 2x ETFs only, account gross <= 1.0, no borrowing. Slice: real short sales of ETFs, target gross <= 1.0 at each rebalance (it drifted to 1.09 between rebalances in exploration); longs never borrow.",
+  "costs": "Commission 0 bps, half-spread 2 bps, slippage 3 bps per trade (assumed, as GEAR-V1); short borrow 0 bps a year (Alpaca docs: $0 borrow fee on easy-to-borrow shares, read 30 Oct 2026); short-sale proceeds earn nothing; financing spread 650 bps over T-bills on any borrowed cash (should never apply). Stress run at 100 bps borrow reported for information. 2x ETF and DBMF fees are inside their prices.",
+  "pass_bar": "On 2021-01-01..2026-10-15, after costs (0 bps borrow), ALL must hold: 1) fund CAGR beats SPY buy-and-hold's; 2) fund CAGR >= 12.5%; 3) fund max drawdown smaller than SPY's; 4) fund Sharpe in excess of T-bills above SPY's; 5) slice correlation to the core below 0.5. Run once. A fail is reported as a fail; no variant is tried."
+}

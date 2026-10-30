@@ -1,5 +1,4 @@
 import { useQuery } from "@tanstack/react-query";
-import { isNYSEOpen } from "@/lib/dashboard-shared";
 import { api as fleetApi } from "@/hooks/use-trading-client";
 
 // ── Canonical types ───────────────────────────────────────────────────────────
@@ -154,6 +153,15 @@ export function fmtDollar(v: number | null | undefined) {
 }
 
 // ── Shared data hook ──────────────────────────────────────────────────────────
+
+/** US regular session (9:30-16:00 New York), weekdays only; holidays are not modelled. */
+function isNYSEOpen(): boolean {
+  const et = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+  const day = et.getDay();
+  if (day === 0 || day === 6) return false;
+  const totalMin = et.getHours() * 60 + et.getMinutes();
+  return totalMin >= 570 && totalMin < 960;
+}
 
 export function useFleetData() {
   const mktOpen = isNYSEOpen();

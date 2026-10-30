@@ -1,0 +1,10 @@
+/* Copied unchanged from DDG-Control artifacts/ddg-control/src/dusk.css (commit 8517d56). Keep identical. */
+/* Night Glass "dusk": every page without the full photo gets the same landscape,
+   blurred and fading into graphite at the top. Add class "dusk" to the page root. */
+.dusk { position: relative; isolation: isolate; }
+.dusk::before {
+  content: ''; position: absolute; left: 0; right: 0; top: 0; height: 640px; z-index: -1; pointer-events: none;
+  background: var(--ng-photo) center 40% / cover;
+  filter: blur(26px) saturate(115%); opacity: 0.42;
+  -webkit-mask-image: linear-gradient(#000 10%, transparent 100%); mask-image: linear-gradient(#000 10%, transparent 100%);
+}

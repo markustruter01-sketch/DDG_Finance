@@ -2,18 +2,18 @@ from core.bot_registry import BOT_REGISTRY, bot_by_id, display_label
 
 
 EXPECTED_LABELS = {
-    "oracle": ("Atlas", "Atlas", "Global Market Indexes", "Atlas · Global Market Indexes"),
+    "oracle": ("Atlas", "Atlas", "Gearbox G4 (headline)", "Atlas · Gearbox G4 (headline)"),
     "spy_qqq_trend": (
         "Momentum",
         "Momentum",
-        "Stock Trend Cooldown",
-        "Momentum · Stock Trend Cooldown",
+        "G4 + DBMF (forward test)",
+        "Momentum · G4 + DBMF (forward test)",
     ),
     "jerome_macro": (
         "Bullion",
         "Bullion",
-        "Precious Metals and Crypto",
-        "Bullion · Precious Metals and Crypto",
+        "Precious Metals and Crypto (research)",
+        "Bullion · Precious Metals and Crypto (research)",
     ),
 }
 

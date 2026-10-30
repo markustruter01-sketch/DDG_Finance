@@ -109,7 +109,7 @@ BOT_PROFILES = {
         "display_name":      "Single-Stock Momentum",
         "db_id":             1,              # replaces Davy Jones (id=1)
         "strategy_type":     "single_stock_momentum",
-        "strategy_label":    "Bot 2 Single-Stock 12-1 Momentum",
+        "strategy_label":    "G4 + DBMF forward test: Gearbox G4 with DBMF instead of T-bills in the safe gear",
         "ALPACA_API_KEY":    os.environ.get("ALPACA_BB_API_KEY", ""),
         "ALPACA_SECRET_KEY": os.environ.get("ALPACA_BB_SECRET_KEY", ""),
         "ALPACA_BASE_URL":   "https://paper-api.alpaca.markets",
@@ -124,7 +124,14 @@ BOT_PROFILES = {
         "MAX_DEPLOYMENT":    1.00,
         "SPY_SLEEVE_WEIGHT": 0.20,
         "SPY_SLEEVE_STOP_PCT": 0.35,
-        # Reserved for the separately validated Bot 2 activation.
+        # GEAR-V2 engine A2 (G4 with DBMF in the safe gear; information only,
+        # not registered) owns this account, by Markus's decision 30 Oct 2026:
+        # Momentum's stock book is sold first, then G4 + DBMF trades
+        # (bot2_momentum_strategy._run_gear_handover). Momentum is retired.
+        # No one-step rollback: with this False, Momentum's code ignores
+        # G4 + DBMF's holdings (they are alpaca_etf_positions rows), so those
+        # would have to be sold first.
+        "GEAR_SLEEVE_LIVE":  True,
     },
 
     "forex_ai": {

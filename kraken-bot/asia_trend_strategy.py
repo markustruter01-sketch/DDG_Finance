@@ -411,12 +411,8 @@ _last_trend_shadow_date: Optional[date] = None
 
 def _sleeve_exclusions(live_positions: list[dict]) -> tuple[set[str], set[str]]:
     """(vault symbols, parked-cash symbols) for this account."""
-    from core.cash_park import CASH_PARK_SYMBOLS
-    from core.kill_switch import _vault_symbols
-    vault = {canonical_symbol(s) for s in _vault_symbols(BOT_ID)}
-    parked = {canonical_symbol(s) for s in CASH_PARK_SYMBOLS}
-    parked |= {p["symbol"] for p in live_positions if is_cash_park(p.get("symbol"))}
-    return vault, parked
+    from gear_account import sleeve_exclusions
+    return sleeve_exclusions(BOT_ID, live_positions)
 
 
 def _maybe_run_trend_shadow(engine, account: dict, live_positions: list[dict]) -> None:
@@ -472,31 +468,11 @@ def _run_trend_sleeve(engine, live_positions: list[dict]) -> None:
 def _run_gear_sleeve(engine, live_positions: list[dict]) -> None:
     """GEAR_SLEEVE_LIVE: GEAR-V1-G4 owns this account (Markus, 23 Oct 2026).
     Replaces the legacy exits/entries entirely; same wiring as the trend sleeve."""
-    from core import bot_state
-    from core.degradation_tracker import record_degradation
-    from core.kill_switch import latch_tripped
-    from core.risk_governor import new_risk_check
-    from sgov_parking import park_idle_cash, unpark_for_entry
-    from sleeve_runtime.gear_live import STATE_KEY, run_gear_cycle
-    from sleeve_runtime.trend_v1b import alpaca_bar_fetcher
+    from gear_account import run_gear_account
+    from sleeve_runtime.gear_live import G4
 
-    vault, parked = _sleeve_exclusions(live_positions)
-    result = run_gear_cycle(
-        engine,
-        bot_id=BOT_ID,
-        fetch_bars=alpaca_bar_fetcher(engine.api),
-        vault=vault,
-        cash_park=parked,
-        read_state=lambda: (bot_state.read_metadata(BOT_ID) or {}).get(STATE_KEY, {}),
-        write_state=lambda st: bot_state.merge_metadata(BOT_ID, {STATE_KEY: st}),
-        kill_tripped=latch_tripped,
-        unpark=lambda e, live: unpark_for_entry(e, "GearG4", live),
-        park=lambda e, live, cash: park_idle_cash(e, "GearG4", live, cash),
-        alert=lambda severity, msg: record_degradation(
-            component=BOT_ID, severity=severity, error_type="gear_v1_g4_rebalance",
-            message=msg[:500], bot_id=BOT_ID),
-        risk_check=new_risk_check,
-    )
+    result = run_gear_account(engine, bot_id=BOT_ID, variant=G4, label="GearG4",
+                              live_positions=live_positions)
     logger.info(f"Asia | GEAR-V1-G4 live cycle | {result['status']}")
 
 

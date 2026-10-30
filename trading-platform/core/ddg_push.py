@@ -14,23 +14,18 @@ from routes.fleet_equity import ACTIVE_BOT_IDS, _fetch_fleet_equity
 
 
 _DETAIL_ALPACA_BOT_IDS = ("oracle", "spy_qqq_trend", "jerome_macro")
-_DETAIL_LEDGER_TABLES = {
-    "oracle": ("alpaca_etf_positions",),
-    "spy_qqq_trend": ("bot2_momentum_positions", "bot2_spy_qqq"),
-    "jerome_macro": ("bot3_positions",),
+# Older bot ids whose ledger rows still count for the bot (oracle's come from
+# the registry). Ledger tables: execution.reconciliation's map, the one source.
+_DETAIL_LEDGER_ALIASES = {
+    "oracle": (),
+    "spy_qqq_trend": ("bot2_spy_qqq",),
+    "jerome_macro": (),
 }
 _DETAIL_INSTRUMENTS = {
-    "oracle": [
-        "SPY", "QQQ", "EWY", "EWT", "INDA", "EWJ", "EWM", "VNM",
-        "EWZ", "EWW", "ECH", "EEM", "EZA", "EPOL", "GREK", "TUR",
-    ],
-    # Bot 2's runner screens a dynamic equity universe; this token identifies
-    # that screen while the fixed sleeve and cash-park instruments stay explicit.
-    "spy_qqq_trend": [
-        "SCREENED_EQUITIES",
-        "SPY",
-        "SGOV",
-    ],
+    # Gearbox G4 (sleeve_runtime/gear_live.py); idle cash parked in SGOV.
+    "oracle": ["SPY", "QQQ", "SSO", "QLD", "SGOV"],
+    # G4 + DBMF forward test; Momentum's book is sold at the handover.
+    "spy_qqq_trend": ["SPY", "QQQ", "SSO", "QLD", "DBMF", "SGOV"],
     "jerome_macro": ["BTC/USD", "ETH/USD", "GLD", "SLV"],
     # Forex AI is paused and has no executable trading universe.
     "forex_ai": [],
@@ -271,7 +266,7 @@ def build_detail() -> dict[str, Any]:
     from core.runner_heartbeat import get_runner_status
     from core.symbols import canonical_symbol
     from execution.per_bot_vault import VAULT_BIL_SYMBOL, VAULT_VOO_SYMBOL
-    from execution.reconciliation import _positions
+    from execution.reconciliation import _AUTHORITATIVE_POSITION_TABLES, _positions
     from db.postgres import get_conn
 
     bot_ids = sorted(ACTIVE_BOT_IDS)
@@ -300,7 +295,7 @@ def build_detail() -> dict[str, Any]:
             if set(bot_modes) != set(bot_ids):
                 raise ValueError("portfolio broker mode is unavailable")
 
-            for bot_id, (table, *aliases) in _DETAIL_LEDGER_TABLES.items():
+            for bot_id, aliases in _DETAIL_LEDGER_ALIASES.items():
                 ledger_ids = [bot_id, *aliases]
                 if bot_id == "oracle":
                     ledger_ids.extend(
@@ -308,29 +303,30 @@ def build_detail() -> dict[str, Any]:
                         for alias in BOT_REGISTRY[bot_id].legacy_aliases
                         if alias not in ledger_ids
                     )
-                cur.execute(
-                    f"""
-                    SELECT symbol, entry_price, stop_price
-                    FROM {table}
-                    WHERE status = 'open'
-                      AND bot_id = ANY(%s)
-                    ORDER BY opened_at DESC NULLS LAST
-                    """,
-                    (ledger_ids,),
-                )
-                for symbol, entry_price, stop_price in cur.fetchall():
-                    key = canonical_symbol(symbol)
-                    ledgers[bot_id].setdefault(
-                        key,
-                        {
-                            "entry_price": _optional_ledger_number(
-                                entry_price, "entry_price"
-                            ),
-                            "stop_price": _optional_ledger_number(
-                                stop_price, "stop_price"
-                            ),
-                        },
+                for table in _AUTHORITATIVE_POSITION_TABLES[bot_id]:
+                    cur.execute(
+                        f"""
+                        SELECT symbol, entry_price, stop_price
+                        FROM {table}
+                        WHERE status = 'open'
+                          AND bot_id = ANY(%s)
+                        ORDER BY opened_at DESC NULLS LAST
+                        """,
+                        (ledger_ids,),
                     )
+                    for symbol, entry_price, stop_price in cur.fetchall():
+                        key = canonical_symbol(symbol)
+                        ledgers[bot_id].setdefault(
+                            key,
+                            {
+                                "entry_price": _optional_ledger_number(
+                                    entry_price, "entry_price"
+                                ),
+                                "stop_price": _optional_ledger_number(
+                                    stop_price, "stop_price"
+                                ),
+                            },
+                        )
 
             cur.execute(
                 """

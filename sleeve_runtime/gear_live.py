@@ -18,15 +18,24 @@ first hourly cycle while the market is open, not exactly at the open.
 
 The order machinery is the tested TREND-V1-B executor
 (sleeve_runtime/trend_executor.execute_rebalance) with G4's targets.
+
+Variants (GearVariant) differ only in what the safe gear holds:
+- G4: T-bills (cash parked in SGOV), as registered. Atlas's account.
+- G4_DBMF: DBMF in the safe gear (GEAR-V2 engine A2; information only, not
+  registered, because DBMF's data starts in 2019). Forward test in Momentum's
+  account, Markus's decision 30 Oct 2026. Signal, mixes, stops, timing: G4's.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
+from functools import partial
 from typing import Any, Callable
 
 from research_harness.explore.gear_v1 import STOP_PCT, SYMBOLS
 from research_harness.sleeves.gear import CANDIDATES, SMA_SESSIONS, gear_for
+from research_harness.sleeves.gear_v2 import DBMF
 from sleeve_runtime.trend_executor import (
     MAX_ATTEMPTS,
     MAX_BAR_AGE_DAYS,
@@ -48,12 +57,23 @@ except ImportError:  # pragma: no cover
     import logging
     log = logging.getLogger("gear_live")
 
-REGISTRATION = "GEAR-V1-G4"
 CANDIDATE = "G4"
-STATE_KEY = "gear_v1_g4"
-EXIT_REASON = "gear_v1_g4_rebalance"
 SIGNAL = "SPY"
 HISTORY_CALENDAR_DAYS = 420          # > 200 sessions of SPY for the gear
+
+
+@dataclass(frozen=True)
+class GearVariant:
+    registration: str                 # label in plans, logs and alerts
+    state_key: str                    # bots_state.metadata key
+    exit_reason: str                  # ledger exit reason; also the alert error_type
+    safe: dict[str, float]            # what the safe gear holds ({} = T-bills)
+
+
+G4 = GearVariant("GEAR-V1-G4", "gear_v1_g4", "gear_v1_g4_rebalance", {})
+G4_DBMF = GearVariant("GEAR-V2-A2", "gear_v2_a2", "gear_v2_a2_rebalance", {DBMF: 1.0})
+# Atlas's names, unchanged (asia_trend_strategy and the tests import them).
+REGISTRATION, STATE_KEY, EXIT_REASON = G4.registration, G4.state_key, G4.exit_reason
 
 
 def gear_on(bars: dict[str, list[dict[str, Any]]], day: date) -> str | None:
@@ -62,8 +82,10 @@ def gear_on(bars: dict[str, list[dict[str, Any]]], day: date) -> str | None:
     return gear_for(closes[-(SMA_SESSIONS + 1):]) if closes else None
 
 
-def target_weights(gear: str | None) -> dict[str, float]:
-    return {} if gear in (None, "safe") else dict(CANDIDATES[CANDIDATE][gear])
+def target_weights(gear: str | None, variant: GearVariant = G4) -> dict[str, float]:
+    if gear is None:
+        return {}
+    return dict(variant.safe) if gear == "safe" else dict(CANDIDATES[CANDIDATE][gear])
 
 
 def compute_gear_plan(
@@ -74,8 +96,9 @@ def compute_gear_plan(
     cash: float,
     signal_day: date | None = None,
     frozen: dict[str, str] | None = None,
+    variant: GearVariant = G4,
 ) -> TrendPlan:
-    """Pure. Same plan shape as TREND-V1-B, with G4's weights."""
+    """Pure. Same plan shape as TREND-V1-B, with the variant's weights."""
     spy = bars.get(SIGNAL) or []
     if not spy:
         raise ValueError("no SPY bars")
@@ -86,9 +109,9 @@ def compute_gear_plan(
     gear = gear_on(bars, signal_day)
     if gear is None:
         raise ValueError("not enough SPY history for the gear")
-    return plan_from_weights(weights=target_weights(gear), bars=bars, positions=positions,
+    return plan_from_weights(weights=target_weights(gear, variant), bars=bars, positions=positions,
                              equity=equity, cash=cash, signal_day=signal_day, price_day=price_day,
-                             frozen=frozen, stop_pct=STOP_PCT, registration=REGISTRATION)
+                             frozen=frozen, stop_pct=STOP_PCT, registration=variant.registration)
 
 
 def rebalance_key(day: date, gear: str) -> str:
@@ -114,9 +137,10 @@ def gear_due(bars: dict[str, list[dict[str, Any]]], today_ny: date,
     return signal_day, gear, key
 
 
-def fetch_gear_bars(fetch_bars: BarFetcher, held: dict[str, float], now: datetime):
-    """G4's symbols plus anything held (legacy holdings get a price to sell)."""
-    symbols = sorted(set(SYMBOLS) | set(held))
+def fetch_gear_bars(fetch_bars: BarFetcher, held: dict[str, float], now: datetime,
+                    variant: GearVariant = G4):
+    """G4's symbols, the safe gear's, and anything held (legacy holdings get a price to sell)."""
+    symbols = sorted(set(SYMBOLS) | set(variant.safe) | set(held))
     return completed_bars(fetch_bars(symbols, now.date() - timedelta(days=HISTORY_CALENDAR_DAYS)), now)
 
 
@@ -135,8 +159,9 @@ def run_gear_cycle(
     alert: Callable[[str, str], None],
     risk_check: Callable[[], dict[str, Any]],
     now: datetime | None = None,
+    variant: GearVariant = G4,
 ) -> dict[str, Any]:
-    """oracle's whole hourly cycle while G4 is live."""
+    """The account's whole hourly cycle while a gear variant owns it."""
     now = now or datetime.now(timezone.utc)
     live = engine.get_positions()
     rows = engine.get_db_positions(bot_id)
@@ -150,7 +175,7 @@ def run_gear_cycle(
     status = "no rebalance due"
     state = read_state() or {}
     cap = sleeve_capital(engine.get_account(), live, vault=vault, cash_park=cash_park)
-    bars = fetch_gear_bars(fetch_bars, cap.held, now)
+    bars = fetch_gear_bars(fetch_bars, cap.held, now, variant)
     due = gear_due(bars, now.astimezone(NEW_YORK).date(), state)
     if due is not None:
         signal_day, gear, key = due
@@ -162,20 +187,22 @@ def run_gear_cycle(
         try:
             report = execute_rebalance(engine, bot_id=bot_id, bars=bars, signal_day=signal_day,
                                        vault=vault, cash_park=cash_park, unpark=unpark,
-                                       risk_check=risk_check, plan_fn=compute_gear_plan,
-                                       registration=REGISTRATION, exit_reason=EXIT_REASON)
+                                       risk_check=risk_check,
+                                       plan_fn=partial(compute_gear_plan, variant=variant),
+                                       registration=variant.registration,
+                                       exit_reason=variant.exit_reason)
         except Exception as exc:
-            msg = f"GEAR-V1-G4 rebalance attempt {attempts} crashed: {type(exc).__name__}: {exc}"
+            msg = f"{variant.registration} rebalance attempt {attempts} crashed: {type(exc).__name__}: {exc}"
             write_state({**base, "done": False, "errors": [msg[:300]]})
             alert("critical", msg)
             log.exception(msg)
             return {"status": f"rebalance attempt {attempts} crashed"}
         write_state({**base, "done": report["done"], "errors": report["errors"][:10]})
-        log.info(f"GEAR-V1-G4 rebalance | gear={gear} | attempt {attempts} | {report}")
+        log.info(f"{variant.registration} rebalance | gear={gear} | attempt {attempts} | {report}")
         if report["unprotected"]:
-            alert("critical", f"GEAR-V1-G4: positions without a protective stop: {report['unprotected']}")
+            alert("critical", f"{variant.registration}: positions without a protective stop: {report['unprotected']}")
         elif report["errors"]:
-            alert("error", f"GEAR-V1-G4 rebalance attempt {attempts} had errors: {report['errors'][:5]}")
+            alert("error", f"{variant.registration} rebalance attempt {attempts} had errors: {report['errors'][:5]}")
         status = f"rebalanced to {gear}" if report["done"] else f"rebalance attempt {attempts} incomplete"
 
     acct = engine.get_account()

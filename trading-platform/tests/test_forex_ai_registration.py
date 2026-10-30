@@ -60,7 +60,7 @@ def test_registry_returns_four_nonretired_bots_and_keeps_gump_retired():
     forex = next(bot for bot in response["bots"] if bot["id"] == "forex_ai")
     assert forex["status"] == "paused"
     assert forex["display_name"] == "Forex"
-    assert forex["subtitle"] == "AI Currency Trading"
+    assert forex["subtitle"] == "AI Currency Trading (research)"
     assert forex["exchange"] == "oanda"
     assert forex["asset_class"] == "forex"
 

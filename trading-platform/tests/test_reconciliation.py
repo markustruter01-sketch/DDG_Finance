@@ -453,7 +453,9 @@ def test_ledger_orphan_findings_report_unmapped_etf_null_quantity(monkeypatch):
     ]
 
 
-def test_authoritative_momentum_ledger_reads_bot2_qty(monkeypatch):
+def test_authoritative_momentum_ledger_reads_bot2_qty_and_its_g4_dbmf_rows(monkeypatch):
+    """Momentum's account: its own table during the handover, and G4 + DBMF's
+    alpaca_etf_positions rows (current_qty) after it."""
     connection = _Connection(rows=[("SPY", 10.0)])
 
     @contextmanager
@@ -470,12 +472,20 @@ def test_authoritative_momentum_ledger_reads_bot2_qty(monkeypatch):
             "bot_id": "spy_qqq_trend",
             "symbol": "SPY",
             "qty": 10.0,
-        }
+        },
+        {
+            "table": "alpaca_etf_positions",
+            "bot_id": "spy_qqq_trend",
+            "symbol": "SPY",
+            "qty": 10.0,
+        },
     ]
-    query, params = connection.cursor_instance.calls[0]
-    assert "FROM bot2_momentum_positions" in query
-    assert "qty::double precision AS qty" in query
-    assert params == ("spy_qqq_trend",)
+    (bot2_query, bot2_params), (etf_query, etf_params) = connection.cursor_instance.calls
+    assert "FROM bot2_momentum_positions" in bot2_query
+    assert "qty::double precision AS qty" in bot2_query
+    assert "FROM alpaca_etf_positions" in etf_query
+    assert "current_qty::double precision AS qty" in etf_query
+    assert bot2_params == etf_params == ("spy_qqq_trend",)
 
 
 @pytest.mark.parametrize(
@@ -516,7 +526,7 @@ def test_authoritative_momentum_ledger_reads_bot2_qty(monkeypatch):
         ),
         (
             "spy_qqq_trend",
-            ("bot2_momentum_positions",),
+            ("bot2_momentum_positions", "alpaca_etf_positions"),
             [
                 {
                     "bot_id": "spy_qqq_trend",
@@ -524,7 +534,14 @@ def test_authoritative_momentum_ledger_reads_bot2_qty(monkeypatch):
                     "stop_order_id": "momentum-stop",
                     "table": "bot2_momentum_positions",
                     "reverse_check": True,
-                }
+                },
+                {
+                    "bot_id": "spy_qqq_trend",
+                    "symbol": "DBMF",
+                    "stop_order_id": "g4-dbmf-stop",
+                    "table": "alpaca_etf_positions",
+                    "reverse_check": True,
+                },
             ],
         ),
     ],
@@ -550,7 +567,11 @@ def test_stop_ledger_rows_use_authoritative_table_and_preserve_oracle_legacy(
             if "FROM ratchet_stops" in query:
                 self.rows = [("SPY", "legacy-oracle-stop")]
             elif "FROM alpaca_etf_positions" in query:
-                self.rows = [("oracle", "SPY", "oracle-stop")]
+                self.rows = (
+                    [("spy_qqq_trend", "DBMF", "g4-dbmf-stop")]
+                    if params == ("spy_qqq_trend",)
+                    else [("oracle", "SPY", "oracle-stop")]
+                )
             elif "FROM bot3_positions" in query:
                 self.rows = [("jerome_macro", "SLV", "bullion-stop")]
             elif "FROM bot2_momentum_positions" in query:

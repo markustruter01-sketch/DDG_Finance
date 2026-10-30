@@ -56,7 +56,7 @@ def _run(eng, bars, state=None, now=FRI_OPEN, **kw):
         park=lambda e, live, cash: events.append(("park", round(cash, 2))),
         alert=lambda sev, msg: events.append((sev, msg)),
         risk_check=kw.get("risk", lambda: {"allowed": True, "reasons": []}),
-        now=now)
+        now=now, variant=kw.get("variant", gl.G4))
     return out, saved["state"], events
 
 
@@ -135,3 +135,57 @@ def test_risk_governor_refusal_still_sells_and_is_reported():
     assert not any(o[0] == "buy" for o in eng.orders)
     assert state["done"] is False and "risk governor" in state["errors"][0]
     assert out["status"] == "rebalance attempt 1 incomplete"
+
+
+# ── G4_DBMF: GEAR-V2 engine A2 in Momentum's account (forward test) ──────────
+
+def _dbmf_bars(**kw):
+    bars = _bars(**kw)
+    bars["DBMF"] = _series(date(2026, 10, 23), 28.0, 0.0, 0.003)
+    return bars
+
+
+def test_variants_differ_only_in_the_safe_gear():
+    assert gl.target_weights("safe", gl.G4_DBMF) == {"DBMF": 1.0}
+    assert gl.target_weights("safe") == {}                        # Atlas: T-bills, as registered
+    for gear in ("aggressive", "normal"):
+        assert gl.target_weights(gear, gl.G4_DBMF) == gl.target_weights(gear)
+    assert gl.target_weights(None, gl.G4_DBMF) == {}
+    assert (gl.REGISTRATION, gl.STATE_KEY, gl.EXIT_REASON) == (
+        "GEAR-V1-G4", "gear_v1_g4", "gear_v1_g4_rebalance")     # Atlas's names unchanged
+    assert gl.G4_DBMF.state_key != gl.G4.state_key and gl.G4_DBMF.exit_reason != gl.G4.exit_reason
+
+
+def test_dbmf_variant_fetches_dbmf_and_holds_it_with_a_20pct_stop_in_the_safe_gear():
+    bars = _dbmf_bars(spy_daily=-0.002)
+    asked = []
+    fetch = lambda syms, start: asked.extend(syms) or {s: bars[s] for s in syms if s in bars}
+    gl.fetch_gear_bars(fetch, {}, FRI_OPEN, gl.G4_DBMF)
+    assert "DBMF" in asked
+    positions = {"SPY": 20, "QQQ": 20}
+    rows = [{"symbol": s, "qty": q, "stop_price": 1.0, "stop_order_id": None} for s, q in positions.items()]
+    eng = _engine(bars, positions, 1_000.0, rows)
+    out, state, events = _run(eng, bars, state={}, variant=gl.G4_DBMF)
+    # One 100% holding: the buy is cut ~2% to fit cash (executor's gap allowance),
+    # so the first attempt is incomplete and the next hourly cycle tops it up.
+    assert state["key"] == "2026-10|safe" and state["done"] is False
+    assert all("to fit cash" in e for e in state["errors"])
+    out, state, events = _run(eng, bars, state=state, variant=gl.G4_DBMF)
+    assert out["status"] == "rebalanced to safe"
+    assert state["done"] is True and state["attempts"] == 2
+    assert "SPY" not in eng.pos and "QQQ" not in eng.pos
+    assert ("record_close", "SPY", "gear_v2_a2_rebalance") in eng.orders
+    qty, stop = eng.stops["DBMF"]
+    assert qty == int(eng.pos["DBMF"]) >= 1
+    assert stop == pytest.approx(eng.px["DBMF"] * 0.8, abs=0.01)
+    equity = eng.get_account()["equity"]
+    assert eng.pos["DBMF"] * eng.px["DBMF"] > 0.95 * equity      # ~all in DBMF (1% buffer, whole shares)
+
+
+def test_dbmf_variant_without_a_dbmf_price_stays_in_cash():
+    bars = _bars(spy_daily=-0.002)                                 # no DBMF bars at all
+    eng = _engine(bars, {"SPY": 20}, 1_000.0,
+                  [{"symbol": "SPY", "qty": 20, "stop_price": 1.0, "stop_order_id": None}])
+    out, state, events = _run(eng, bars, state={}, variant=gl.G4_DBMF)
+    assert "SPY" not in eng.pos and "DBMF" not in eng.pos
+    assert events[-1][0] == "park"                                 # cash parked, as T-bills

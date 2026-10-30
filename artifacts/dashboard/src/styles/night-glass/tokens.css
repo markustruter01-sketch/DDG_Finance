@@ -11,12 +11,14 @@
   --ng-text: #ffffff;
   --ng-text-2: rgba(255, 255, 255, 0.72);
   --ng-text-3: rgba(255, 255, 255, 0.62);
-  --ng-ice: #7cc9e8;
+  /* The four brand colours (Markus 31 Oct, option A "Bright"). White does most of the work.
+     Ice = main, Mint = gains and good, Violet = second, Amber = losses, debt and problems only.
+     No red anywhere. Late = an amber ring; a problem = a filled amber dot. */
+  --ng-ice: #6cc7f0;
   --ng-mint: #3ddc97;
-  --ng-amber: #f5a524;
-  --ng-volt: #d4ff3f;
   --ng-violet: #a78bfa;
-  --ng-problem: #ff6b6b;
+  --ng-amber: #f5a524;
+  --ng-problem: var(--ng-amber);
   --ng-sans: Geist, system-ui, sans-serif;
   --ng-mono: 'Geist Mono', ui-monospace, monospace;
   /* The one landscape photo: full on home pages, blurred "dusk" at the top of every other page. */

@@ -121,12 +121,6 @@ export function getBotStatus(
   return "LIVE";
 }
 
-export const STATUS_COLORS: Record<BotStatus, string> = {
-  LIVE:       "#22c55e",
-  MKT_CLOSED: "#64748b",
-  DOWN:       "#ef4444",
-  IDLE:       "#eab308",
-};
 
 export const STATUS_LABELS: Record<BotStatus, string> = {
   LIVE:       "LIVE",

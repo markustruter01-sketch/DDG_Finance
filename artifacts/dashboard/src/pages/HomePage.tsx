@@ -18,13 +18,15 @@ import { useRecentTrades } from "@/hooks/use-journal";
 import { useExportReport } from "@/hooks/use-report";
 import { useBotHistory, type BotDay } from "@/hooks/use-bot-history";
 
-// Chart colours: white does the talking; Mint (Finance) only as the fleet line;
-// gains and losses as a thin mint / red line, never a fill.
+// Chart colours = the brand four (same values as styles/night-glass/tokens.css).
+// Mint = gains and the fleet line; Amber = losses; never a fill. Accounts and slices
+// take Ice, Violet, White in a fixed order (Mint and Amber are kept for gain / loss),
+// then fading whites. Charts need real colour values, so they are repeated here.
 const MINT = "#3DDC97";
-const PROBLEM = "#FF6B6B";
+const PROBLEM = "#F5A524";
 const AXIS = "rgba(255,255,255,0.62)";
 const HAIRLINE = "rgba(255,255,255,0.10)";
-const SHADES = [1, 0.72, 0.5, 0.34, 0.22, 0.14].map((a) => `rgba(255,255,255,${a})`);
+const SHADES = ["#6CC7F0", "#A78BFA", "#FFFFFF", "rgba(255,255,255,0.5)", "rgba(255,255,255,0.3)", "rgba(255,255,255,0.18)"];
 
 // ── Formatting (display only) ────────────────────────────────────────────────
 const money = (v: number | null | undefined) => (v == null ? null : fmtEq(v));
@@ -90,7 +92,7 @@ function Tip({ active, payload, label, fmt, title }: {
   );
 }
 
-/** A white bar with a thin mint (gain) or red (loss) line at its end. */
+/** A white bar with a thin mint (gain) or amber (loss) line at its end. */
 function CapBar(props: { x?: number; y?: number; width?: number; height?: number; value?: number | number[]; horizontal?: boolean }) {
   const { x = 0, y = 0, width = 0, height = 0, horizontal = false } = props;
   const v = Array.isArray(props.value) ? props.value[1] : props.value ?? 0;

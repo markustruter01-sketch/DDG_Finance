@@ -60,7 +60,7 @@ BOT_REGISTRY: dict[str, BotEntry] = {
         display_name="Atlas",
         short_name="Atlas",
         icon="🔮",
-        strategy_label="Stock Trend Follower v1.0 — EMA20/50 + ADX + RSI",
+        strategy_label="Gearbox G4: SPY/QQQ + 2x when calm, T-bills below SPY's 200-day average",
         asset_class="stocks",
         exchange="alpaca",
         starting_capital=100_000,
@@ -77,14 +77,14 @@ BOT_REGISTRY: dict[str, BotEntry] = {
         trading_hours="nyse_only",
         cycle_minutes=15,
         color="purple",
-        subtitle="Global Market Indexes",
+        subtitle="Gearbox G4 (headline)",
     ),
     "spy_qqq_trend": BotEntry(
         id="spy_qqq_trend",
         display_name="Momentum",
         short_name="Momentum",
         icon="📈",
-        strategy_label="EMA50/200 dual-trend on SPY+QQQ",
+        strategy_label="G4 with DBMF instead of T-bills in the safe gear (forward test)",
         asset_class="equity_etf",
         exchange="alpaca",
         starting_capital=100_000,
@@ -95,7 +95,7 @@ BOT_REGISTRY: dict[str, BotEntry] = {
         trading_hours="nyse_only",
         cycle_minutes=60,
         color="amber",
-        subtitle="Stock Trend Cooldown",
+        subtitle="G4 + DBMF (forward test)",
     ),
     "jerome_macro": BotEntry(
         id="jerome_macro",
@@ -113,7 +113,7 @@ BOT_REGISTRY: dict[str, BotEntry] = {
         trading_hours="macro_cycle",
         cycle_minutes=240,
         color="red",
-        subtitle="Precious Metals and Crypto",
+        subtitle="Precious Metals and Crypto (research)",
     ),
 
     "forex_gump": BotEntry(
@@ -149,7 +149,7 @@ BOT_REGISTRY: dict[str, BotEntry] = {
         trading_hours="forex_session",
         cycle_minutes=60,
         color="blue",
-        subtitle="AI Currency Trading",
+        subtitle="AI Currency Trading (research)",
     ),
 }
 

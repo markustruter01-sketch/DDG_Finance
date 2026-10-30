@@ -2127,14 +2127,64 @@ def _sell_sgov_to_fund_buys(
     }
 
 
+HANDOVER_EXIT_REASON = "gear_v2_a2_handover"
+
+
+def _run_gear_handover(profile: dict[str, Any]) -> dict[str, Any]:
+    """GEAR_SLEEVE_LIVE: G4 with DBMF in the safe gear owns this account
+    (GEAR-V2 engine A2, forward test, not registered; Markus, 30 Oct 2026).
+
+    Momentum's own book is sold first, through its tested sell path (lifts
+    each stock's stop, sells, closes its ledger row). G4 starts only when no
+    Momentum row is left open; until then nothing is bought. Vault (BIL/VOO)
+    and parked SGOV are never part of the handover."""
+    from alpaca_etf_engine import AlpacaEtfEngine
+    from core.degradation_tracker import record_degradation
+    from core.kill_switch import latch_tripped
+    from gear_account import run_gear_account
+    from sleeve_runtime.gear_live import G4_DBMF
+
+    key = profile.get("ALPACA_API_KEY") or os.environ.get("ALPACA_BB_API_KEY", "")
+    secret = profile.get("ALPACA_SECRET_KEY") or os.environ.get("ALPACA_BB_SECRET_KEY", "")
+    base_url = profile.get("ALPACA_BASE_URL", ALPACA_BASE_URL)
+    engine = AlpacaEtfEngine(api_key=key, secret_key=secret, base_url=base_url)
+    ensure_schema()
+    rows = load_open_positions()
+    if rows:
+        if latch_tripped():
+            return {"status": "kill switch tripped: no trading"}
+        if not engine.is_market_open():
+            return {"status": "market closed", "momentum_rows_open": len(rows)}
+        client = AlpacaMomentumClient(key, secret, base_url)
+        rows = _reconcile_protective_stops(client, rows)
+        failed = [
+            canonical_symbol(row["symbol"])
+            for row in rows
+            if not _sell_confirmed(client, row, HANDOVER_EXIT_REASON)
+        ]
+        if failed:
+            msg = f"GEAR-V2-A2 handover: Momentum sells not confirmed for {failed}; nothing bought, retry next cycle"
+            logger.critical("Bot 2 | %s", msg)
+            record_degradation(component=BOT_ID, severity="error", error_type=HANDOVER_EXIT_REASON,
+                               message=msg[:500], bot_id=BOT_ID)
+            return {"status": "handover incomplete", "failed": failed}
+        logger.info("Bot 2 | GEAR-V2-A2 handover: Momentum book sold (%s rows)", len(rows))
+    result = run_gear_account(engine, bot_id=BOT_ID, variant=G4_DBMF, label="GearDBMF",
+                              live_positions=engine.get_positions())
+    logger.info("Bot 2 | GEAR-V2-A2 live cycle | %s", result["status"])
+    return result
+
+
 def run_bot2_cycle(
     profile: dict[str, Any] | None = None,
     db_id: int | None = None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
     """Live cycle. Only called by the runner, which enforces bots_state.paused."""
-    gate_passed = universe_gate_is_passed()
     profile = profile or {}
+    if profile.get("GEAR_SLEEVE_LIVE", False):
+        return _run_gear_handover(profile)
+    gate_passed = universe_gate_is_passed()
     now = now or datetime.now(timezone.utc)
     if not us_equity_session_open(now):
         return {"status": "deferred", "orders": 0, "reason": "US_equity_market_closed"}

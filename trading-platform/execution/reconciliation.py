@@ -28,10 +28,12 @@ from core.symbols import canonical_symbol
 _LEDGER_ACCOUNT_ALIASES = {"buck_futures": "oracle"}
 _TRADES_DEFAULT_ACCOUNT = "oracle"
 _MATERIAL_NOTIONAL = 0.01
-_AUTHORITATIVE_POSITION_TABLES = {
-    "oracle": "alpaca_etf_positions",
-    "spy_qqq_trend": "bot2_momentum_positions",
-    "jerome_macro": "bot3_positions",
+# Each bot's strategy ledger table(s). Momentum's account keeps its own table
+# for the handover and G4 + DBMF's rows in alpaca_etf_positions (30 Oct 2026).
+_AUTHORITATIVE_POSITION_TABLES: dict[str, tuple[str, ...]] = {
+    "oracle": ("alpaca_etf_positions",),
+    "spy_qqq_trend": ("bot2_momentum_positions", "alpaca_etf_positions"),
+    "jerome_macro": ("bot3_positions",),
 }
 _TERMINAL_ORDER_STATUSES = {"canceled", "filled", "expired", "rejected"}
 
@@ -145,42 +147,43 @@ def _authoritative_ledger_positions(bot_id: str) -> list[dict[str, Any]]:
     quantity findings.
     """
     bot_id = resolve_bot_id(bot_id)
-    table = _AUTHORITATIVE_POSITION_TABLES.get(bot_id)
-    if table is None:
-        return []
-    quantity_column = (
-        "current_qty" if table == "alpaca_etf_positions" else "qty"
-    )
+    tables = _AUTHORITATIVE_POSITION_TABLES.get(bot_id, ())
+    rows: list[dict[str, Any]] = []
     try:
         from db.postgres import get_conn
         with get_conn() as conn:
             with conn.cursor() as cur:
-                cur.execute(
-                    f"""
-                    SELECT
-                        symbol,
-                        {quantity_column}::double precision AS qty
-                    FROM {table} AS position
-                    WHERE position.bot_id = %s
-                      AND lower(position.status) = 'open'
-                      AND NOT EXISTS (
-                          SELECT 1
-                          FROM per_bot_vault_holdings AS vault
-                          WHERE vault.bot_id = position.bot_id
-                            AND vault.symbol = position.symbol
-                      )
-                    """,
-                    (bot_id,),
-                )
-                return [
-                    {
-                        "table": table,
-                        "bot_id": bot_id,
-                        "symbol": row[0],
-                        "qty": row[1],
-                    }
-                    for row in cur.fetchall()
-                ]
+                for table in tables:
+                    quantity_column = (
+                        "current_qty" if table == "alpaca_etf_positions" else "qty"
+                    )
+                    cur.execute(
+                        f"""
+                        SELECT
+                            symbol,
+                            {quantity_column}::double precision AS qty
+                        FROM {table} AS position
+                        WHERE position.bot_id = %s
+                          AND lower(position.status) = 'open'
+                          AND NOT EXISTS (
+                              SELECT 1
+                              FROM per_bot_vault_holdings AS vault
+                              WHERE vault.bot_id = position.bot_id
+                                AND vault.symbol = position.symbol
+                          )
+                        """,
+                        (bot_id,),
+                    )
+                    rows.extend(
+                        {
+                            "table": table,
+                            "bot_id": bot_id,
+                            "symbol": row[0],
+                            "qty": row[1],
+                        }
+                        for row in cur.fetchall()
+                    )
+        return rows
     except Exception as exc:
         logger.warning(
             f"Reconciliation | authoritative ledger read failed for {bot_id}: {exc}"
@@ -337,8 +340,8 @@ def _ledger_orphan_findings(
             handled_by_authoritative_read = (
                 ledger_bot_id in _AUTHORITATIVE_POSITION_TABLES
                 and ledger_bot_id in broker_positions
-                and _AUTHORITATIVE_POSITION_TABLES[ledger_bot_id]
-                == row.get("table")
+                and row.get("table")
+                in _AUTHORITATIVE_POSITION_TABLES[ledger_bot_id]
             )
             if not handled_by_authoritative_read:
                 findings.append(
@@ -519,11 +522,12 @@ def _authoritative_quantity_mismatches(
             broker_by_symbol[symbol] = broker_by_symbol.get(symbol, 0.0) + qty
 
     ledger_by_symbol: dict[str, float] = {}
+    ledger_tables: dict[str, set[str]] = {}
     unknown_quantities: list[dict[str, Any]] = []
     for position in ledger:
         raw_qty = position.get("qty")
         position_table = position.get(
-            "table", _AUTHORITATIVE_POSITION_TABLES[resolved_bot_id]
+            "table", _AUTHORITATIVE_POSITION_TABLES[resolved_bot_id][0]
         )
         if (
             raw_qty is None
@@ -543,12 +547,12 @@ def _authoritative_quantity_mismatches(
         if qty >= DUST_QTY:
             symbol = canonical_symbol(position.get("symbol"))
             ledger_by_symbol[symbol] = ledger_by_symbol.get(symbol, 0.0) + qty
+            ledger_tables.setdefault(symbol, set()).add(position_table)
 
-    table = _AUTHORITATIVE_POSITION_TABLES[resolved_bot_id]
     return unknown_quantities + [
         {
             "bot_id": resolved_bot_id,
-            "table": table,
+            "table": "+".join(sorted(ledger_tables[symbol])),
             "symbol": symbol,
             "kind": "quantity_mismatch",
             "broker_qty": broker_by_symbol[symbol],
@@ -582,7 +586,7 @@ def _stop_ledger_rows(bot_id: str) -> list[dict[str, Any]]:
     """
     bot_id = resolve_bot_id(bot_id)
     rows: list[dict[str, Any]] = []
-    table = _AUTHORITATIVE_POSITION_TABLES.get(bot_id)
+    tables = _AUTHORITATIVE_POSITION_TABLES.get(bot_id, ())
     try:
         from db.postgres import get_conn
         with get_conn() as conn:
@@ -602,7 +606,7 @@ def _stop_ledger_rows(bot_id: str) -> list[dict[str, Any]]:
                         }
                         for row in cur.fetchall()
                     )
-                if table is not None:
+                for table in tables:
                     cur.execute(
                         f"SELECT bot_id, symbol, stop_order_id FROM {table} "
                         "WHERE bot_id = %s AND status = 'open' "

@@ -149,3 +149,56 @@ def test_pinned_hash_mismatch_stops_the_run(tmp_path):
         store.write_dataset(name, source="test", bars_by_symbol={"SPY": _series(_days(5), 0, 0.01, 1)})
     with pytest.raises(ex.PinnedDataError):
         ex.load_bars(store, EXPLORE_END)
+
+
+def _synthetic_store(tmp_path):
+    """Datasets with the plan's names but synthetic prices (2003..2026-10-15)."""
+    from research_harness.harness.store import BarStore
+    store = BarStore(tmp_path / "data")
+    days = [d for d in _days(6300, date(2003, 1, 6)) if d <= date(2026, 10, 15)]
+    seed = iter(range(100, 200))
+    store.write_dataset(ex.GEAR_DATASET[0], source="t", bars_by_symbol={
+        s: _series(days, 0.0003, 0.012, next(seed)) for s in ex.GEAR_SYMBOLS})
+    store.write_dataset(ex.ENGINE_DATASET[0], source="t", bars_by_symbol={
+        s: _series(days, 0.0001, 0.008, next(seed)) for s in ex.ENGINE_SYMBOLS})
+    store.write_dataset(ex.RATES_DATASET[0], source="t", fields=("day", "rate"), positive_fields=(),
+                        bars_by_symbol={"DTB3": [{"day": d, "rate": 0.02} for d in days]})
+    store.write_dataset("dbmf_t", source="t", bars_by_symbol={
+        "DBMF": _series([d for d in days if d >= date(2019, 5, 8)], 0.0001, 0.008, 7)})
+    return store
+
+
+def test_heldout_runs_once_end_to_end(tmp_path, monkeypatch):
+    import json
+    import research_harness.harness.registry as rg
+    from research_harness.harness.registry import RegistrationError
+    from research_harness.heldout import gear_v2 as hv
+
+    store = _synthetic_store(tmp_path)
+    pins = {n: (ds[0], store.manifest_hash(ds[0])) for n, ds in
+            (("GEAR_DATASET", ex.GEAR_DATASET), ("ENGINE_DATASET", ex.ENGINE_DATASET),
+             ("RATES_DATASET", ex.RATES_DATASET))}
+    for mod in (ex, hv):
+        for n, v in pins.items():
+            monkeypatch.setattr(mod, n, v)
+    regs = tmp_path / "regs"
+    regs.mkdir()
+    reg = {"id": "GEAR-V2-T", "registered_at": "t", "hypothesis": "h", "candidate": "c",
+           "candidates_declared": 4, "prior_variants_tried": "15", "universe": [], "window": "w",
+           "sizing": "s", "leverage": "l", "costs": "c", "pass_bar": "p",
+           "part_a": "A0", "part_b": "B1", "data": dict(pins.values())}
+    (regs / "GEAR-V2-T.json").write_text(json.dumps(reg))
+    real = rg.load_registration
+    monkeypatch.setattr(rg, "load_registration", lambda reg_id, directory=regs: real(reg_id, regs))
+    ledger = tmp_path / "ledger.jsonl"
+    out = hv.run("GEAR-V2-T", store, dbmf_dataset="dbmf_t", directory=regs, ledger=ledger)
+    assert set(out["pass_bar"]) == {"1_cagr_beats_spy", "2_cagr_at_least_12.5pct",
+                                    "3_max_drawdown_smaller_than_spy",
+                                    "4_sharpe_excess_tbill_above_spy", "5_slice_correlation_below_0_5"}
+    assert out["verdict"].startswith(("PASS", "FAIL"))
+    assert out["fund"]["from"] >= "2021-01-01" and out["fund"]["to"] <= "2026-10-15"
+    assert isinstance(out["information_only"]["A2_dbmf_safe_gear"], dict)
+    entry = json.loads(ledger.read_text().splitlines()[0])
+    assert "dbmf_t" in entry["data_manifests"]
+    with pytest.raises(RegistrationError):
+        hv.run("GEAR-V2-T", store, directory=regs, ledger=ledger)

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { OctagonX, Pause, Play, RefreshCw } from "lucide-react";
 import { api } from "@/hooks/use-trading-client";
-import { formatBotLabel, useBotIdentity } from "@/lib/bot-identity";
+import { botColor, formatBotLabel, useBotIdentity } from "@/lib/bot-identity";
 import { Shell, Status, bneTime } from "@/components/Shell";
 
 // Controls for the live platform. bots_state.paused is the only pause switch;
@@ -45,7 +45,7 @@ function BotRow({ row }: { row: PauseRow }) {
   return (
     <li className="control-row" data-testid={`row-bot-${row.bot_id}`}>
       <div className="grow">
-        <div className="card-title">{formatBotLabel(identity)}</div>
+        <div className="card-title"><span className="dot" style={{ background: botColor(row.bot_id), marginRight: 8, verticalAlign: "middle" }} aria-hidden="true" />{formatBotLabel(identity)}</div>
         <div className="label">{row.bot_id}</div>
         {row.pause_reason && row.paused !== false && (
           <div className="note">Reason: {row.pause_reason}{row.paused_at ? ` · since ${bneTime(row.paused_at)}` : ""}</div>

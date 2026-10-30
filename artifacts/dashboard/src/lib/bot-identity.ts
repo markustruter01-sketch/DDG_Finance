@@ -3,6 +3,18 @@
 import { useMemo } from "react";
 import { useBotRegistry, type BotRegistryEntry } from "@/hooks/use-portfolio";
 
+/** Each account's colour on every card and chart (brand colours, Markus 31 Oct).
+ *  Fixed per account, never by position in a list. Amber is never an account
+ *  colour: it only means a loss or a problem. */
+export const BOT_COLORS: Record<string, string> = {
+  oracle: "#6CC7F0",        // Atlas · Ice
+  spy_qqq_trend: "#A78BFA", // Momentum · Violet
+  bot2_spy_qqq: "#A78BFA",  // Momentum's older ledger name
+  jerome_macro: "#3DDC97",  // Bullion · Mint
+  forex_ai: "#FFFFFF",      // Forex · White
+};
+export const botColor = (id?: string | null) => (id && BOT_COLORS[id]) || "rgba(255,255,255,0.5)";
+
 export interface BotIdentity {
   canonicalId: string;
   displayName: string;

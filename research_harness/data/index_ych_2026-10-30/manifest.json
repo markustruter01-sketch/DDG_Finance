@@ -1,0 +1,27 @@
+{
+  "dataset": "index_ych_2026-10-30",
+  "fetched_at": "2026-10-30T01:03:50.796428+00:00",
+  "fields": [
+    "day",
+    "open",
+    "high",
+    "low",
+    "close"
+  ],
+  "notes": "Dividend/split-adjusted OHLC (total-return proxy). The vendor revises adjusted history, so a later pull can differ; the manifest hash pins this one.",
+  "source": "Yahoo chart API v8, adjusted by adjclose/close (as yfinance auto_adjust=True) 1985-01-01..2020-12-31",
+  "symbols": {
+    "^GSPC": {
+      "first": "1985-01-02",
+      "last": "2020-12-31",
+      "rows": 9075,
+      "sha256": "2de700c9985e776c4b49eafbec0c1e85d287e27e206f144b2cf3f9e019236d81"
+    },
+    "^NDX": {
+      "first": "1985-10-01",
+      "last": "2020-12-31",
+      "rows": 8887,
+      "sha256": "ab01a2a097b24eef8dc176206914c17353a6ec4d2601da11270216b6c5ad8505"
+    }
+  }
+}

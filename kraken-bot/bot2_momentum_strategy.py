@@ -450,13 +450,19 @@ class AlpacaMomentumClient:
     def positions(self) -> list[dict[str, Any]]:
         result = []
         for position in self._request("GET", "/v2/positions") or []:
-            result.append({
+            row = {
                 "symbol": canonical_symbol(position["symbol"]),
                 "qty": float(position["qty"]),
                 "entry_price": float(position["avg_entry_price"]),
                 "current_price": float(position["current_price"]),
                 "market_value": float(position["market_value"]),
-            })
+            }
+            # _prepare_symbol_for_sell refuses to sell without this field; it was
+            # dropped here, so every confirmed sell failed after its stop was
+            # cancelled (30 Oct 2026). Absent at the broker = still refused.
+            if position.get("qty_available") is not None:
+                row["qty_available"] = float(position["qty_available"])
+            result.append(row)
         return result
 
     def assets(self) -> list[dict[str, Any]]:
@@ -2128,16 +2134,20 @@ def _sell_sgov_to_fund_buys(
 
 
 HANDOVER_EXIT_REASON = "gear_v2_a2_handover"
+HANDOVER_PAUSE_SECONDS = 2.0   # between sells: stays well under Alpaca's request limit
 
 
 def _run_gear_handover(profile: dict[str, Any]) -> dict[str, Any]:
     """GEAR_SLEEVE_LIVE: G4 with DBMF in the safe gear owns this account
     (GEAR-V2 engine A2, forward test, not registered; Markus, 30 Oct 2026).
 
-    Momentum's own book is sold first, through its tested sell path (lifts
-    each stock's stop, sells, closes its ledger row). G4 starts only when no
-    Momentum row is left open; until then nothing is bought. Vault (BIL/VOO)
-    and parked SGOV are never part of the handover."""
+    Momentum's book is sold first, one stock at a time, through the ETF
+    engine's full-close path (the one Atlas's G4 used live): cancel that
+    stock's stop, sell, confirm flat, then close its Momentum ledger row. At
+    the first sell that does not complete, the handover stops for this cycle
+    (no other stop is touched) and that stock's stop is re-armed at once.
+    G4 starts only when no Momentum row is left open; until then nothing is
+    bought. Vault (BIL/VOO) and parked SGOV are never part of the handover."""
     from alpaca_etf_engine import AlpacaEtfEngine
     from core.degradation_tracker import record_degradation
     from core.kill_switch import latch_tripped
@@ -2156,18 +2166,30 @@ def _run_gear_handover(profile: dict[str, Any]) -> dict[str, Any]:
         if not engine.is_market_open():
             return {"status": "market closed", "momentum_rows_open": len(rows)}
         client = AlpacaMomentumClient(key, secret, base_url)
-        rows = _reconcile_protective_stops(client, rows)
-        failed = [
-            canonical_symbol(row["symbol"])
-            for row in rows
-            if not _sell_confirmed(client, row, HANDOVER_EXIT_REASON)
-        ]
-        if failed:
-            msg = f"GEAR-V2-A2 handover: Momentum sells not confirmed for {failed}; nothing bought, retry next cycle"
-            logger.critical("Bot 2 | %s", msg)
-            record_degradation(component=BOT_ID, severity="error", error_type=HANDOVER_EXIT_REASON,
-                               message=msg[:500], bot_id=BOT_ID)
-            return {"status": "handover incomplete", "failed": failed}
+        # Records stop fills and re-arms any missing stop before anything is sold.
+        _reconcile_protective_stops(client, rows)
+        rows = load_open_positions()          # fresh: stop ids may have just changed
+        for row in rows:
+            symbol = canonical_symbol(row["symbol"])
+            stop = _owned_stop(client, symbol, row.get("stop_order_id"))
+            live = next((p for p in engine.get_positions()
+                         if canonical_symbol(p["symbol"]) == symbol), None)
+            pnl = live.get("unrealised_pnl_usd") if live else None
+            if not engine.close_position(symbol, bot_id=BOT_ID,
+                                         stop_order_id=str(stop["id"]) if stop else None):
+                rearm = "stop re-armed"
+                try:
+                    _reconcile_protective_stops(client, [row])
+                except Exception as exc:   # reported; next cycle's reconciliation retries
+                    rearm = f"stop re-arm FAILED ({type(exc).__name__}: {exc})"
+                msg = (f"GEAR-V2-A2 handover: {symbol} sell not confirmed; {rearm}; "
+                       "handover stopped for this cycle, nothing bought")
+                logger.critical("Bot 2 | %s", msg)
+                record_degradation(component=BOT_ID, severity="critical" if "FAILED" in rearm else "error",
+                                   error_type=HANDOVER_EXIT_REASON, message=msg[:500], bot_id=BOT_ID)
+                return {"status": "handover incomplete", "failed": [symbol]}
+            record_close(symbol, HANDOVER_EXIT_REASON, pnl)
+            time.sleep(HANDOVER_PAUSE_SECONDS)
         logger.info("Bot 2 | GEAR-V2-A2 handover: Momentum book sold (%s rows)", len(rows))
     result = run_gear_account(engine, bot_id=BOT_ID, variant=G4_DBMF, label="GearDBMF",
                               live_positions=engine.get_positions())

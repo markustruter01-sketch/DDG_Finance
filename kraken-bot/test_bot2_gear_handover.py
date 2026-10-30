@@ -27,6 +27,8 @@ ROWS = [{"symbol": "AMD", "qty": 2, "entry_price": 500.0, "stop_order_id": "st-a
 
 class _Engine:
     market_open = True
+    fail: set[str] = set()
+    closes: list = []
 
     def __init__(self, **_kw):
         pass
@@ -35,13 +37,22 @@ class _Engine:
         return self.market_open
 
     def get_positions(self):
-        return [{"symbol": "SGOV", "qty": 434}]
+        return [{"symbol": "SGOV", "qty": 434},
+                {"symbol": "AMD", "qty": 2, "unrealised_pnl_usd": 26.0},
+                {"symbol": "SPY", "qty": 27, "unrealised_pnl_usd": 2950.0}]
+
+    def close_position(self, symbol, *, bot_id=None, stop_order_id=None, stop_price=None):
+        _Engine.closes.append((symbol, bot_id, stop_order_id, stop_price))
+        return symbol not in _Engine.fail
 
 
 @pytest.fixture
 def wired(monkeypatch):
-    seen = {"sold": [], "gear": [], "alerts": [], "clients": 0}
+    seen = {"sold": [], "gear": [], "alerts": [], "clients": 0, "rearmed": []}
     _Engine.market_open = True
+    _Engine.fail = set()
+    _Engine.closes = []
+    seen["closes"] = _Engine.closes
     monkeypatch.setattr(alpaca_etf_engine, "AlpacaEtfEngine", _Engine)
     monkeypatch.setattr(kill_switch, "latch_tripped", lambda: False)
     monkeypatch.setattr(degradation_tracker, "record_degradation",
@@ -50,14 +61,18 @@ def wired(monkeypatch):
                         lambda engine, **kw: seen["gear"].append(kw) or {"status": "rebalanced to safe"})
     monkeypatch.setattr(bot2, "ensure_schema", lambda: None)
     monkeypatch.setattr(bot2, "load_open_positions", lambda: [dict(r) for r in ROWS])
-    monkeypatch.setattr(bot2, "_reconcile_protective_stops", lambda client, rows: rows)
+    monkeypatch.setattr(bot2, "_reconcile_protective_stops",
+                        lambda client, rows: seen["rearmed"].append([r["symbol"] for r in rows]) or rows)
+    monkeypatch.setattr(bot2, "_owned_stop", lambda client, symbol, recorded: {"id": f"live-{symbol}"})
+    monkeypatch.setattr(bot2, "record_close", lambda symbol, reason, pnl: seen["sold"].append((symbol, reason, pnl)))
+    monkeypatch.setattr(bot2, "HANDOVER_PAUSE_SECONDS", 0.0)
 
     class _Client:
         def __init__(self, *_a):
             seen["clients"] += 1
     monkeypatch.setattr(bot2, "AlpacaMomentumClient", _Client)
     monkeypatch.setattr(bot2, "_sell_confirmed",
-                        lambda client, row, reason: seen["sold"].append((row["symbol"], reason)) or True)
+                        lambda *a: pytest.fail("the handover must not use Momentum's own sell path"))
     return seen
 
 
@@ -71,7 +86,11 @@ def test_switch_off_keeps_momentums_own_cycle(monkeypatch):
 
 def test_handover_sells_the_whole_momentum_book_then_starts_g4_dbmf(wired):
     out = bot2.run_bot2_cycle(PROFILE)
-    assert wired["sold"] == [("AMD", "gear_v2_a2_handover"), ("SPY", "gear_v2_a2_handover")]
+    # one stock at a time through the engine's full close, with that stock's live stop id
+    assert wired["closes"] == [("AMD", "spy_qqq_trend", "live-AMD", None),
+                               ("SPY", "spy_qqq_trend", "live-SPY", None)]
+    assert wired["sold"] == [("AMD", "gear_v2_a2_handover", 26.0), ("SPY", "gear_v2_a2_handover", 2950.0)]
+    assert wired["rearmed"] == [["AMD", "SPY"]]          # stops checked once, before any sale
     assert len(wired["gear"]) == 1
     call = wired["gear"][0]
     assert call["variant"] is G4_DBMF and call["variant"] is not G4
@@ -80,15 +99,45 @@ def test_handover_sells_the_whole_momentum_book_then_starts_g4_dbmf(wired):
     assert wired["alerts"] == []
 
 
-def test_a_failed_sell_buys_nothing_and_alerts(wired, monkeypatch):
-    monkeypatch.setattr(bot2, "_sell_confirmed",
-                        lambda client, row, reason: wired["sold"].append(row["symbol"]) or row["symbol"] != "AMD")
+def test_the_first_failed_sell_stops_the_handover_and_re_arms_that_stop(wired):
+    """30 Oct 2026: every sell failed after its stop was cancelled and the loop
+    went on to cancel the next stop, leaving 18 holdings unprotected."""
+    _Engine.fail = {"AMD"}
     out = bot2.run_bot2_cycle(PROFILE)
     assert out == {"status": "handover incomplete", "failed": ["AMD"]}
-    assert wired["sold"] == ["AMD", "SPY"]                 # every row is tried
-    assert wired["gear"] == []                              # nothing bought
+    assert [c[0] for c in wired["closes"]] == ["AMD"]       # SPY's stop is never touched
+    assert wired["rearmed"] == [["AMD", "SPY"], ["AMD"]]    # AMD's stop re-armed at once
+    assert wired["sold"] == [] and wired["gear"] == []      # nothing recorded, nothing bought
     assert wired["alerts"][0]["error_type"] == "gear_v2_a2_handover"
-    assert wired["alerts"][0]["bot_id"] == "spy_qqq_trend"
+    assert wired["alerts"][0]["severity"] == "error" and "stop re-armed" in wired["alerts"][0]["message"]
+
+
+def test_a_failed_re_arm_is_reported_as_critical(wired, monkeypatch):
+    _Engine.fail = {"AMD"}
+    calls = []
+
+    def reconcile(client, rows):
+        calls.append(len(rows))
+        if len(calls) > 1:
+            raise RuntimeError("stop rejected")
+        return rows
+    monkeypatch.setattr(bot2, "_reconcile_protective_stops", reconcile)
+    out = bot2.run_bot2_cycle(PROFILE)
+    assert out["status"] == "handover incomplete"
+    assert wired["alerts"][0]["severity"] == "critical" and "FAILED" in wired["alerts"][0]["message"]
+
+
+def test_momentum_position_read_keeps_qty_available():
+    client = bot2.AlpacaMomentumClient("k", "s")
+    client._request = lambda method, path, **kw: [
+        {"symbol": "AMD", "qty": "2", "qty_available": "2", "avg_entry_price": "500",
+         "current_price": "513", "market_value": "1026"},
+        {"symbol": "SPY", "qty": "27", "avg_entry_price": "650", "current_price": "759",
+         "market_value": "20500"},
+    ]
+    amd, spy = client.positions()
+    assert amd["qty_available"] == 2.0
+    assert "qty_available" not in spy                       # absent at the broker: still refused
 
 
 def test_no_sells_while_market_closed_or_kill_switch_tripped(wired, monkeypatch):
@@ -97,13 +146,13 @@ def test_no_sells_while_market_closed_or_kill_switch_tripped(wired, monkeypatch)
     _Engine.market_open = True
     monkeypatch.setattr(kill_switch, "latch_tripped", lambda: True)
     assert bot2.run_bot2_cycle(PROFILE)["status"] == "kill switch tripped: no trading"
-    assert wired["sold"] == [] and wired["gear"] == [] and wired["clients"] == 0
+    assert wired["closes"] == [] and wired["gear"] == [] and wired["clients"] == 0
 
 
 def test_after_the_handover_g4_dbmf_runs_alone(wired, monkeypatch):
     monkeypatch.setattr(bot2, "load_open_positions", lambda: [])
     bot2.run_bot2_cycle(PROFILE)
-    assert wired["sold"] == [] and wired["clients"] == 0
+    assert wired["closes"] == [] and wired["clients"] == 0
     assert len(wired["gear"]) == 1 and wired["gear"][0]["variant"] is G4_DBMF
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 import re
 from datetime import date, datetime, timezone
@@ -342,7 +343,6 @@ def fetch_live_catalog(connection_factory: Callable[[], Any]) -> dict[str, Any]:
 
 def load_snapshot(path: str) -> dict[str, Any]:
     """Load and validate the committed snapshot before it is served."""
-    import json
 
     with open(path, encoding="utf-8") as handle:
         snapshot = json.load(handle)
@@ -367,3 +367,80 @@ def load_snapshot(path: str) -> dict[str, Any]:
         "exploration_runs": len(snapshot["exploration_runs"]),
     }
     return mark_counted(snapshot)
+
+# ── Research harness ledger (registered tests since 15 Oct 2026) ───────────────
+# research_harness/ledger.jsonl is the append-only record of every registered
+# replication and held-out test. Served as Bench experiments next to the older
+# Helium records, so the Bench shows the current research record.
+_HARNESS_FAMILY = {
+    "FX-BT1": "forex-fx-bt1",
+    "TREND-V1-B": "fleet-trend-v1",
+    "GEAR-V1-G4": "atlas-gear-v1-g4",
+    "GEAR-V2-A0B1": "atlas-gear-v2",
+}
+_HARNESS_HYPOTHESIS = {
+    "FX-BT1": "Rebuild the original Forex backtest in the research harness and check it gives the same numbers.",
+    "TREND-V1-B": "A long-only ETF trend sleeve beats T-bills after costs on the held-out years.",
+    "GEAR-V1-G4": "Gearbox G4 beats the S&P 500 with a worst fall no bigger than the S&P 500's on the held-out years.",
+    "GEAR-V2-A0B1": "G4 plus an always-on long/short trend slice beats the S&P 500 on the held-out years.",
+}
+
+
+def _harness_outcome(kind: str, result: dict[str, Any]) -> str:
+    if kind == "replication":
+        return "REPRODUCED" if result.get("reproduced") else "NOT REPRODUCED"
+    verdict = str(result.get("verdict", "")).upper()
+    if verdict.startswith("FAIL"):
+        return "FAIL"
+    if verdict.startswith("PASS"):
+        return "PASS"
+    return "PENDING"
+
+
+def harness_experiments(ledger_path: str) -> list[dict[str, Any]]:
+    """One Bench experiment row per research-harness ledger line (newest last)."""
+    rows: list[dict[str, Any]] = []
+    with open(ledger_path, "r", encoding="utf-8") as handle:
+        for line in handle:
+            if not line.strip():
+                continue
+            entry = json.loads(line)
+            result = entry.get("result") or {}
+            reg = str(entry["registration_id"])
+            metrics = result.get("fund") or result.get("summary") or {}
+            sharpe = metrics.get("sharpe_excess_tbill", metrics.get("sharpe_daily_rf0"))
+            rows.append({
+                "id": reg,
+                "family": _HARNESS_FAMILY.get(reg, reg.lower()),
+                "hypothesis": _HARNESS_HYPOTHESIS.get(reg, f"Registered test {reg}."),
+                "parameters_summary": _safe_text(
+                    result.get("configuration") or result.get("candidate") or entry.get("kind", "")
+                ),
+                "pass_bar": result.get("pass_bar") or {},
+                "data_window": {"from": metrics.get("from"), "to": metrics.get("to")},
+                "metrics": {
+                    "sharpe": _number_or_none(sharpe),
+                    "return_pct": _number_or_none(metrics.get("total_return_pct")),
+                    "max_drawdown_pct": _number_or_none(metrics.get("max_drawdown_pct")),
+                },
+                "outcome": _harness_outcome(str(entry.get("kind", "")), result),
+                "created_at": _iso_utc(entry.get("ran_at")),
+                "source": "research_harness_ledger",
+            })
+    return rows
+
+
+def with_harness_ledger(catalog: dict[str, Any], ledger_path: str) -> dict[str, Any]:
+    """Append the harness ledger's registered tests to a served catalog."""
+    rows = harness_experiments(ledger_path)
+    for row in rows:
+        row["counted"] = True
+    catalog["experiments"] = [*catalog["experiments"], *rows]
+    catalog["row_counts"] = {
+        **catalog.get("row_counts", {}),
+        "experiments": len(catalog["experiments"]),
+    }
+    if rows:
+        catalog["harness_as_of"] = max(r["created_at"] or "" for r in rows) or None
+    catalog["source_label"] = f"{catalog.get('source_label', '')} + research harness ledger".strip(" +")
+    return catalog

@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field
 
 from core.equity_universe import eligible_asset_records, set_screen_data
 from db.research_postgres import get_research_conn as get_conn, research_dsn_host
-from research.strategy_bench_catalog import fetch_live_catalog, load_snapshot
+from research.strategy_bench_catalog import fetch_live_catalog, load_snapshot, with_harness_ledger
 from analysis.bot2_momentum_pead_v3 import ASSET_TABLE, PRICE_SOURCES, PRICE_TABLE
 from analysis.bot2_momentum_pead_v4 import (
     CONTROL_ITERATIONS,
@@ -55,6 +55,7 @@ router = APIRouter()
 SNAPSHOT_PATH = (
     Path(__file__).resolve().parents[1] / "data" / "strategy_bench_snapshot.json"
 )
+HARNESS_LEDGER_PATH = Path(__file__).resolve().parents[2] / "research_harness" / "ledger.jsonl"
 _ENGINE_LOCK = threading.RLock()
 _PANEL_CACHE: dict[date, tuple[list[dict[str, Any]], set[str], dict[str, Any]]] = {}
 _RANKING_CACHE: dict[
@@ -92,13 +93,22 @@ def _committed_snapshot() -> dict[str, Any]:
         ) from exc
 
 
+def _with_ledger(catalog: dict[str, Any]) -> dict[str, Any]:
+    try:
+        return with_harness_ledger(catalog, str(HARNESS_LEDGER_PATH))
+    except Exception as exc:
+        logger.error("research harness ledger unavailable ({})", type(exc).__name__)
+        catalog["source_detail"] = "The research harness ledger could not be read; older records only."
+        return catalog
+
+
 @router.get("/research/strategy-bench/catalog", tags=["Development Research"])
 async def get_strategy_bench_catalog() -> dict[str, Any]:
     if _runner_environment() not in {"dev", "development"}:
-        return _committed_snapshot()
+        return _with_ledger(_committed_snapshot())
 
     try:
-        return await asyncio.to_thread(fetch_live_catalog, get_conn)
+        return _with_ledger(await asyncio.to_thread(fetch_live_catalog, get_conn))
     except Exception as exc:
         logger.warning(
             "Strategy Bench research read unavailable; serving committed snapshot ({})",
@@ -109,7 +119,7 @@ async def get_strategy_bench_catalog() -> dict[str, Any]:
             "The research database is unavailable in this workspace; "
             "showing the committed snapshot."
         )
-        return snapshot
+        return _with_ledger(snapshot)
 
 
 def _json(value: Any) -> str:

@@ -179,3 +179,25 @@ a holding with no bar for 10 sessions is closed at its last close with exit
 call). FLEET-V1 is unaffected: its instruments are built on the S&P
 calendar and never miss a bar (verified on its data before run 2).
 Run 2 is the exploration run of record. Nothing else changes.
+
+## Verdict — exploration run 2 (Fable 5.1, 2 Nov 2026 ~19:00 Brisbane): FAILED
+Run of record (exploration_log.jsonl, code 362ffbc), 2019-02-01..2024-12-31,
+after costs, whole shares:
+| | CAGR | Sharpe | max DD | avg gross |
+|---|---|---|---|---|
+| B (S&P 500) | 15.8% | 0.72 | −33.7% | 1.00 |
+| M1 | 2.8% | 0.16 | −74.1% | 0.62 |
+| M2 | 11.0% | 0.44 | −53.2% | 0.73 |
+| X18 (no dial) | 9.9% | 0.38 | −78.7% | 0.85 |
+| F1 (own code) | 12.7% | 0.86 | −16.2% | 0.74 |
+| R null (500 draws) 95th pct Sharpe | | 0.36 | | |
+No candidate met (a) or (b); M1 was below the random-20 null and below X18.
+Nothing is registered; no variant is tried on this data.
+
+Reading: the S&P-based dial cannot see a momentum crash inside a healthy
+index (2021-22: S&P trending, speculative momentum names −70-80%), and
+"500 most traded by dollar volume" in this panel selects high-beta small
+caps at tops. M2's better figures come from holding fewer stocks (half the
+book in SSO at 1.5x), not from gearing. Any stock-momentum follow-up needs a
+book-level drawdown control and a large-cap universe, and is a new plan
+(trial count then N = 10).

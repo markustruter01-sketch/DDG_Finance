@@ -28,6 +28,13 @@ from typing import Mapping
 HOLDOUT_START = date(2021, 1, 1)
 EXPLORE_END = HOLDOUT_START - timedelta(days=1)
 
+# Plans whose committed plan file declares an exploration window that runs past
+# the legacy lock (their own held-out rows live in a dataset's locked part).
+# Each entry must cite its plan; a test checks the plan file states the date.
+DECLARED_EXPLORATION_END = {
+    "MOMO-V1": date(2024, 12, 31),     # research_harness/explore/MOMO-V1-PLAN.md, "Windows"
+}
+
 
 class HoldoutViolation(RuntimeError):
     """A read touched a held-out period without permission."""
@@ -84,14 +91,25 @@ def check_locked_read(grant: ReadGrant | None, dataset: str, symbol: str, end: d
             f"{g.end.isoformat()}")
 
 
-def check_window(end: date, registration_id: str | None, grant: ReadGrant | None = None) -> None:
+def check_window(end: date, registration_id: str | None, grant: ReadGrant | None = None,
+                 plan: str | None = None) -> None:
     """Legacy date lock: refuse any window reaching HOLDOUT_START unless registered.
 
-    A valid grant whose window covers ``end`` also passes. Otherwise the id
-    must name a committed, well-formed registration file — any string is not
-    enough, or the lock could be bypassed by typing a made-up id.
+    A valid grant whose window covers ``end`` also passes, and so does an
+    exploration read for a plan in DECLARED_EXPLORATION_END that ends on or
+    before that plan's declared exploration end. Otherwise the id must name a
+    committed, well-formed registration file — any string is not enough, or
+    the lock could be bypassed by typing a made-up id.
     """
     if end < HOLDOUT_START:
+        return
+    if plan is not None:
+        declared = DECLARED_EXPLORATION_END.get(plan)
+        if declared is None:
+            raise HoldoutViolation(f"plan {plan!r} declares no exploration window past {EXPLORE_END}")
+        if end > declared:
+            raise HoldoutViolation(
+                f"window ends {end.isoformat()}, after {plan}'s declared exploration end {declared.isoformat()}")
         return
     if grant is not None:
         g = _check_grant(grant)

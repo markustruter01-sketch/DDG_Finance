@@ -292,9 +292,104 @@ def fetch_shiller(store: BarStore, dataset: str, start: str, end: str, **lock) -
     )
 
 
+PANEL_FIELDS = ("day", "open", "high", "low", "close", "volume")
+
+
+def panel_symbols_to_keep(bars_by_symbol: dict[str, list[dict]], start: date, end: date) -> set[str]:
+    """Every stock that is in MOMO-V1's universe (sleeves/momo_v1.universe_on)
+    at any month's first session in [start, end]. Pruning to this set leaves
+    every monthly universe exactly as it is on the full panel (a stock that is
+    never in the top 500 can never be ranked or held), and keeps the dataset
+    small. Uses only price, volume and history length, never returns."""
+    from research_harness.sleeves import momo_v1 as mv
+
+    panel = mv.Panel(bars_by_symbol)
+    calendar = sorted({b["day"] for bs in panel.bars.values() for b in bs})
+    keep: set[str] = set()
+    for d in mv.month_first_sessions(calendar, start, end):
+        keep.update(mv.universe_on(panel, d))
+    return keep
+
+
+def split_panel(bars_by_symbol: dict[str, list[dict]], keep: set[str],
+                locked_from: date) -> tuple[dict[str, list[dict]], dict[str, list[dict]]]:
+    """(open rows before locked_from, locked rows from it) for every kept stock.
+    A stock with no row before locked_from still gets an empty open file, so
+    its locked rows can be read with a grant."""
+    open_part = {s: [b for b in bars_by_symbol[s] if b["day"] < locked_from] for s in sorted(keep)}
+    locked_part = {s: [b for b in bars_by_symbol[s] if b["day"] >= locked_from] for s in sorted(keep)}
+    return open_part, {s: b for s, b in locked_part.items() if b}
+
+
+DELISTED_CHOICES = ("include", "exclude")
+
+
+def momo_candidates(records: list[dict], delisted: str) -> set[str]:
+    """Stocks to read bars for. The research asset table describes TODAY:
+    a stock delisted since 2018 is inactive and untradable now, so the
+    platform's static gates (experiments 18-19) drop it, which biases a
+    2018-2026 backtest toward survivors. ``delisted="include"`` applies
+    every other gate (US ordinary equity, name and symbol structure) but not
+    the gates that only describe today's listing (status, tradable, exchange).
+    No default: the choice is the plan owner's and is written in the manifest."""
+    from core.equity_universe import eligible_asset_records
+
+    if delisted not in DELISTED_CHOICES:
+        raise ValueError(f"delisted must be one of {DELISTED_CHOICES}")
+    if delisted == "include":
+        records = [{**r, "status": "active", "tradable": True, "exchange": "NYSE"} for r in records]
+    eligible, _ = eligible_asset_records(records)
+    return {str(r["symbol"]).upper() for r in eligible}
+
+
+def fetch_momo_panel(store: BarStore, dataset: str, start: str, end: str, locked_from: str,
+                     universe_from: str, delisted: str) -> dict:
+    """MOMO-V1's stock panel from the research database's rank-500 panel
+    (the tables and price sources of experiments 18-19), written as an open
+    part (before locked_from) and a locked part in one go, with the same
+    stock set. Runs where the research database is (the DDG - Finance Replit)."""
+    import sys
+
+    tp = Path(__file__).resolve().parents[1] / "trading-platform"
+    if str(tp) not in sys.path:
+        sys.path.insert(0, str(tp))
+    from analysis.bot2_momentum_pead_v3 import load_stored_assets
+    from analysis.bot2_momentum_rank500_backtest import _load_compact_panel
+
+    first, last, lf = date.fromisoformat(start), date.fromisoformat(end), date.fromisoformat(locked_from)
+    records = [{"symbol": a.symbol, "asset_class": a.asset_class, "status": a.status,
+                "exchange": a.exchange, "tradable": a.tradable, "name": a.name}
+               for a in load_stored_assets()]
+    candidates = momo_candidates(records, delisted)
+    inactive = sum(1 for r in records if str(r["status"]).lower() != "active")
+    raw = _load_compact_panel(candidates, last)
+    bars: dict[str, list[dict]] = {}
+    for sym, series in raw.items():
+        rows = []
+        for b in series.bars:
+            if first <= b.day <= last and b.close > 0 and b.open > 0 and b.high > 0 and b.low > 0:
+                rows.append({"day": b.day, "open": float(b.open), "high": float(b.high),
+                             "low": float(b.low), "close": float(b.close), "volume": float(b.volume)})
+        if rows:
+            bars[sym] = rows
+    keep = panel_symbols_to_keep(bars, date.fromisoformat(universe_from), last)
+    if not keep:
+        raise RuntimeError("MOMO panel: no stock ever qualifies for the universe")
+    open_part, locked_part = split_panel(bars, keep, lf)
+    note = (f"rank-500 research panel; delisted={delisted} ({inactive} of {len(records)} stored assets "
+            f"are inactive today); {len(candidates)} candidates; {len(bars)} with bars; {len(keep)} ever in "
+            f"the top-500 universe {universe_from}..{end}. Prices as stored (alpaca_sip_adjusted preferred).")
+    store.write_dataset(dataset, source=f"research panel {start}..{locked_from} (open)",
+                        bars_by_symbol=open_part, fields=PANEL_FIELDS,
+                        positive_fields=("open", "high", "low", "close"), notes=note, locked_from=lf)
+    return store.write_dataset(dataset, source=f"research panel {locked_from}..{end} (locked)",
+                               bars_by_symbol=locked_part, fields=PANEL_FIELDS,
+                               positive_fields=("open", "high", "low", "close"), notes=note, locked=True)
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("kind", choices=("fx", "etf", "tbill", "coinbase", "yahoo", "fred", "shiller"))
+    ap.add_argument("kind", choices=("fx", "etf", "tbill", "coinbase", "yahoo", "fred", "shiller", "momo_panel"))
     ap.add_argument("--dataset", required=True)
     ap.add_argument("--to")
     ap.add_argument("--symbols")
@@ -303,6 +398,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--end")
     ap.add_argument("--locked-from", help="open part: every row must end before this date")
     ap.add_argument("--locked", action="store_true", help="write the locked part of an open dataset")
+    ap.add_argument("--universe-from", help="momo_panel: first month whose universe decides the stock set")
+    ap.add_argument("--delisted", choices=DELISTED_CHOICES,
+                    help="momo_panel (required): include or exclude stocks inactive today")
     a = ap.parse_args(argv)
     store = BarStore()
     lock = {"locked": True} if a.locked else (
@@ -317,6 +415,12 @@ def main(argv: list[str] | None = None) -> int:
         m = fetch_fred(store, a.dataset, a.series.split(","), a.start, a.end, **lock)
     elif a.kind == "shiller":
         m = fetch_shiller(store, a.dataset, a.start, a.end, **lock)
+    elif a.kind == "momo_panel":
+        if not a.delisted:
+            ap.error("momo_panel needs --delisted include|exclude (the plan owner's choice)")
+        m = fetch_momo_panel(store, a.dataset, a.start, a.end, a.locked_from, a.universe_from, a.delisted)
+        print(f"open part manifest hash: {store.manifest_hash(a.dataset)}")
+        a.locked = True
     elif a.kind == "coinbase":
         m = fetch_coinbase(store, a.dataset, a.symbols.split(","), a.start, a.end)
     else:

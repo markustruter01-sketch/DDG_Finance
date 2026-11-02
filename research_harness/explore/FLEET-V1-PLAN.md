@@ -242,3 +242,42 @@ against B.
 8. **Opus, in parallel from step 2:** platform cleanup per the audit (arm the
    kill switch, enforce limits, delete `POST /run` and the forex council,
    remove dead code). Never touches research_harness.
+
+## Amendment 1 — facts found while building steps 2-4 (Opus 5.5, 2 Nov 2026; no data read)
+Factual only; nothing below changes a rule. Items marked **Fable** are open
+decisions for step 5.
+- **Stooq is unusable**: every request returns a JavaScript proof-of-work page.
+  The declared fallback (Yahoo chart v8) is used for every price series:
+  `^GSPC`, `^NDX`, `^SPGSCI`, `DX-Y.NYB` and the ETFs.
+- **Gold before GLD (Fable)**: FRED has withdrawn `GOLDAMGBD228NLBM` /
+  `GOLDPMGBD228NLBM` (HTTP 404), so neither declared gold source exists.
+  Yahoo `GC=F` (front-month futures) starts 2000-08 and is pulled. Options:
+  (i) rebuild gold from `GC=F` from 2000, gold line off before it has 253
+  sessions; (ii) gold line off until GLD (2004-11). The code runs (ii) unless
+  a gold series is passed to `recon.reconstruct.build(gold=...)`.
+- **Commodities and dollar (Fable)**: `^SPGSCI` and `DX-Y.NYB` are plain
+  index levels with no T-bill collateral yield (DBC and UUP earn it).
+  Calibration reports both "plain" and "plus T-bill"; until one is chosen the
+  runner takes the larger haircut of the two.
+- **Rolling windows (Fable)**: "every 10-year window starting 1987 to 2011
+  (25 windows)" runs into the held-out period. Only the 15 windows ending by
+  2010-12-31 (starts 1987-2001) are used and reported as 15 of 25.
+- **Judgment calls in code (Fable to confirm)**:
+  - cash rate DTB3 - 0.50% is floored at 0;
+  - the 1% cash buffer applies only when E > 1, as written;
+  - a haircut is applied only when the rebuilt series fell less than the real
+    ETF; a candidate takes the largest haircut among its instruments that are
+    rebuilt for part of the window;
+  - fractional shares throughout (the simulator has one switch; the plan says
+    whole shares in the real-ETF era);
+  - A0 uses FLEET-V1's costs and cash rate so it is like-for-like;
+  - N1 is rebalanced monthly with no stops;
+  - Shiller's monthly dividend is used for the month it is labelled with
+    (Shiller interpolates recent dividends: a small look-ahead in the TR
+    series, the same for every candidate and benchmark).
+- **File locations**: reconstruction and calibration live in
+  `research_harness/recon/` (not `research_harness/data/`, which is the
+  dataset store). `fetch.py` gained `fred` and `shiller` commands and
+  `--locked-from` / `--locked`.
+- **Lock (step 2)**: the plan named `registry.begin_run`; the function is
+  `registry.begin_locked_run`, which issues the single-use read grant.

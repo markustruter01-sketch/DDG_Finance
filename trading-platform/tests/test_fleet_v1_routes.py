@@ -61,8 +61,9 @@ def test_clear_halt_needs_the_owner_token(monkeypatch):
 
 
 def test_clear_halt_refuses_an_account_that_is_not_halted(monkeypatch):
+    from core import bot_state
     monkeypatch.setenv(fleet_v1.CLEAR_CONFIRMATION_ENV_VAR, "right")
-    monkeypatch.setattr(fleet_v1, "_read_state", lambda bot_id: {"drawdown": {"mode": "normal"}})
+    monkeypatch.setattr(bot_state, "read_metadata", lambda bot_id: {"fleet_v1_f1": {"drawdown": {"mode": "normal"}}})
     req = fleet_v1.ClearHaltRequest(confirmation_token="right")
     with pytest.raises(HTTPException) as e:
         asyncio.run(fleet_v1.fleet_v1_clear_halt("oracle", req))
@@ -73,3 +74,18 @@ def test_only_fleet_accounts_are_served():
     with pytest.raises(HTTPException) as e:
         fleet_v1._variant("jerome_macro")
     assert e.value.status_code == 404
+
+
+def test_halt_clearing_covers_both_governed_accounts():
+    from sleeve_runtime.fleet_live import F1
+    from sleeve_runtime.momo_live import STATE_KEY
+    assert fleet_v1.HALT_STATE_KEYS == {"oracle": F1.state_key, "spy_qqq_trend": STATE_KEY}
+    req = fleet_v1.ClearHaltRequest(confirmation_token="x")
+    import os
+    os.environ[fleet_v1.CLEAR_CONFIRMATION_ENV_VAR] = "x"
+    try:
+        with pytest.raises(HTTPException) as e:
+            asyncio.run(fleet_v1.fleet_v1_clear_halt("jerome_macro", req))
+        assert e.value.status_code == 404
+    finally:
+        del os.environ[fleet_v1.CLEAR_CONFIRMATION_ENV_VAR]

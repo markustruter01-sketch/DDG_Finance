@@ -30,9 +30,8 @@ fleet_v1_router = APIRouter()
 REPO_ROOT = Path(__file__).resolve().parents[2]
 EXPLORATION_LOG = REPO_ROOT / "research_harness" / "exploration_log.jsonl"
 LEDGER = REPO_ROOT / "research_harness" / "ledger.jsonl"
-ACCOUNTS = {"oracle": "FLEET-V1-F1", "spy_qqq_trend": "FLEET-V1-C1"}
-ROLE = {"oracle": "The fleet (65% equity core + 35% cross-asset)",
-        "spy_qqq_trend": "Control: the equity core alone"}
+ACCOUNTS = {"oracle": "FLEET-V1-F1"}          # Momentum's account runs MOMO-V2 since 2 Nov (routes/momo_v2.py)
+ROLE = {"oracle": "The fleet (65% equity core + 35% cross-asset)"}
 CLEAR_CONFIRMATION_ENV_VAR = "KILL_SWITCH_RESET_CONFIRMATION"    # same owner token as a kill-switch reset
 PLAN_ID = "FLEET-V1"
 REGISTRATION = "FLEET-V1-F1"
@@ -205,6 +204,10 @@ async def fleet_v1_record() -> dict[str, Any]:
     return await asyncio.to_thread(read)
 
 
+# Every account whose runtime keeps a drawdown governor in bots_state.metadata.
+HALT_STATE_KEYS = {"oracle": "fleet_v1_f1", "spy_qqq_trend": "momo_v2"}
+
+
 class ClearHaltRequest(BaseModel):
     confirmation_token: str
     by: str = "owner"
@@ -220,21 +223,24 @@ async def fleet_v1_clear_halt(bot_id: str, request: ClearHaltRequest) -> dict[st
         raise HTTPException(status_code=403, detail="Halt-clear confirmation is not configured.")
     if not hmac.compare_digest(request.confirmation_token, expected):
         raise HTTPException(status_code=403, detail="Invalid confirmation.")
-    variant = _variant(bot_id)
+    state_key = HALT_STATE_KEYS.get(bot_id)
+    if state_key is None:
+        raise HTTPException(status_code=404, detail=f"{bot_id} has no drawdown governor")
 
     def clear() -> dict[str, Any]:
-        from core.bot_state import merge_metadata
+        from core.bot_state import merge_metadata, read_metadata
         from execution.reconciliation import _client_for
         from sleeve_runtime.fleet_live import clear_halt
 
-        st = _read_state(bot_id)
+        st = (read_metadata(bot_id) or {}).get(state_key, {}) or {}
         dd = st.get("drawdown") or {}
         if not dd.get("halted"):
             raise HTTPException(status_code=409, detail=f"{bot_id} is not halted.")
         equity = float(_client_for(bot_id).get_account().equity)
         st = {**st, "drawdown": clear_halt(dd, equity, by=request.by[:60])}
-        merge_metadata(bot_id, {variant.state_key: st})
-        logger.warning(f"FLEET-V1 | {bot_id} hard halt cleared by {request.by!r}; new high-water mark {equity:,.2f}")
-        return _account_view(bot_id)
+        merge_metadata(bot_id, {state_key: st})
+        logger.warning(f"Drawdown governor | {bot_id} hard halt cleared by {request.by!r}; "
+                       f"new high-water mark {equity:,.2f}")
+        return {"bot_id": bot_id, "drawdown": st["drawdown"]}
 
     return await asyncio.to_thread(clear)

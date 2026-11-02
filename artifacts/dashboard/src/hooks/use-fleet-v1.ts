@@ -100,6 +100,49 @@ export function useClearHalt(botId: string) {
   return useMutation({
     mutationFn: async (token: string) =>
       (await api.post(`/fleet-v1/${botId}/clear-halt`, { confirmation_token: token, by: "dashboard" })).data as FleetAccount,
-    onSettled: () => qc.invalidateQueries({ queryKey: FLEET_STATE_KEY }),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: FLEET_STATE_KEY });
+      qc.invalidateQueries({ queryKey: ["/momo-v2/state"] });
+    },
+  });
+}
+
+// ── MOMO-V2 (Momentum's account) ─────────────────────────────────────────────
+export interface MomoState {
+  bot_id: string;
+  registration: string;
+  role: string;
+  month: string | null;
+  selection_day: string | null;
+  universe_source: string | null;
+  names: string[];
+  targets: Record<string, number>;
+  held: "in" | "out" | null;
+  why: string | null;
+  trend_on: boolean | null;
+  invested_fraction: number | null;
+  book_index: number | null;
+  book_sma100: number | null;
+  book_vol20: number | null;
+  stopped: string[];
+  skipped_unaffordable: string[];
+  last_rebalance_key: string | null;
+  last_rebalance_at: string | null;
+  last_rebalance_done: boolean | null;
+  attempts: number | null;
+  errors: string[];
+  since_cutover: FleetAccount["since_cutover"];
+  drawdown: { mode: DrawdownMode; halted: boolean; drawdown: number | null; high_water_mark: number | null;
+              as_of: string | null; error: string | null };
+}
+
+export const MOMO_STATE_KEY = ["/momo-v2/state"];
+
+export function useMomoV2State() {
+  const interval = useVisibleInterval(60_000);
+  return useQuery({
+    queryKey: MOMO_STATE_KEY,
+    queryFn: async () => (await api.get("/momo-v2/state")).data as MomoState,
+    refetchInterval: interval,
   });
 }

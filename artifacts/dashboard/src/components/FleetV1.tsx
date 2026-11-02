@@ -2,7 +2,7 @@
  *  Night Glass v5 building blocks only; every value comes from the API. */
 import type { ReactNode } from "react";
 import { Status } from "@/components/Shell";
-import type { Figures, FleetAccount, FleetRecord, FleetState, DrawdownMode } from "@/hooks/use-fleet-v1";
+import type { Figures, FleetAccount, FleetRecord, FleetState, DrawdownMode, MomoState } from "@/hooks/use-fleet-v1";
 import { botColor } from "@/lib/bot-identity";
 
 const LINES = ["IEF", "GLD", "DBC", "UUP"] as const;
@@ -167,6 +167,56 @@ export function FleetRecordPanel({ record }: { record: FleetRecord }) {
           </div>
         </>
       )}
+    </section>
+  );
+}
+
+// ── MOMO-V2: Momentum's account ──────────────────────────────────────────────
+export function MomoPanel({ momo, limits }: { momo: MomoState; limits: FleetState["limits"] | null }) {
+  const sc = momo.since_cutover;
+  const weights = momo.names.map((n) => ({ name: n, w: momo.targets[n] ?? 0 }));
+  const invested = Object.values(momo.targets).reduce((a, b) => a + b, 0);
+  const brake = momo.held === "out" ? <Status tone="late" word="Brake on: all cash" />
+    : momo.trend_on === false ? <Status tone="late" word="Trend broken" /> : modeStatus(momo.drawdown.mode);
+  return (
+    <section className="glass panel fleet-account" aria-label={momo.registration}>
+      <div className="panel-head">
+        <h2><span className="dot" style={{ background: botColor(momo.bot_id), marginRight: 8, verticalAlign: "middle" }} aria-hidden="true" />
+          {momo.registration} <span className="note">experiment</span></h2>
+        {brake}
+      </div>
+      <div className="note">{momo.role}</div>
+      <div className="engine-stats">
+        <div className="stat"><span className="label">Book trend</span>
+          <span className="num-sm">{momo.trend_on == null ? "—" : momo.trend_on ? "Up" : "Down"}</span></div>
+        <div className="stat"><span className="label">Invested</span><span className="num-sm">{pct(invested, 0)}</span></div>
+        <div className="stat"><span className="label">Names held</span>
+          <span className="num-sm">{momo.names.length - momo.stopped.length} / {momo.names.length || 50}</span></div>
+      </div>
+      <div className="note">
+        Book index {num(momo.book_index, 1)} vs its 100-day average {num(momo.book_sma100, 1)} ·
+        volatility {pct(momo.book_vol20, 0)} · sized at {pct(momo.invested_fraction, 0)}
+      </div>
+      {limits && <DrawdownMeter dd={momo.drawdown.drawdown} soft={limits.soft} hard={limits.hard} />}
+      {sc && (
+        <div className="small tab">
+          Since {sc.from}: account <b>{pct(sc.account_return, 1, true)}</b> · SPY <b>{pct(sc.spy_price_return, 1, true)}</b>
+          <span className="note"> (SPY price only)</span>
+        </div>
+      )}
+      <ul className="list">
+        {weights.slice(0, 8).map(({ name, w }) => (
+          <Row key={name} label={name} value={momo.stopped.includes(name) ? "stopped" : pct(w)}
+            sub={momo.stopped.includes(name) ? "cash until next month" : "20% stop"} />
+        ))}
+        {weights.length > 8 && <Row label={`… ${weights.length - 8} more`} value="" />}
+      </ul>
+      <div className="note">
+        Picked {momo.selection_day ?? "—"} from the S&amp;P 500 ({momo.universe_source ?? "—"})
+        {momo.skipped_unaffordable.length > 0 && <> · skipped (price above a 2% slot): {momo.skipped_unaffordable.join(", ")}</>}
+        {momo.last_rebalance_done === false && <span className="loss"> · last rebalance incomplete ({momo.attempts} attempts)</span>}
+        {momo.errors.length > 0 && <span className="loss"> · {momo.errors[0]}</span>}
+      </div>
     </section>
   );
 }

@@ -4,7 +4,14 @@ import { OctagonX, Pause, Play, RefreshCw } from "lucide-react";
 import { api } from "@/hooks/use-trading-client";
 import { botColor, formatBotLabel, useBotIdentity } from "@/lib/bot-identity";
 import { Shell, Status, bneTime } from "@/components/Shell";
-import { useClearHalt, useFleetV1State, type FleetAccount } from "@/hooks/use-fleet-v1";
+import { useClearHalt, useFleetV1State, useMomoV2State } from "@/hooks/use-fleet-v1";
+
+type Governed = {
+  bot_id: string;
+  registration: string;
+  drawdown: { mode: string; halted: boolean; drawdown: number | null; high_water_mark: number | null;
+              as_of: string | null; cleared_by?: string | null; cleared_at?: string | null };
+};
 import { pct } from "@/components/FleetV1";
 
 // Controls for the live platform. bots_state.paused is the only pause switch;
@@ -118,7 +125,7 @@ function EmergencyStop({ tripped }: { tripped: boolean }) {
   );
 }
 
-function HaltRow({ account }: { account: FleetAccount }) {
+function HaltRow({ account }: { account: Governed }) {
   const [token, setToken] = useState("");
   const clear = useClearHalt(account.bot_id);
   const dd = account.drawdown;
@@ -155,6 +162,7 @@ function HaltRow({ account }: { account: FleetAccount }) {
 
 function DrawdownLimits() {
   const fleet = useFleetV1State();
+  const momo = useMomoV2State();
   if (fleet.isError) {
     return <section className="glass panel" role="alert"><Status tone="problem" word="FLEET-V1 state unreadable" /></section>;
   }
@@ -171,7 +179,10 @@ function DrawdownLimits() {
         {limits.enforced ? "Enforced" : "Record only"}: above {pct(limits.soft, 0)} {limits.soft_action}; above {pct(limits.hard, 0)} {limits.hard_action}.
         {!ks.armed && " The kill switch is disarmed by the KILL_SWITCH_ARMED secret; arming it is an owner action in Replit's secrets."}
       </p>
-      <ul className="list">{fleet.data.accounts.map((a) => <HaltRow key={a.bot_id} account={a} />)}</ul>
+      <ul className="list">
+        {fleet.data.accounts.map((a) => <HaltRow key={a.bot_id} account={a} />)}
+        {momo.data && <HaltRow key={momo.data.bot_id} account={momo.data} />}
+      </ul>
     </section>
   );
 }

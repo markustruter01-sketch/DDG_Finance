@@ -45,6 +45,7 @@ from core.runner_heartbeat import (
 from core.settling import safe_recent_fill_symbols
 from core.symbols import canonical_symbol, is_crypto_symbol
 from core.cash_park import is_cash_park
+from core.stop_policy import stop_exempt
 
 
 Status = Literal["PASS", "DRIFT", "FAIL", "UNKNOWN"]
@@ -331,6 +332,8 @@ def check_stop_coverage(inputs: InvariantInputs) -> dict[str, Any]:
             qty = _material_qty(position)
             symbol = canonical_symbol(position.get("symbol"))
             if qty < DUST_QTY or symbol in vault or is_cash_park(position.get("symbol")):
+                continue
+            if stop_exempt(bot_id, symbol):        # FLEET-V1 cross-asset line: stop-free by design
                 continue
             checked += 1
             position_side = str(position.get("side", "long")).lower()
@@ -1608,7 +1611,7 @@ def collect_inputs(now: datetime | None = None) -> InvariantInputs:
             from core.kill_switch import is_tripped
 
         inputs.kill_switch_runtime = bool(is_tripped())
-        raw_config = os.environ.get("KILL_SWITCH_ARMED", "false").strip().lower()
+        raw_config = os.environ.get("KILL_SWITCH_ARMED", "true").strip().lower()
         inputs.kill_switch_config = raw_config in {"1", "true", "yes", "on"}
     except Exception as exc:
         inputs.source_errors["kill_switch"] = str(exc)

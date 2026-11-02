@@ -476,6 +476,17 @@ def _run_gear_sleeve(engine, live_positions: list[dict]) -> None:
     logger.info(f"Asia | GEAR-V1-G4 live cycle | {result['status']}")
 
 
+def _run_fleet_sleeve(engine, live_positions: list[dict]) -> None:
+    """FLEET_SLEEVE_LIVE: FLEET-V1-F1 owns this account (Markus, 2 Nov 2026;
+    sleeve_runtime/FLEET-V1-LIVE-SPEC.md). Replaces G4 and the legacy logic."""
+    from fleet_account import run_fleet_account
+    from sleeve_runtime.fleet_live import F1
+
+    result = run_fleet_account(engine, bot_id=BOT_ID, variant=F1, label="FleetF1",
+                               live_positions=live_positions)
+    logger.info(f"Asia | FLEET-V1-F1 live cycle | {result['status']}")
+
+
 # ── Main cycle ─────────────────────────────────────────────────────────────────
 
 def run_asia_cycle(profile: dict, db_id: int) -> None:
@@ -520,6 +531,9 @@ def run_asia_cycle(profile: dict, db_id: int) -> None:
         f"Asia | Positions: {len(live_positions)} live, {len(db_positions)} in DB"
     )
 
+    if profile.get("FLEET_SLEEVE_LIVE", False):
+        _run_fleet_sleeve(engine, live_positions)
+        return
     if profile.get("GEAR_SLEEVE_LIVE", False):
         _run_gear_sleeve(engine, live_positions)
         return

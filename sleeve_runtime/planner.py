@@ -6,7 +6,9 @@ functions the backtest uses, so live trades match what was tested.
 
 Safety rules built into every plan:
 - Whole shares only; every held position ends with a protective stop for
-  its full quantity at stop_pct below the rebalance reference price.
+  its full quantity at stop_pct below the rebalance reference price, except
+  symbols the caller declares stop-free (``no_stop``: FLEET-V1 sleeve 2,
+  whose monthly trend call is the exit by design).
 - Sells come before buys; buys are scaled down (never up) to fit the cash
   that will be available, keeping a cash buffer.
 - A symbol with no usable price, or one the caller freezes (with a reason),
@@ -64,6 +66,7 @@ def plan_rebalance(
     cash_buffer_pct: float,
     max_gross: float = 1.0,
     frozen: dict[str, str] | None = None,
+    no_stop: frozenset[str] = frozenset(),
 ) -> RebalancePlan:
     if equity <= 0:
         raise ValueError("equity must be positive")
@@ -123,7 +126,7 @@ def plan_rebalance(
     plan.final_qty = {s: q for s, q in final.items() if q > 0}
 
     for sym, q in sorted(plan.final_qty.items()):
-        if sym in plan.skipped:
+        if sym in plan.skipped or sym in no_stop:
             continue
         level = round(stop_price(prices[sym], long=True, stop_pct=stop_pct), 2)
         unchanged = q == int(positions.get(sym, 0))

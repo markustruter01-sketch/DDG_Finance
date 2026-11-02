@@ -38,7 +38,7 @@ from apscheduler.triggers.date import DateTrigger
 from loguru import logger
 
 from config.settings import settings
-from core.pipeline import run_pipeline, run_postmortem
+from core.pipeline import run_postmortem
 from analysis.auditor import run_full_audit
 from core.market_clock import is_market_open, is_early_close_day, is_alpaca_maintenance_window
 from execution.broker import get_account
@@ -968,76 +968,6 @@ async def _oracle_residual_cleanup() -> None:
 
     except Exception as exc:
         logger.error(f"Scheduler | oracle_residual_cleanup: FAILED — {exc}")
-
-
-async def _intraday_cycle() -> None:
-    global _last_reset_date
-
-    logger.info("Scheduler | JOB STARTING: intraday_cycle")
-
-    # Stage 3B (2026-08-11): oracle stock-scanner retired — slot repurposed to
-    # Asia-Pacific ETF trend (asia_trend_strategy via kraken-bot/runner.py).
-    # Hard-stop this job so it cannot open new stock positions after publish.
-    # Belt-and-suspenders: also reads bots_state.paused from DB.
-    try:
-        from core.bot_state import is_paused as _is_bot_paused
-        if _is_bot_paused("oracle"):
-            logger.info("Scheduler | oracle paused in DB — intraday_cycle skipped (Stage 3B retirement)")
-            return
-    except Exception as _pause_chk_err:
-        logger.warning(f"Scheduler | oracle pause-check failed ({_pause_chk_err}) — continuing")
-    # Hard-exit: oracle stock pipeline is permanently retired as of Stage 3B publish.
-    logger.info("Scheduler | intraday_cycle DISABLED — oracle stock scanner retired (Stage 3B). ETF bots run via runner.py.")
-    return
-
-    if not is_market_open():
-        logger.info("Scheduler | Market closed — skipping intraday cycle")
-        return
-
-    if is_alpaca_maintenance_window():
-        logger.warning("Scheduler | Alpaca monthly maintenance window (2nd Saturday 09:00–11:00 ET) — skipping intraday cycle")
-        return
-
-    # ── Early-close guard ─────────────────────────────────────────────────
-    # NYSE early-close days (Black Friday, Christmas Eve, NYE) end at 1 PM ET.
-    # The CronTrigger fires at :01, :16, :31, :46 through hour 15, but we
-    # must stop at 13:00 on half-days.  is_market_open() (Alpaca clock) is
-    # authoritative; this guard is a belt-and-suspenders safety net.
-    from datetime import datetime
-    import pytz
-    et = pytz.timezone("America/New_York")
-    now_et = datetime.now(et)
-    if is_early_close_day() and now_et.hour >= 13:
-        logger.info(
-            f"Scheduler | Early-close day — market closed at 13:00 ET "
-            f"(now {now_et.strftime('%H:%M')} ET). Skipping cycle."
-        )
-        return
-
-    today = date.today()
-    if _last_reset_date != today:
-        try:
-            acct = get_account()
-            ks_reset(opening_equity=acct["equity"])
-            _last_reset_date = today
-            logger.info(f"Scheduler | First cycle of {today} — opening equity: ${acct['equity']:,.2f}")
-        except Exception as exc:
-            logger.error(f"Scheduler | Failed to reset kill switch: {exc}")
-
-    try:
-        result = await run_pipeline(force=False, dry_run=False)
-        logger.info(f"Scheduler | intraday_cycle complete: status={result['status']}")
-    except Exception as exc:
-        logger.error(f"Scheduler | intraday_cycle CRASHED: {exc}")
-        try:
-            from core.bot_state import touch_heartbeat as _bs_touch
-            _bs_touch("oracle", status="error", error=str(exc)[:200])
-        except Exception as _hb_exc:
-            logger.debug(f"Pipeline | Oracle error heartbeat failed: {_hb_exc}")
-
-    await _run_micro_audit()
-
-
 
 
 async def _run_micro_audit() -> None:

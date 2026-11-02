@@ -1,26 +1,24 @@
 """Fleet drawdown limits: the one definition used by the risk governor, the
-kill switch and the record-only log.
+kill switch and the FLEET-V1 account governor.
 
-Markus (23 Oct 2026): run the fleet at MEDIUM risk. While the fleet is on
-paper and practice money, crossing a limit must not stop trading; the platform
-records, in risk_limit_shadow, exactly what it would have done instead, so the
-spec can be judged and tuned on real behaviour.
+FLEET-V1-LIVE-SPEC.md section 4 (owner's decision, 2 Nov 2026): the limits
+are ENFORCED.
+- SOFT_DRAWDOWN: the risk governor refuses new risk (buys) above this, and
+  each FLEET-V1 account halves every target (sleeve_runtime/fleet_live.py)
+  until its equity is back to 95% of its high-water mark.
+- HARD_DRAWDOWN: the kill switch trips (latch, pause every bot, cancel
+  non-stop orders, keep protective stops) on the fleet's drawdown, and each
+  FLEET-V1 account sells to cash and halts until the owner clears it.
+Integrity checks (missing stops, ledger mismatches, negative cash, unknown
+equity, a latched switch) are not drawdown limits and act as before.
 
-- SOFT_DRAWDOWN: the risk governor would refuse new risk (buys) above this.
-- HARD_DRAWDOWN: the kill switch would trip (latch, pause every bot, cancel
-  non-stop orders, keep protective stops) above this.
-- ENFORCE_DRAWDOWN_LIMITS: False = record only. Integrity checks (missing
-  stops, ledger mismatches, negative cash, unknown equity, a latched switch)
-  are NOT drawdown limits and keep acting as before.
-
-Low risk (the earlier setting) was 10% / 15%. Medium was chosen to match the
-~25% worst falls of the tested strategies and of SPY over 2021-2026.
+History: 10%/15% (low risk), then 20%/25% record-only (medium, 23 Oct 2026).
 """
 
-RISK_PROFILE = "medium"
-SOFT_DRAWDOWN = 0.20
-HARD_DRAWDOWN = 0.25
-ENFORCE_DRAWDOWN_LIMITS = False
+RISK_PROFILE = "fleet_v1"
+SOFT_DRAWDOWN = 0.15
+HARD_DRAWDOWN = 0.22
+ENFORCE_DRAWDOWN_LIMITS = True
 
 WOULD_HAVE = {
     "governor_soft": "refuse every new buy (sells and protective stops continue)",

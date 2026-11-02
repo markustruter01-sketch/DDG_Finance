@@ -2,7 +2,8 @@
  * DDG Finance home (Night Glass v5): one screen on desktop, stacked on phones.
  * All money and return figures are server values (Rule 27); the client only
  * formats them, sums market values for the holdings mix and divides equity by
- * fleet equity for allocation shares.
+ * fleet equity for allocation shares. The bottom-right pair is FLEET-V1's two
+ * accounts: signal, targets, drawdown mode and return against SPY since cutover.
  */
 import { useMemo, type ReactNode } from "react";
 import { Download } from "lucide-react";
@@ -14,17 +15,17 @@ import { Shell, Status } from "@/components/Shell";
 import { useFleetData, fmtEq, getBotStatus, type BotSlice, type LivePos } from "@/hooks/useFleetData";
 import { useBotRegistry, useFleetHistory } from "@/hooks/use-portfolio";
 import { useRiskMetrics } from "@/hooks/use-performance";
-import { useRecentTrades } from "@/hooks/use-journal";
 import { useExportReport } from "@/hooks/use-report";
 import { useBotHistory, type BotDay } from "@/hooks/use-bot-history";
 import { botColor } from "@/lib/bot-identity";
+import { useFleetV1State } from "@/hooks/use-fleet-v1";
+import { FleetAccountPanel } from "@/components/FleetV1";
 
 // Chart colours = the brand four (same values as styles/night-glass/tokens.css).
 // Each account has its own colour (lib/bot-identity BOT_COLORS). Only losses get a
 // status colour (amber, a thin line, never a fill); gains stay plain. The fleet
 // total is white. Holdings mix (not accounts) uses fading whites.
 const FLEET = "#FFFFFF";
-const PROBLEM = "#F5A524";
 const AXIS = "rgba(255,255,255,0.62)";
 const HAIRLINE = "rgba(255,255,255,0.10)";
 const NEUTRALS = [1, 0.62, 0.38, 0.22, 0.14].map((a) => `rgba(255,255,255,${a})`);
@@ -90,25 +91,6 @@ function Tip({ active, payload, label, fmt, title }: {
         <div key={i} className="tab">{fmt(Number(p.value), p)}</div>
       ))}
     </div>
-  );
-}
-
-/** A bar in its account's colour; a loss also gets a thin amber line at its end. */
-function CapBar(props: { x?: number; y?: number; width?: number; height?: number; value?: number | number[]; horizontal?: boolean; payload?: { color?: string } }) {
-  const { x = 0, y = 0, width = 0, height = 0, horizontal = false } = props;
-  const v = Array.isArray(props.value) ? props.value[1] : props.value ?? 0;
-  const rx = Math.min(x, x + width), ry = Math.min(y, y + height);
-  const w = Math.abs(width), h = Math.abs(height);
-  if (!w || !h) return null;
-  const up = v >= 0;
-  const cap = horizontal
-    ? { x: up ? rx + w - 2 : rx, y: ry, width: 2, height: h }
-    : { x: rx, y: up ? ry : ry + h - 2, width: w, height: 2 };
-  return (
-    <g>
-      <rect x={rx} y={ry} width={w} height={h} fill={props.payload?.color ?? "#FFFFFF"} fillOpacity={0.55} />
-      {!up && <rect {...cap} fill={PROBLEM} />}
-    </g>
   );
 }
 
@@ -218,7 +200,7 @@ export default function HomePage() {
   const fleetHistory = useFleetHistory();
   const botHistory = useBotHistory(90);
   const risk = useRiskMetrics();
-  const trades = useRecentTrades(10);
+  const fleetV1 = useFleetV1State();
   const report = useExportReport();
 
   const engines: Engine[] = useMemo(() => {
@@ -269,17 +251,6 @@ export default function HomePage() {
     }
     return row;
   });
-
-  const movers = [...allPos]
-    .filter((p) => p.symbol !== "SGOV" && p.symbol !== "BIL" && p.symbol !== "VOO")
-    .sort((a, b) => Math.abs(b.unrealized_pl) - Math.abs(a.unrealized_pl))
-    .slice(0, 8)
-    .map((p) => ({ symbol: p.symbol, pl: p.unrealized_pl, color: botColor(p.bot_id) }));
-  const closed = (trades.data?.trades ?? [])
-    .filter((t) => t.pnl_usd != null)
-    .slice(0, 10)
-    .reverse()
-    .map((t) => ({ label: t.symbol, pl: t.pnl_usd as number, when: t.closed_at }));  // trade rows carry no account: white
 
   const r = risk.data;
   const downloadReport = async () => {
@@ -395,43 +366,13 @@ export default function HomePage() {
           </Panel>
 
           <div className="pair">
-            <Panel title="Open P&L · largest positions">
-              <div className="chart">
-                {movers.length ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={movers} layout="vertical" margin={{ top: 0, right: 8, bottom: 0, left: 0 }} barCategoryGap="18%">
-                      <XAxis type="number" hide />
-                      <YAxis type="category" dataKey="symbol" width={58} tick={{ fill: AXIS, fontSize: 10 }} axisLine={false} tickLine={false} />
-                      <ReferenceLine x={0} stroke={HAIRLINE} />
-                      <Tooltip cursor={{ fill: "rgba(255,255,255,0.04)" }} content={<Tip fmt={(v) => `Unrealised ${signedMoney(v)}`} />} />
-                      <Bar dataKey="pl" isAnimationActive={false} shape={(p: object) => <CapBar {...p} horizontal />} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : <Empty>No open strategy positions.</Empty>}
-              </div>
-            </Panel>
-            <Panel title="Recent closed trades">
-              <div className="chart">
-                {closed.length ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={closed} margin={{ top: 4, right: 4, bottom: 0, left: 0 }} barCategoryGap="20%">
-                      <XAxis dataKey="label" interval="preserveStartEnd" minTickGap={4} tick={{ fill: AXIS, fontSize: 9 }}
-                        axisLine={{ stroke: HAIRLINE }} tickLine={false} />
-                      <YAxis width={44} tickFormatter={(v: number) => signedMoney(v) ?? ""} tick={{ fill: AXIS, fontSize: 10 }}
-                        axisLine={false} tickLine={false} />
-                      <ReferenceLine y={0} stroke={HAIRLINE} />
-                      <Tooltip cursor={{ fill: "rgba(255,255,255,0.04)" }} content={<Tip
-                        title={(l, row) => {
-                          const when = row?.payload?.when as string | undefined;
-                          return when ? `${l} · ${new Intl.DateTimeFormat("en-AU", { timeZone: "Australia/Brisbane", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }).format(new Date(when))}` : l;
-                        }}
-                        fmt={(v) => `Realised ${signedMoney(v)}`} />} />
-                      <Bar dataKey="pl" isAnimationActive={false} shape={(p: object) => <CapBar {...p} />} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : <Empty>{trades.isError ? "Trade history unavailable." : "No closed trades yet."}</Empty>}
-              </div>
-            </Panel>
+            {fleetV1.data ? fleetV1.data.accounts.map((a) => (
+              <FleetAccountPanel key={a.bot_id} account={a} state={fleetV1.data!} />
+            )) : (
+              <Panel title="FLEET-V1">
+                <Empty>{fleetV1.isError ? "FLEET-V1 state unavailable. Check the trading API." : "Reading FLEET-V1 state…"}</Empty>
+              </Panel>
+            )}
           </div>
         </div>
       </div>

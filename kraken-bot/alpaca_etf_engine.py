@@ -559,6 +559,9 @@ class AlpacaEtfEngine:
         }
         if getattr(acc, "long_market_value", None) is not None:
             account["long_market_value"] = float(acc.long_market_value)
+        if getattr(acc, "last_equity", None) not in (None, ""):
+            # Equity at the previous session's close: the FLEET-V1 drawdown governor's input.
+            account["last_equity"] = float(acc.last_equity)
         return account
 
     # ── Positions ─────────────────────────────────────────────────────────────
@@ -1454,13 +1457,19 @@ class AlpacaEtfEngine:
         bot_id: str,
         db_positions: list[dict],
     ) -> None:
-        """Ensure every live DB-tracked long has the recorded stop at Alpaca."""
+        """Ensure every live DB-tracked long has the recorded stop at Alpaca.
+        Stop-free lines (core/stop_policy.py: FLEET-V1's cross-asset sleeve) are skipped."""
+        from core.stop_policy import stop_exempt
+
         for position in db_positions:
             if position.get("direction", "long") != "long":
                 continue
             symbol = position.get("symbol", "")
             if is_cash_park(symbol):
                 logger.debug(f"EtfEngine | {symbol}: cash-park exemption — skip stop reconciliation")
+                continue
+            if stop_exempt(bot_id, symbol):
+                logger.debug(f"EtfEngine | {symbol}: stop-free by design (FLEET-V1 cross-asset) — skip")
                 continue
             if math.floor(abs(float(position.get("qty", 0) or 0))) < 1:
                 logger.debug(f"EtfEngine | {symbol}: sub-1-share position — skip stop reconciliation")

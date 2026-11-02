@@ -160,9 +160,11 @@ def plan_from_weights(
     frozen: dict[str, str] | None,
     stop_pct: float,
     registration: str,
+    no_stop: frozenset[str] = frozenset(),
 ) -> TrendPlan:
     """Shared by every live sleeve: whole-share plan and stops from the
-    latest bar day's closes, for the given target weights."""
+    latest bar day's closes, for the given target weights. Symbols in
+    ``no_stop`` get no protective stop (stop_for returns None)."""
     whole = {s: float(math.floor(q + 1e-9)) for s, q in positions.items()}
     fractional = {s: q - whole[s] for s, q in positions.items() if q - whole[s] > DUST_QTY}
     prices: dict[str, float | None] = {}
@@ -172,7 +174,7 @@ def plan_from_weights(
     plan = plan_rebalance(weights=weights, equity=equity, cash=cash,
                           positions={s: q for s, q in whole.items() if q > 0},
                           prices=prices, stop_pct=stop_pct, cash_buffer_pct=CASH_BUFFER_PCT,
-                          frozen=frozen)
+                          frozen=frozen, no_stop=no_stop)
     return TrendPlan(plan, weights, signal_day, price_day, prices, fractional, registration)
 
 

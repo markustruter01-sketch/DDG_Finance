@@ -19,6 +19,7 @@ from loguru import logger
 from config.settings import settings
 from core.symbols import canonical_symbol, same_symbol
 from core.cash_park import is_cash_park
+from core.stop_policy import stop_exempt
 from core.bot_config import load_bot_profiles
 from core.bot_registry import active_bot_ids
 from core.risk_limits import HARD_DRAWDOWN
@@ -555,6 +556,10 @@ def evaluate_account(account: dict[str, Any], now: float | None = None) -> list[
             _state["missing_stop_since"].pop(f"{bot_id}:{position.get('symbol')}", None)
             continue
         if is_cash_park(position.get("symbol")):
+            _state["missing_stop_since"].pop(f"{bot_id}:{position.get('symbol')}", None)
+            continue
+        if stop_exempt(bot_id, canonical_symbol(position.get("symbol"))):
+            # FLEET-V1 cross-asset line: stop-free by design (core/stop_policy.py).
             _state["missing_stop_since"].pop(f"{bot_id}:{position.get('symbol')}", None)
             continue
         covered = any(_covers(position, order) for order in account.get("orders", []))

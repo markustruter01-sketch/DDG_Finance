@@ -47,13 +47,17 @@ class FakeEngine:
         self.no_stop: set[str] = set()
         self.stuck_stop: set[str] = set()          # stops whose cancel is never confirmed
         self.unprefixed: set[str] = set()          # stops findable by order id only (Alpaca re-ids a replaced order)
+        self.last_equity: float | None = None      # Alpaca's previous-close equity
         self._oid = 0
 
     # broker reads
     def get_account(self):
         lmv = sum(q * self.px[s] for s, q in self.pos.items())
-        return {"equity": self.cash + lmv, "cash": self.cash, "buying_power": self.cash,
-                "long_market_value": lmv}
+        out = {"equity": self.cash + lmv, "cash": self.cash, "buying_power": self.cash,
+               "long_market_value": lmv}
+        if self.last_equity is not None:
+            out["last_equity"] = self.last_equity
+        return out
 
     def get_positions(self):
         return [{"symbol": s, "qty": q, "entry_price": self.px[s], "current_price": self.px[s],
@@ -98,7 +102,8 @@ class FakeEngine:
         self.orders.append(("sell", symbol, qty))
         self.pos[symbol] -= qty
         self.cash += qty * self.px[symbol]
-        self.ensure_protective_stop(bot_id, symbol, stop_price)
+        if stop_price is not None:            # like the real engine: no stop price, no re-arm
+            self.ensure_protective_stop(bot_id, symbol, stop_price)
         return True
 
     def buy_market(self, symbol, shares):

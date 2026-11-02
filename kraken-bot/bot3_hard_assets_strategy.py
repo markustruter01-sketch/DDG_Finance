@@ -1629,6 +1629,9 @@ def run_bot3_cycle(
 ) -> dict[str, Any]:
     """Live cycle. Only called by the runner, which enforces bots_state.paused."""
     profile = profile or {}
+    if profile.get("PAUSED_IN_CODE", False):
+        # Owner decision pending (FLEET-V1-LIVE-SPEC.md section 1): no reads, no orders.
+        return {"status": "paused_in_code", "orders": 0, "reason": "owner_decision_pending"}
     try:
         max_deployment = _max_deployment(profile)
     except ValueError as exc:

@@ -48,14 +48,26 @@ class _Connection:
         return self.cursor_instance
 
 
-def _rows(now: datetime, *, failures=0, success_age=10, missing=False):
+def _rows(now: datetime, *, failures=0, success_age=10, missing=False, resumed_age=None):
     values = []
     for bot_id in bot_liveness.ACTIVE_BOTS:
         success = None if missing and bot_id == "jerome_macro" else now - timedelta(seconds=success_age)
+        resumed = None if resumed_age is None else now - timedelta(seconds=resumed_age)
         values.append((
-            bot_id, False, success, success, success, 5, failures, "boom", "error",
+            bot_id, False, success, success, success, 5, failures, "boom", "error", resumed,
         ))
     return values
+
+
+def test_a_bot_just_resumed_after_a_long_pause_is_not_stale(monkeypatch):
+    # 3 Nov 2026: paused 3 h by the kill switch, resumed by the owner, declared
+    # stale 4 minutes later and re-paused. Staleness counts from the resume.
+    now = datetime.now(timezone.utc)
+    _patch_liveness_db(monkeypatch, _rows(now, success_age=12_000, resumed_age=240))
+    assert not [f for f in bot_liveness.evaluate_liveness(now=now) if f["trigger"] == "bot_cycle_stale"]
+    # ...but a bot resumed long ago that still has not cycled is stale.
+    _patch_liveness_db(monkeypatch, _rows(now, success_age=12_000, resumed_age=11_000))
+    assert [f for f in bot_liveness.evaluate_liveness(now=now) if f["trigger"] == "bot_cycle_stale"]
 
 
 def _patch_liveness_db(monkeypatch, rows):

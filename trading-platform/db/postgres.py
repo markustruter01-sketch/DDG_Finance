@@ -729,6 +729,11 @@ CREATE TABLE IF NOT EXISTS bots_state (
   error_message  TEXT DEFAULT '',
   metadata       JSONB DEFAULT '{}'::jsonb
 );
+-- When the bot was last resumed: liveness measures staleness from the later
+-- of the last successful cycle and this, so a bot paused for hours is not
+-- declared stale the moment it is resumed (3 Nov 2026: that re-tripped the
+-- kill switch and re-paused every account).
+ALTER TABLE bots_state ADD COLUMN IF NOT EXISTS resumed_at TIMESTAMPTZ;
 
 -- ── Bot Portfolio Table ────────────────────────────────────────────────────
 -- Canonical per-bot portfolio state: cash, equity, open positions.

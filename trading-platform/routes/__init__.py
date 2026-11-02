@@ -17,6 +17,7 @@ from .entry_windows import router as entry_windows_router
 from .strategy_bench import router as strategy_bench_router
 from .fleet_v1 import fleet_v1_router
 from .momo_v2 import momo_v2_router
+from .comparison import comparison_router
 
 ALL_ROUTERS = [
     system_router,
@@ -38,4 +39,5 @@ ALL_ROUTERS = [
     strategy_bench_router,
     fleet_v1_router,
     momo_v2_router,
+    comparison_router,
 ]

@@ -625,6 +625,14 @@ async def per_bot_vault_report(bot_id: str | None = None) -> dict:
     return get_vault_report(bot_id)
 
 
+@portfolio_router.get("/vault/per-bot/summary", tags=["Vault"])
+async def per_bot_vault_summary() -> dict:
+    """VAULT-V2 card: balances, income, contributions, marks, next skim. DB only."""
+    import asyncio
+    from execution.per_bot_vault import get_vault_summary
+    return await asyncio.to_thread(get_vault_summary)
+
+
 @portfolio_router.get("/vault/per-bot/inspection", tags=["Vault"])
 async def per_bot_vault_inspection(
     bot_id: str | None = None,

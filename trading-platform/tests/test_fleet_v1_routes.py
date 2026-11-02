@@ -17,6 +17,17 @@ def test_since_cutover_is_computed_server_side_and_none_without_marks():
     assert out["account_return"] == pytest.approx(0.03)
     assert out["spy_price_return"] == pytest.approx(0.02)
     assert fleet_v1.since_cutover({}) is None
+    assert out["basis"] == "sleeve equity"
+
+
+def test_since_cutover_counts_the_vault_when_the_marks_carry_total_equity():
+    # VAULT-V2: a $300 skim moves money from the sleeve to the vault; the
+    # account's reported return must not fall because of it.
+    st = {"cutover": {"day": "2026-11-03", "equity": 98_000.0, "total": 100_000.0, "spy": 500.0},
+          "mark": {"day": "2026-12-01", "equity": 100_700.0, "total": 103_000.0, "spy": 510.0}}
+    out = fleet_v1.since_cutover(st)
+    assert out["account_return"] == pytest.approx(0.03)
+    assert out["basis"] == "total equity incl. vault"
 
 
 def test_record_view_picks_the_logged_figures():

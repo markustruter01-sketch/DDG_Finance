@@ -22,7 +22,7 @@ export interface FleetAccount {
   attempts: number | null;
   errors: string[];
   since_cutover: {
-    from: string; to: string; account_return: number; spy_price_return: number; note: string;
+    from: string; to: string; account_return: number; spy_price_return: number; note: string; basis?: string;
   } | null;
   drawdown: {
     mode: DrawdownMode;
@@ -143,6 +143,63 @@ export function useMomoV2State() {
   return useQuery({
     queryKey: MOMO_STATE_KEY,
     queryFn: async () => (await api.get("/momo-v2/state")).data as MomoState,
+    refetchInterval: interval,
+  });
+}
+
+// ── The 2027 comparison (routes/comparison.py) ──────────────────────────────
+export interface RaceStats { return: number; worst_fall: number; sharpe: number | null }
+export interface Comparison {
+  since: string;
+  days: number;
+  rows: Array<Record<string, number | string>>;
+  spy: RaceStats | null;
+  accounts: Record<string, (RaceStats & { spy_same_days: number; equity: number }) | null>;
+  note: string;
+}
+
+export function useComparison() {
+  const interval = useVisibleInterval(5 * 60_000);
+  return useQuery({
+    queryKey: ["/fleet/comparison"],
+    queryFn: async () => (await api.get("/fleet/comparison")).data as Comparison,
+    refetchInterval: interval,
+  });
+}
+
+// ── VAULT-V2 (execution/per_bot_vault.py get_vault_summary) ─────────────────
+export interface VaultBot {
+  bot_id: string;
+  value: number | null;
+  as_of: string | null;
+  bil_qty: number;
+  voo_qty: number;
+  money_in: number;
+  income_lifetime: number | null;
+  income_month: number | null;
+  yield_30d_realized: number | null;
+  contributions_year: number;
+  contributions_lifetime: number;
+  trading_equity: number | null;
+  total_equity: number | null;
+  high_water_mark: number | null;
+  from_mark: number | null;
+}
+export interface VaultSummary {
+  enabled: boolean;
+  rule?: string;
+  asset?: string;
+  next_skim?: string;
+  total: number | null;
+  bots: VaultBot[];
+  error?: string;
+}
+
+export function useVaultSummary() {
+  const interval = useVisibleInterval(10 * 60_000);
+  return useQuery({
+    queryKey: ["/vault/per-bot/summary"],
+    queryFn: async () => (await api.get("/vault/per-bot/summary")).data as VaultSummary,
     refetchInterval: interval,
   });
 }

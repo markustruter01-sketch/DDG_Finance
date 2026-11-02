@@ -30,7 +30,7 @@ BOT_PROFILES = {
         "display_name":      "Global ETF Trend",
         "db_id":             5,
         "strategy_type":     "etf_trend_global",
-        "strategy_label":    "Gearbox G4: SPY/QQQ + 2x when calm, T-bills below SPY's 200-day average",
+        "strategy_label":    "FLEET-V1-F1: 65% geared S&P/Nasdaq trend core + 35% cross-asset trend (bonds, gold, commodities, dollar)",
         # ── Alpaca account (oracle's dedicated paper account) ──────────────────
         "ALPACA_API_KEY":    os.environ.get("ALPACA_API_KEY", ""),
         "ALPACA_SECRET_KEY": os.environ.get("ALPACA_SECRET_KEY", ""),
@@ -54,13 +54,15 @@ BOT_PROFILES = {
         "TP1_PCT":           0.06,
         "TP2_PCT":           0.12,
         "MIN_HOLD_DAYS":     5,
-        # GEAR-V1-G4 can invest ~99% of sleeve equity (1% cash buffer); the
+        # FLEET-V1-F1 can invest ~99% of sleeve equity (1% cash buffer); the
         # kill switch's deployment check must allow it.
         "MAX_DEPLOYMENT":    1.00,
-        # GEAR-V1-G4 owns this account (sleeve_runtime/gear_live.py), by
-        # Markus's decision 23 Oct 2026; legacy Atlas logic is off.
-        # Rollback: set False (and MAX_DEPLOYMENT back to 0.80) and publish.
-        "GEAR_SLEEVE_LIVE":  True,
+        # FLEET-V1-F1 owns this account (sleeve_runtime/fleet_live.py), by
+        # Markus's decision 2 Nov 2026 (sleeve_runtime/FLEET-V1-LIVE-SPEC.md).
+        # It sells G4's holdings it does not want on its first cycle.
+        # Rollback to G4: FLEET_SLEEVE_LIVE False, GEAR_SLEEVE_LIVE True, publish.
+        "FLEET_SLEEVE_LIVE": True,
+        "GEAR_SLEEVE_LIVE":  False,
         # TREND-V1-B cutover: cancelled 23 Oct 2026 (G4 took the account).
         "TREND_SLEEVE_LIVE": False,
     },
@@ -88,6 +90,10 @@ BOT_PROFILES = {
         "MIN_HOLD_DAYS":     5,
         "MAX_DEPLOYMENT":    1.00,
         # Reserved for Phase 3 Bot 3; activation follows separate validation.
+        # Paused in code pending an owner decision (audit 2 Nov 2026,
+        # FLEET-V1-LIVE-SPEC.md section 1): the cycle returns before reading
+        # or trading anything. Its open positions keep their broker stops.
+        "PAUSED_IN_CODE":    True,
     },
 
     # ── Phase 2: New Alpaca-based bots (built paused, staggered activation) ───
@@ -106,51 +112,36 @@ BOT_PROFILES = {
     #   2. Resume the bot (bots_state.paused = false via the dashboard/API).
 
     "bot2_spy_qqq": {
-        "display_name":      "Single-Stock Momentum",
-        "db_id":             1,              # replaces Davy Jones (id=1)
-        "strategy_type":     "single_stock_momentum",
-        "strategy_label":    "G4 + DBMF forward test: Gearbox G4 with DBMF instead of T-bills in the safe gear",
+        # Momentum's account (canonical id spy_qqq_trend). Since 2 Nov 2026:
+        # FLEET-V1-C1, the equity core alone, as F1's forward control
+        # (kraken-bot/fleet_control_strategy.py). Information only.
+        "display_name":      "Core control",
+        "db_id":             1,
+        "strategy_type":     "fleet_v1_control",
+        "strategy_label":    "FLEET-V1-C1: the equity trend core alone (control for F1)",
         "ALPACA_API_KEY":    os.environ.get("ALPACA_BB_API_KEY", ""),
         "ALPACA_SECRET_KEY": os.environ.get("ALPACA_BB_SECRET_KEY", ""),
         "ALPACA_BASE_URL":   "https://paper-api.alpaca.markets",
         "STARTING_CAPITAL":  100_000,
-        "LOOP_SLEEP_SECONDS": 3600,          # hourly check (exits + 4:30 PM entry)
-        "MAX_POSITIONS":     50,
-        "MOMENTUM_LOOKBACK_SESSIONS": 252,
-        "MOMENTUM_SKIP_SESSIONS": 21,
-        "UNIVERSE_SIZE":      500,
-        "MIN_MEDIAN_CLOSE": 5.0,
-        "STOP_LOSS_PCT":     0.20,
+        "LOOP_SLEEP_SECONDS": 3600,
         "MAX_DEPLOYMENT":    1.00,
-        "SPY_SLEEVE_WEIGHT": 0.20,
-        "SPY_SLEEVE_STOP_PCT": 0.35,
-        # GEAR-V2 engine A2 (G4 with DBMF in the safe gear; information only,
-        # not registered) owns this account, by Markus's decision 30 Oct 2026:
-        # Momentum's stock book is sold first, then G4 + DBMF trades
-        # (bot2_momentum_strategy._run_gear_handover). Momentum is retired.
-        # No one-step rollback: with this False, Momentum's code ignores
-        # G4 + DBMF's holdings (they are alpaca_etf_positions rows), so those
-        # would have to be sold first.
-        "GEAR_SLEEVE_LIVE":  True,
     },
 
     "forex_ai": {
+        # 2 Nov 2026 (FLEET-V1-LIVE-SPEC.md section 5): the council and trading
+        # are OFF. The bot stays registered (paused) only as a read-only NAV
+        # monitor, because its OANDA NAV is part of fleet equity and the fleet
+        # high-water mark; removing it outright would read as a ~25% fleet
+        # drawdown to the kill switch. Full removal needs a high-water-mark rebase.
         "display_name":      "Forex",
         "db_id":             None,
         "strategy_type":     "read_only_oanda",
-        "strategy_label":    "AI Currency Trading",
+        "strategy_label":    "Forex (retired; read-only NAV monitor)",
         "LOOP_SLEEP_SECONDS": 3600,
         "STARTING_CAPITAL":  100_000,
-        # APPROVED: aggregate gross-exposure ceiling (registered plan item 4).
         "FOREX_MAX_GROSS":   FOREX_MAX_GROSS,
-        # Phase 4 shadow council + ledger: ON (ledger table OK'd 10 Oct 17:50;
-        # line-up recorded in the registered plan; dry run passed 11 Oct).
-        # Set False to stop all AI calls.
-        "FOREX_COUNCIL_ENABLED": True,
-        # Phase 5 practice execution (forex_execution.py). Orders only when this
-        # is True AND the bot is unpaused in bots_state on the published runner.
-        # Markus (23 Oct 2026): trade on practice as soon as built and tested.
-        "FOREX_TRADING_ENABLED": True,
+        "FOREX_COUNCIL_ENABLED": False,
+        "FOREX_TRADING_ENABLED": False,
     },
 }
 

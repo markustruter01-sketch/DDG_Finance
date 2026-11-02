@@ -1,4 +1,4 @@
-"""oracle's cycle: TREND_SLEEVE_LIVE decides who trades the account."""
+"""oracle's cycle: the *_SLEEVE_LIVE switches decide who trades the account."""
 from __future__ import annotations
 
 import pathlib
@@ -31,15 +31,17 @@ class _Engine:
         self.calls.append("reconcile_protective_stops")
 
 
-def _cycle(monkeypatch, live: bool, gear: bool = False):
+def _cycle(monkeypatch, live: bool, gear: bool = False, fleet: bool = False):
     seen = []
     monkeypatch.setattr(atlas, "AlpacaEtfEngine", _Engine)
     monkeypatch.setattr(atlas, "_run_trend_sleeve", lambda e, live_pos: seen.append("sleeve"))
     monkeypatch.setattr(atlas, "_run_gear_sleeve", lambda e, live_pos: seen.append("gear"))
+    monkeypatch.setattr(atlas, "_run_fleet_sleeve", lambda e, live_pos: seen.append("fleet"))
     monkeypatch.setattr(atlas, "_maybe_run_trend_shadow", lambda *a: seen.append("shadow"))
     monkeypatch.setattr(atlas, "_in_entry_window", lambda *a: seen.append("legacy") or False)
     monkeypatch.setattr("sgov_parking.park_idle_cash", lambda *a, **k: None)
-    atlas.run_asia_cycle({"TREND_SLEEVE_LIVE": live, "GEAR_SLEEVE_LIVE": gear}, 5)
+    atlas.run_asia_cycle({"TREND_SLEEVE_LIVE": live, "GEAR_SLEEVE_LIVE": gear,
+                          "FLEET_SLEEVE_LIVE": fleet}, 5)
     return seen
 
 
@@ -56,7 +58,20 @@ def test_gear_switch_runs_only_g4(monkeypatch):
     assert _cycle(monkeypatch, True, gear=True) == ["gear"]      # G4 wins if both were ever on
 
 
-def test_atlas_ships_with_g4_live_and_trend_cancelled():
+def test_fleet_switch_runs_only_fleet_v1(monkeypatch):
+    assert _cycle(monkeypatch, False, fleet=True) == ["fleet"]
+    assert _cycle(monkeypatch, True, gear=True, fleet=True) == ["fleet"]   # FLEET-V1 wins over G4 and trend
+
+
+def test_atlas_ships_with_fleet_v1_live_and_g4_off():
     oracle = load_bot_profiles()["oracle"]
-    assert oracle["GEAR_SLEEVE_LIVE"] is True and oracle["TREND_SLEEVE_LIVE"] is False
+    assert oracle["FLEET_SLEEVE_LIVE"] is True
+    assert oracle["GEAR_SLEEVE_LIVE"] is False and oracle["TREND_SLEEVE_LIVE"] is False
     assert oracle["MAX_DEPLOYMENT"] == 1.0
+
+
+def test_jerome_is_paused_in_code_and_forex_has_no_ai_or_trading():
+    profiles = load_bot_profiles()
+    assert profiles["jerome_macro"]["PAUSED_IN_CODE"] is True
+    assert profiles["forex_ai"]["FOREX_COUNCIL_ENABLED"] is False
+    assert profiles["forex_ai"]["FOREX_TRADING_ENABLED"] is False

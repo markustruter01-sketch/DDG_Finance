@@ -1,4 +1,5 @@
-"""Control routes: run, postmortem, kill switch, emergency, auto-trading, system restart."""
+"""Control routes: postmortem, kill switch, emergency, auto-trading, system restart.
+POST /run (the retired LLM pipeline) was removed 2 Nov 2026 (FLEET-V1-LIVE-SPEC.md section 5)."""
 
 from __future__ import annotations
 
@@ -11,7 +12,7 @@ from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from loguru import logger
 
-from core.pipeline import get_last_run, run_pipeline, run_postmortem, reset_error_state
+from core.pipeline import get_last_run, run_postmortem, reset_error_state
 from core.scheduler import get_job_status, is_auto_trading_enabled, set_auto_trading
 from core.market_clock import is_market_open
 from execution.broker import get_account, get_positions, close_position, cancel_all_orders
@@ -30,12 +31,6 @@ from routes._deps import (
 
 control_router = APIRouter()
 
-class RunRequest(BaseModel):
-    dry_run: bool = False
-    force: bool = False
-    crypto_only: bool = False
-
-
 class KillResetRequest(BaseModel):
     opening_equity: float | None = None
     confirmation_token: str
@@ -50,19 +45,6 @@ class KillAcknowledgementRequest(BaseModel):
 
 class AutoTradingRequest(BaseModel):
     enabled: bool
-
-
-@control_router.post("/run", tags=["Control"])
-async def manual_run(request: RunRequest, background_tasks: BackgroundTasks) -> dict:
-    if is_tripped() and not request.force:
-        raise HTTPException(
-            status_code=409,
-            detail="Kill switch is tripped. Pass force=true to override, or POST /kill/reset first.",
-        )
-
-    logger.info(f"Manual run requested: dry_run={request.dry_run} force={request.force}")
-    result = await run_pipeline(force=request.force, dry_run=request.dry_run, crypto_only=request.crypto_only)
-    return result
 
 
 @control_router.post("/run/postmortem", tags=["Control"])

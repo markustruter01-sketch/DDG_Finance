@@ -37,8 +37,11 @@ class Settings(BaseSettings):
     kill_switch_check_interval_minutes: int = Field(default=5)
     kill_switch_portfolio_stale_hours: float = Field(default=2.0)
     kill_switch_armed: bool = Field(
-        default=False,
-        description="Explicit second gate for enforcement; production alone never arms the switch",
+        default=True,
+        description=(
+            "Armed by default (FLEET-V1-LIVE-SPEC.md section 4). Enforcement still needs a "
+            "published deployment; the owner disarms by setting KILL_SWITCH_ARMED=false"
+        ),
     )
     total_capital_slots: int = Field(
         default=10,

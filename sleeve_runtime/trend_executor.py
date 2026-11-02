@@ -114,7 +114,7 @@ def _fresh(engine, bot_id: str, vault: set[str], cash_park: set[str]):
     return live, rows, cap
 
 
-def _buy(engine, bot_id: str, sym: str, qty: int, stop: float, ref_price: float,
+def _buy(engine, bot_id: str, sym: str, qty: int, stop: float | None, ref_price: float,
          row: dict | None) -> str | None:
     """One market buy; records the fill. Returns an error string or None.
     Never sends a buy the cash in the account cannot pay for, even if the
@@ -124,7 +124,8 @@ def _buy(engine, bot_id: str, sym: str, qty: int, stop: float, ref_price: float,
     stop for the same symbol is open (wash-trade protection, see
     docs.alpaca.markets/us/docs/user-protection). So the stop is lifted
     (cancel confirmed) first, and put back for the whole position right after,
-    whatever happened to the buy. If the stop can't be lifted, no buy."""
+    whatever happened to the buy. If the stop can't be lifted, no buy.
+    ``stop=None``: a stop-free symbol (FLEET-V1 sleeve 2); none is placed."""
     lifted = False
     if row is not None:
         if not engine._cancel_owned_stop(bot_id, sym, row.get("stop_order_id")):
@@ -134,7 +135,8 @@ def _buy(engine, bot_id: str, sym: str, qty: int, stop: float, ref_price: float,
         return _market_buy(engine, bot_id, sym, qty, stop, ref_price, row)
     finally:
         # Protect at once (the lifted stop is gone, so never pass its id); step 3 re-checks every holding.
-        engine.ensure_protective_stop(bot_id, sym, stop, None if lifted else (row or {}).get("stop_order_id"))
+        if stop is not None:
+            engine.ensure_protective_stop(bot_id, sym, stop, None if lifted else (row or {}).get("stop_order_id"))
 
 
 def _market_buy(engine, bot_id: str, sym: str, qty: int, stop: float, ref_price: float,

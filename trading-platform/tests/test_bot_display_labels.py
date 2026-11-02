@@ -2,18 +2,18 @@ from core.bot_registry import BOT_REGISTRY, bot_by_id, display_label
 
 
 EXPECTED_LABELS = {
-    "oracle": ("Atlas", "Atlas", "Gearbox G4 (headline)", "Atlas · Gearbox G4 (headline)"),
+    "oracle": ("Atlas", "Atlas", "FLEET-V1 fleet (headline)", "Atlas · FLEET-V1 fleet (headline)"),
     "spy_qqq_trend": (
         "Momentum",
         "Momentum",
-        "G4 + DBMF (forward test)",
-        "Momentum · G4 + DBMF (forward test)",
+        "Core-only control",
+        "Momentum · Core-only control",
     ),
     "jerome_macro": (
         "Bullion",
         "Bullion",
-        "Precious Metals and Crypto (research)",
-        "Bullion · Precious Metals and Crypto (research)",
+        "Paused (owner decision pending)",
+        "Bullion · Paused (owner decision pending)",
     ),
 }
 

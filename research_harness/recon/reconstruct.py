@@ -30,6 +30,7 @@ NDX_YIELD = 0.008                          # Nasdaq-100 dividend yield before QQ
 BORROW_SPREAD = 0.005                      # 2x funds pay DTB3 + 0.50% on the borrowed 1x
 FEES_2X = {"SSO": 0.0089, "QLD": 0.0095}   # ProShares, read 2 Nov 2026
 BOND_MATURITY_YEARS = 10
+SHILLER_LAG_MONTHS = 3                     # Shiller's monthly dividend is paid this many months after its label
 REAL_ETF = {                               # live instrument -> the rebuilt series it is spliced onto
     "SPY": "SPX_TR", "QQQ": "NDX_TR", "SSO": "SSO_R", "QLD": "QLD_R",
     "IEF": "UST10_TR", "GLD": "GOLD", "DBC": "GSCI", "UUP": "DXY",
@@ -76,8 +77,17 @@ def from_returns(first_day: date, rets: list[tuple[date, float]], start_value: f
 def sp500_tr(price: Series, monthly: list[dict[str, Any]]) -> Series:
     """S&P 500 total return: the daily price index with Shiller's monthly
     dividend (annual rate / 12, index points) reinvested on the first session
-    of each month. Months without a published dividend pay nothing."""
-    div = {(m["day"].year, m["day"].month): m["dividend"] / 12 for m in monthly}
+    of each month.
+
+    The dividend is lagged SHILLER_LAG_MONTHS (one quarter): the first session
+    of month m pays the dividend labelled month m-3. Shiller interpolates his
+    monthly dividends from quarterly data, so month m's value was not knowable
+    at the time. Months with no m-3 dividend pay nothing."""
+    def _pay_month(d: date) -> tuple[int, int]:
+        k = d.year * 12 + (d.month - 1) + SHILLER_LAG_MONTHS
+        return k // 12, k % 12 + 1
+
+    div = {_pay_month(m["day"]): m["dividend"] / 12 for m in monthly}
     rets, seen = [], set()
     for i in range(1, len(price)):
         d, p = price[i]
@@ -126,7 +136,7 @@ def levered(under: Series, rf_annual: dict[date, float], fee: float, lev: float 
 
 
 def with_collateral(s: Series, rf_annual: dict[date, float]) -> Series:
-    """An index plus T-bill interest on fully collateralised futures (information only)."""
+    """An index plus T-bill interest on fully collateralised futures."""
     rets = returns(s)
     rf_d = rf_daily_for([d for d, _ in rets], rf_annual)
     return from_returns(s[0][0], [(d, r + rf) for (d, r), rf in zip(rets, rf_d)], s[0][1])
@@ -163,6 +173,7 @@ def build(
     *,
     ndx_yield: float = NDX_YIELD,
     gold: Series | None = None,
+    collateral: bool = True,
 ) -> dict[str, Any]:
     """All FLEET-V1 instruments.
 
@@ -173,6 +184,11 @@ def build(
     gold: the rebuilt gold series for before GLD, or None (then the gold
         line exists only from GLD's first day). The source is an open
         decision for the plan (FRED's LBMA series has been withdrawn).
+    collateral: if True (default, the plan's step-5 decision), the GSCI and
+        DXY series that DBC and UUP are spliced onto are the index plus T-bill
+        interest (DTB3) on fully collateralised futures (with_collateral); if
+        False they are the plain index. recon["GSCI"] / recon["DXY"] hold
+        whichever series is spliced.
 
     Returns {"instruments": {symbol: bars}, "recon": {name: Series}, "calendar": [...]}.
     """
@@ -188,6 +204,9 @@ def build(
     recon["UST10_TR"] = bond_tr(align(rates["DGS10"], cal))
     recon["GSCI"] = align(from_bars(index_bars[INDEX["GSCI"]]), cal)
     recon["DXY"] = align(from_bars(index_bars[INDEX["DXY"]]), cal)
+    if collateral:
+        recon["GSCI"] = with_collateral(recon["GSCI"], dtb3)
+        recon["DXY"] = with_collateral(recon["DXY"], dtb3)
     if gold is not None:
         recon["GOLD"] = align(gold, cal)
     instruments = {}

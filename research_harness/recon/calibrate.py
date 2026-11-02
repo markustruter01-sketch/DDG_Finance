@@ -14,7 +14,8 @@ never read here):
 
 Commodities and the dollar are reported twice — the plain index, and the
 index plus T-bill interest (the collateral yield a futures fund earns) —
-because neither Yahoo index includes it; the plan's later steps choose.
+because neither Yahoo index includes it. The live DBC and UUP lines use the
+"+ T-bill" series (step-5 decision); the plain pair is still reported.
 The Nasdaq-100 yield is reported at 0%, 0.8% (declared) and 1.5%.
 
 Run:  python3 -m research_harness.recon.calibrate --index DS --etf DS --rates DS --shiller DS
@@ -71,8 +72,9 @@ def compare(recon: rc.Series, etf: rc.Series, end: date = CAL_END) -> dict[str, 
 def calibrate(index_bars, etf_bars, rates, shiller, *, gold: rc.Series | None = None,
               end: date = CAL_END) -> dict[str, Any]:
     """Calibration report for every pair the data allows."""
-    built = rc.build(index_bars, etf_bars, rates, shiller, gold=gold)
+    built = rc.build(index_bars, etf_bars, rates, shiller, gold=gold, collateral=True)
     recon = built["recon"]
+    plain = rc.build(index_bars, etf_bars, rates, shiller, gold=gold, collateral=False)["recon"]
     etf = {s: rc.from_bars(b) for s, b in etf_bars.items() if b}
     out: dict[str, Any] = {"end": end.isoformat(), "pairs": {}, "missing": []}
 
@@ -91,10 +93,10 @@ def calibrate(index_bars, etf_bars, rates, shiller, *, gold: rc.Series | None = 
     add("QLD_R vs QLD", recon["QLD_R"], "QLD")
     add("UST10_TR vs IEF", recon["UST10_TR"], "IEF")
     add("GOLD vs GLD", recon.get("GOLD"), "GLD")
-    add("GSCI plain vs DBC", recon["GSCI"], "DBC")
-    add("GSCI + T-bill vs DBC", rc.with_collateral(recon["GSCI"], rates["DTB3"]), "DBC")
-    add("DXY plain vs UUP", recon["DXY"], "UUP")
-    add("DXY + T-bill vs UUP", rc.with_collateral(recon["DXY"], rates["DTB3"]), "UUP")
+    add("GSCI plain vs DBC", plain["GSCI"], "DBC")
+    add("GSCI + T-bill vs DBC", recon["GSCI"], "DBC")
+    add("DXY plain vs UUP", plain["DXY"], "UUP")
+    add("DXY + T-bill vs UUP", recon["DXY"], "UUP")
     ndx = rc.align(rc.from_bars(index_bars[rc.INDEX["NDX"]]), built["calendar"])
     for y in NDX_YIELDS:
         add(f"NDX_TR {y:.1%} vs QQQ", rc.add_yield(ndx, y), "QQQ")

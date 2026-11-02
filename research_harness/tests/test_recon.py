@@ -100,9 +100,11 @@ def test_align_carries_forward_never_back():
 def test_sp500_tr_pays_dividend_once_on_first_session_of_month():
     days = [date(2000, 1, 28), date(2000, 1, 31), date(2000, 2, 1), date(2000, 2, 2)]
     price = [(d, 100.0) for d in days]
-    tr = rc.sp500_tr(price, [{"day": date(2000, 2, 1), "dividend": 12.0}])
+    tr = rc.sp500_tr(price, [{"day": date(1999, 11, 1), "dividend": 12.0},   # paid Feb (lag 3)
+                             {"day": date(2000, 2, 1), "dividend": 24.0}])   # paid May: not here
+    assert rc.SHILLER_LAG_MONTHS == 3
     assert tr[1][1] == pytest.approx(100.0)
-    assert tr[2][1] == pytest.approx(101.0)           # 12/12 = 1 point on 1 Feb
+    assert tr[2][1] == pytest.approx(101.0)           # Nov's 12/12 = 1 point on 1 Feb
     assert tr[3][1] == pytest.approx(101.0)           # not again on 2 Feb
 
 

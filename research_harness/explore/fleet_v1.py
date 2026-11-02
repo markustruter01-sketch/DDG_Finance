@@ -51,6 +51,9 @@ ROLLING_YEARS = 10
 ROLLING_WIN_SHARE = 0.70
 ROLLING_DECLARED = 25                     # the plan's count; see rolling_windows()
 NDX_SENSITIVITY = (0.0, 0.015)            # plus the declared 0.8%
+# The held-out window 2011-2020 is entirely in the real-ETF era, so the
+# held-out run (Process step 7) uses whole shares; exploration stays fractional.
+HELDOUT_WHOLE_SHARES = True
 
 COSTS = SymbolCosts(
     per_trade_bps={"SPY": 5.0, "QQQ": 5.0, "IEF": 5.0, "GLD": 5.0,
@@ -66,8 +69,8 @@ UNIVERSE["F2"] = UNIVERSE["C2"] + UNIVERSE["S2"]
 CALIBRATION_PAIR = {                      # instrument -> calibration pairs whose haircut applies
     "SPY": ("SPX_TR vs SPY",), "SSO": ("SSO_R vs SSO",), "QLD": ("QLD_R vs QLD",),
     "QQQ": ("NDX_TR 0.8% vs QQQ",), "IEF": ("UST10_TR vs IEF",), "GLD": ("GOLD vs GLD",),
-    "DBC": ("GSCI plain vs DBC", "GSCI + T-bill vs DBC"),   # the larger, until Fable picks one
-    "UUP": ("DXY plain vs UUP", "DXY + T-bill vs UUP"),
+    "DBC": ("GSCI + T-bill vs DBC",),     # the lines use the + T-bill series (step-5 decision)
+    "UUP": ("DXY + T-bill vs UUP",),
 }
 DATASETS = {"index": "fleet_idx_y", "etf": "fleet_etf_y", "rates": "fleet_rates_fred",
             "shiller": "fleet_shiller"}

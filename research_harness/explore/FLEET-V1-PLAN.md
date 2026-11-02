@@ -281,3 +281,16 @@ decisions for step 5.
   `--locked-from` / `--locked`.
 - **Lock (step 2)**: the plan named `registry.begin_run`; the function is
   `registry.begin_locked_run`, which issues the single-use read grant.
+
+### Decisions taken at step 5 (Fable 5.1, 2 Nov 2026, before any data was read)
+
+- **Gold before GLD**: the gold line is off until GLD (2004-11). No `GC=F` splice.
+- **GSCI and DXY**: the DBC and UUP lines use the index plus T-bill
+  collateral (DTB3); the plain variant is still reported in calibration.
+  `^SPGSCI` is a spot index with no roll yield; the DBC calibration haircut
+  carries that.
+- **Rolling windows**: 15; the 70% bar is 11 of 15.
+- **Shiller dividend**: lagged one quarter (month m pays the dividend
+  labelled m-3).
+- **Shares**: the held-out run uses whole shares; exploration stays fractional.
+- All other judgment calls in Amendment 1 are confirmed.

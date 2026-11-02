@@ -1,4 +1,4 @@
-"""Record-only drawdown limits: episode log and the kill switch never tripping on them."""
+"""Drawdown limits: the episode log, and the kill switch on the fleet drawdown (enforced since 2 Nov 2026)."""
 from __future__ import annotations
 
 from contextlib import contextmanager
@@ -69,23 +69,39 @@ def test_unknown_equity_writes_nothing_and_errors_never_raise():
 
 def test_would_refuse_row():
     db = FakeDb()
-    risk_shadow.record_would_refuse(0.225, _snap(77_500), ["fleet drawdown 22.5% above the 20% soft limit"],
+    risk_shadow.record_would_refuse(0.175, _snap(82_500), ["fleet drawdown 17.5% above the 15% soft limit"],
                                     get_conn=db.conn)
-    assert db.rows == [{"limit": "governor_soft", "event": "would_refuse", "threshold": 0.20, "dd": 0.225,
+    assert db.rows == [{"limit": "governor_soft", "event": "would_refuse", "threshold": 0.15, "dd": 0.175,
                         "would_have": "refuse every new buy (sells and protective stops continue)"}]
 
 
-def test_kill_switch_check_never_trips_on_drawdown_while_record_only(monkeypatch):
-    from core import kill_switch
+def _kill_switch_check(monkeypatch, *, enforce: bool, report_only: bool):
+    from core import kill_switch, risk_limits
     from execution import reconciliation
 
     snapshot = {"accounts": [], "fleet_equity": 70_000.0, "fleet_hwm": 100_000.0, "mismatches": [],
                 "pause_state_disagreements": [], "account_findings": [], "liveness_findings": []}
     calls = {}
+    monkeypatch.setattr(risk_limits, "ENFORCE_DRAWDOWN_LIMITS", enforce)
     monkeypatch.setattr(reconciliation, "collect_live_snapshot", lambda: snapshot)
     monkeypatch.setattr(kill_switch, "_load_acknowledgements", lambda: set())
     monkeypatch.setattr(kill_switch, "trip", lambda flags, snap: calls.setdefault("trip", flags))
     monkeypatch.setattr(kill_switch, "report", lambda snap: calls.setdefault("report", True))
     monkeypatch.setattr(risk_shadow, "record_drawdown_episodes", lambda snap: calls.setdefault("recorded", True))
-    reconciliation.run_kill_switch_check(report_only=False)                   # even if armed
+    reconciliation.run_kill_switch_check(report_only=report_only)
+    return calls
+
+
+def test_armed_kill_switch_trips_on_a_30pct_fleet_drawdown(monkeypatch):
+    calls = _kill_switch_check(monkeypatch, enforce=True, report_only=False)
+    assert calls["recorded"] and [f["trigger"] for f in calls["trip"]] == ["fleet_drawdown"]
+
+
+def test_report_only_never_trips_even_when_enforced(monkeypatch):
+    calls = _kill_switch_check(monkeypatch, enforce=True, report_only=True)
+    assert "trip" not in calls and calls["report"]
+
+
+def test_record_only_mode_never_trips_on_drawdown(monkeypatch):
+    calls = _kill_switch_check(monkeypatch, enforce=False, report_only=False)
     assert "trip" not in calls and calls["report"] and calls["recorded"]

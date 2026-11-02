@@ -113,12 +113,12 @@ BOT_PROFILES = {
 
     "bot2_spy_qqq": {
         # Momentum's account (canonical id spy_qqq_trend). Since 2 Nov 2026:
-        # FLEET-V1-C1, the equity core alone, as F1's forward control
-        # (kraken-bot/fleet_control_strategy.py). Information only.
-        "display_name":      "Core control",
+        # MOMO-V2, 50 S&P 500 names by 12-1 momentum with brakes on the book
+        # itself; a forward-only paper experiment (kraken-bot/momo_strategy.py).
+        "display_name":      "Momentum",
         "db_id":             1,
-        "strategy_type":     "fleet_v1_control",
-        "strategy_label":    "FLEET-V1-C1: the equity trend core alone (control for F1)",
+        "strategy_type":     "momo_v2",
+        "strategy_label":    "MOMO-V2: 50 S&P 500 stocks by momentum, brakes on the book (paper experiment)",
         "ALPACA_API_KEY":    os.environ.get("ALPACA_BB_API_KEY", ""),
         "ALPACA_SECRET_KEY": os.environ.get("ALPACA_BB_SECRET_KEY", ""),
         "ALPACA_BASE_URL":   "https://paper-api.alpaca.markets",

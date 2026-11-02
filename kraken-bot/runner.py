@@ -134,7 +134,7 @@ from core.bot_registry import active_bot_ids as _registry_active_bot_ids
 _BOT_RUNNERS = {
     "oracle": ("asia_trend_strategy", "run_asia_cycle"),
     "jerome_macro": ("bot3_hard_assets_strategy", "run_bot3_cycle"),
-    "spy_qqq_trend": ("fleet_control_strategy", "run_control_cycle"),   # FLEET-V1-C1 control
+    "spy_qqq_trend": ("momo_strategy", "run_momo_account_cycle"),       # MOMO-V2 (forward-only experiment)
     "forex_ai": ("forex_ai_strategy", "run_forex_cycle"),
 }
 _registered_ids = _registry_active_bot_ids()

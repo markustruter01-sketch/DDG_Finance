@@ -24,8 +24,8 @@ _DETAIL_LEDGER_ALIASES = {
 _DETAIL_INSTRUMENTS = {
     # FLEET-V1-F1 (sleeve_runtime/fleet_live.py); idle cash parked in SGOV.
     "oracle": ["SPY", "QQQ", "SSO", "QLD", "IEF", "GLD", "DBC", "UUP", "SGOV"],
-    # FLEET-V1-C1 control (the core alone); DBMF is sold at its first cycle.
-    "spy_qqq_trend": ["SPY", "QQQ", "SSO", "QLD", "SGOV"],
+    # MOMO-V2: 50 S&P 500 members chosen monthly (not a fixed list); idle cash in SGOV.
+    "spy_qqq_trend": ["SGOV"],
     "jerome_macro": ["BTC/USD", "ETH/USD", "GLD", "SLV"],
     # Forex AI is paused and has no executable trading universe.
     "forex_ai": [],

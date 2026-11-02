@@ -18,8 +18,8 @@ import { useRiskMetrics } from "@/hooks/use-performance";
 import { useExportReport } from "@/hooks/use-report";
 import { useBotHistory, type BotDay } from "@/hooks/use-bot-history";
 import { botColor } from "@/lib/bot-identity";
-import { useFleetV1State } from "@/hooks/use-fleet-v1";
-import { FleetAccountPanel } from "@/components/FleetV1";
+import { useFleetV1State, useMomoV2State } from "@/hooks/use-fleet-v1";
+import { FleetAccountPanel, MomoPanel } from "@/components/FleetV1";
 
 // Chart colours = the brand four (same values as styles/night-glass/tokens.css).
 // Each account has its own colour (lib/bot-identity BOT_COLORS). Only losses get a
@@ -201,6 +201,7 @@ export default function HomePage() {
   const botHistory = useBotHistory(90);
   const risk = useRiskMetrics();
   const fleetV1 = useFleetV1State();
+  const momo = useMomoV2State();
   const report = useExportReport();
 
   const engines: Engine[] = useMemo(() => {
@@ -371,6 +372,11 @@ export default function HomePage() {
             )) : (
               <Panel title="FLEET-V1">
                 <Empty>{fleetV1.isError ? "FLEET-V1 state unavailable. Check the trading API." : "Reading FLEET-V1 state…"}</Empty>
+              </Panel>
+            )}
+            {momo.data ? <MomoPanel momo={momo.data} limits={fleetV1.data?.limits ?? null} /> : (
+              <Panel title="MOMO-V2">
+                <Empty>{momo.isError ? "MOMO-V2 state unavailable. Check the trading API." : "Reading MOMO-V2 state…"}</Empty>
               </Panel>
             )}
           </div>

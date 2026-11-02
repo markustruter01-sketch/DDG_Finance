@@ -6,8 +6,8 @@ EXPECTED_LABELS = {
     "spy_qqq_trend": (
         "Momentum",
         "Momentum",
-        "Core-only control",
-        "Momentum · Core-only control",
+        "Stock momentum (experiment)",
+        "Momentum · Stock momentum (experiment)",
     ),
     "jerome_macro": (
         "Bullion",

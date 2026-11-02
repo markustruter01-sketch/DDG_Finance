@@ -84,7 +84,7 @@ BOT_REGISTRY: dict[str, BotEntry] = {
         display_name="Momentum",
         short_name="Momentum",
         icon="📈",
-        strategy_label="FLEET-V1-C1: the equity trend core alone (control for F1)",
+        strategy_label="MOMO-V2: 50 S&P 500 stocks by momentum, brakes on the book (paper experiment)",
         asset_class="equity_etf",
         exchange="alpaca",
         starting_capital=100_000,
@@ -95,7 +95,7 @@ BOT_REGISTRY: dict[str, BotEntry] = {
         trading_hours="nyse_only",
         cycle_minutes=60,
         color="amber",
-        subtitle="Core-only control",
+        subtitle="Stock momentum (experiment)",
     ),
     "jerome_macro": BotEntry(
         id="jerome_macro",

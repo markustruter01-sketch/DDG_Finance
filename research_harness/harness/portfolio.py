@@ -89,10 +89,11 @@ def simulate(
     max_gross: float = 1.0,
     allow_short: bool = False,
     registration_id: str | None = None,
+    grant: Any = None,
     whole_shares: bool = False,
     stop_pct: float | None = None,
 ) -> SimResult:
-    check_window(end, registration_id)
+    check_window(end, registration_id, grant)
     if stop_pct is not None and not 0 < stop_pct < 1:
         raise ValueError("stop_pct must be between 0 and 1")
     bars = {s: [b for b in bs if b["day"] <= end] for s, bs in bars.items()}

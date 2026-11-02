@@ -8,6 +8,11 @@ Every load is a window: explicit dates, a named dataset, a manifest hash.
 Data lives outside git (default .local/research_data) because vendor data is
 large and licensed; the manifest hash recorded in the ledger is what makes a
 result re-runnable.
+
+Locked datasets (FLEET-V1 onwards): the open dataset is written with
+``locked_from``; its rows must all end before that date. The rows from that
+date are written separately with ``locked=True`` into ``<root>/_locked/<name>``
+and can only be loaded with a ReadGrant (see harness/holdout.py).
 """
 
 from __future__ import annotations
@@ -22,9 +27,10 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
-from research_harness.harness.holdout import check_window
+from research_harness.harness.holdout import ReadGrant, check_locked_read, check_window
 
 DEFAULT_ROOT = Path(os.environ.get("QT_RESEARCH_DATA", ".local/research_data"))
+LOCKED_DIR = "_locked"
 BASE_FIELDS = ("day", "open", "high", "low", "close")
 
 
@@ -61,18 +67,43 @@ class BarStore:
         fields: tuple[str, ...] = BASE_FIELDS,
         positive_fields: tuple[str, ...] | None = None,
         notes: str = "",
+        locked_from: date | None = None,
+        locked: bool = False,
     ) -> dict[str, Any]:
         """Write an immutable dataset. Prices must be > 0; pass
-        positive_fields=() for series that may be zero (interest rates)."""
+        positive_fields=() for series that may be zero (interest rates).
+
+        locked_from: this open dataset's rows must all end before that date;
+            the later rows belong to its locked part.
+        locked: write the locked part of an existing open dataset (rows must
+            all be on or after the open dataset's locked_from)."""
         if fields[0] != "day":
             raise ValueError("first field must be 'day'")
+        if locked and locked_from is not None:
+            raise ValueError("pass locked_from to the open part, locked=True to the locked part")
         positive = fields[1:] if positive_fields is None else positive_fields
-        folder = self.root / dataset
+        bars_by_symbol = {s: list(b) for s, b in bars_by_symbol.items()}
+        if locked:
+            lf = self.manifest(dataset).get("locked_from")
+            if lf is None:
+                raise ValueError(f"open dataset {dataset} declares no locked_from")
+            bound = date.fromisoformat(lf)
+            early = [s for s, bs in bars_by_symbol.items() if any(b["day"] < bound for b in bs)]
+            if early:
+                raise ValueError(f"locked part of {dataset} has rows before {lf}: {early}")
+            folder = self.root / LOCKED_DIR / dataset
+        else:
+            if locked_from is not None:
+                late = [s for s, bs in bars_by_symbol.items() if any(b["day"] >= locked_from for b in bs)]
+                if late:
+                    raise ValueError(f"open dataset {dataset} has rows on/after locked_from "
+                                     f"{locked_from.isoformat()}: {late}")
+            folder = self.root / dataset
         if folder.exists():
             raise FileExistsError(f"dataset {dataset} already exists; datasets are immutable")
         # Build in a temp folder and rename at the end, so a failed pull never
         # leaves a half-written dataset that blocks the name forever.
-        final, folder = folder, self.root / f".{dataset}.partial"
+        final, folder = folder, folder.parent / f".{dataset}.partial"
         if folder.exists():
             shutil.rmtree(folder)
         folder.mkdir(parents=True)
@@ -103,6 +134,10 @@ class BarStore:
             "notes": notes,
             "symbols": symbols,
         }
+        if locked_from is not None:
+            manifest["locked_from"] = locked_from.isoformat()
+        if locked:
+            manifest["locked_part_of"] = dataset
         (folder / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True))
         folder.rename(final)
         return manifest
@@ -117,6 +152,26 @@ class BarStore:
     def manifest_hash(self, dataset: str) -> str:
         return _sha((self.root / dataset / "manifest.json").read_bytes())
 
+    def locked_manifest_hash(self, dataset: str) -> str:
+        """Hash of a dataset's locked part (recorded in the ledger by held-out runs)."""
+        return _sha((self.root / LOCKED_DIR / dataset / "manifest.json").read_bytes())
+
+    def _read_rows(self, folder: Path, dataset: str, symbol: str, start: date, end: date) -> list[dict[str, Any]]:
+        meta = json.loads((folder / "manifest.json").read_text())
+        entry = meta["symbols"].get(symbol)
+        if entry is None:
+            raise KeyError(f"{symbol} not in dataset {dataset}")
+        data = (folder / f"{symbol}.csv").read_bytes()
+        if _sha(data) != entry["sha256"]:
+            raise DataIntegrityError(f"{folder.name}/{symbol}.csv does not match its manifest")
+        reader = csv.DictReader(io.StringIO(data.decode()))
+        out = []
+        for row in reader:
+            day = date.fromisoformat(row["day"])
+            if start <= day <= end:
+                out.append({"day": day, **{k: float(v) for k, v in row.items() if k != "day"}})
+        return out
+
     def load(
         self,
         dataset: str,
@@ -125,22 +180,20 @@ class BarStore:
         start: date,
         end: date,
         registration_id: str | None = None,
+        grant: ReadGrant | None = None,
     ) -> list[dict[str, Any]]:
-        """Bars with start <= day <= end. Refuses held-out reads unless registered."""
-        check_window(end, registration_id)
+        """Bars with start <= day <= end. Refuses held-out reads unless registered,
+        and reads of a dataset's locked rows unless a grant covers them."""
+        check_window(end, registration_id, grant)
         meta = self.manifest(dataset)
-        entry = meta["symbols"].get(symbol)
-        if entry is None:
-            raise KeyError(f"{symbol} not in dataset {dataset}")
-        data = (self.root / dataset / f"{symbol}.csv").read_bytes()
-        if _sha(data) != entry["sha256"]:
-            raise DataIntegrityError(f"{dataset}/{symbol}.csv does not match its manifest")
-        reader = csv.DictReader(io.StringIO(data.decode()))
-        out = []
-        for row in reader:
-            day = date.fromisoformat(row["day"])
-            if start <= day <= end:
-                out.append({"day": day, **{k: float(v) for k, v in row.items() if k != "day"}})
+        out = self._read_rows(self.root / dataset, dataset, symbol, start, end)
+        lf = meta.get("locked_from")
+        if lf is not None and end >= date.fromisoformat(lf):
+            check_locked_read(grant, dataset, symbol, end)
+            locked = self.root / LOCKED_DIR / dataset
+            if not (locked / "manifest.json").exists():
+                raise FileNotFoundError(f"locked part of {dataset} has not been pulled")
+            out += self._read_rows(locked, dataset, symbol, start, end)
         return out
 
     def load_rates(
@@ -151,7 +204,9 @@ class BarStore:
         start: date,
         end: date,
         registration_id: str | None = None,
+        grant: ReadGrant | None = None,
     ) -> dict[date, float]:
         """An annual-rate series (decimal, e.g. 0.05) as {day: rate}."""
-        rows = self.load(dataset, series, start=start, end=end, registration_id=registration_id)
+        rows = self.load(dataset, series, start=start, end=end, registration_id=registration_id,
+                         grant=grant)
         return {r["day"]: r["rate"] for r in rows}

@@ -97,3 +97,7 @@ BUILD_COMMIT
 # Python bytecode
 __pycache__/
 *.pyc
+
+# Locked held-out rows are never committed (FLEET-V1 plan, step 2)
+research_harness/data/_locked/
+.local/research_data/_locked/

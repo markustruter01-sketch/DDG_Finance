@@ -154,25 +154,30 @@ def corr_to(curve: Sequence[CurvePoint], bench: Sequence[CurvePoint], a: date, b
 
 
 # ── runs ──────────────────────────────────────────────────────────────────────
-def _sim(bars, strategy, rf_cash, start, end, stop_pct=None):
+def _sim(bars, strategy, rf_cash, start, end, stop_pct=None, *, whole_shares=False, grant=None):
+    """Exploration: fractional shares, no grant. The held-out runner passes
+    whole_shares=HELDOUT_WHOLE_SHARES and its read grant."""
     return simulate(bars, strategy, costs=COSTS, rf_annual=rf_cash, start=start, end=end,
-                    whole_shares=False, stop_pct=stop_pct)
+                    whole_shares=whole_shares, stop_pct=stop_pct, grant=grant)
 
 
-def run_core(instr, cid, rf_cash, start, end):
+def run_core(instr, cid, rf_cash, start, end, *, whole_shares=False, grant=None):
     log: list = []
     bars = {s: instr[s] for s in UNIVERSE[cid] if s in instr}
-    return _sim(bars, core_v1.make_strategy(cid, log), rf_cash, start, end, core_v1.STOP_PCT), log
+    return _sim(bars, core_v1.make_strategy(cid, log), rf_cash, start, end, core_v1.STOP_PCT,
+                whole_shares=whole_shares, grant=grant), log
 
 
-def run_xasset(instr, rf_cash, start, end):
+def run_xasset(instr, rf_cash, start, end, *, whole_shares=False, grant=None):
     log: list = []
     bars = {s: instr[s] for s in xasset_v1.LINES if s in instr}
-    return _sim(bars, xasset_v1.make_strategy(log), rf_cash, start, end), log
+    return _sim(bars, xasset_v1.make_strategy(log), rf_cash, start, end,
+                whole_shares=whole_shares, grant=grant), log
 
 
-def run_hold(instr, rf_cash, start, end):
-    return _sim({"SPY": instr["SPY"]}, lambda d, v: {"SPY": 1.0}, rf_cash, start, end)
+def run_hold(instr, rf_cash, start, end, *, whole_shares=False, grant=None):
+    return _sim({"SPY": instr["SPY"]}, lambda d, v: {"SPY": 1.0}, rf_cash, start, end,
+                whole_shares=whole_shares, grant=grant)
 
 
 def run_a0(instr, rf_cash, start, end):

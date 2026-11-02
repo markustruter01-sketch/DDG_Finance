@@ -11,8 +11,9 @@ def _pos(symbol, qty, price):
     return {"symbol": symbol, "qty": qty, "market_value": qty * price, "side": "long"}
 
 
-def _ledger(monkeypatch, qty, pending=None):
+def _ledger(monkeypatch, qty, pending=None, selling=()):
     monkeypatch.setattr(rec, "_vault_ledger", lambda _b: (qty, pending or {"BIL": 0.0, "VOO": 0.0}))
+    monkeypatch.setattr(rec, "_vault_sales_in_flight", lambda _b: set(selling))
 
 
 def test_matching_vault_has_no_finding(monkeypatch):
@@ -58,3 +59,14 @@ def test_unreadable_vault_ledger_is_a_check_failure(monkeypatch):
     monkeypatch.setattr(rec, "_vault_ledger", boom)
     out = rec._vault_mismatches("oracle", [_pos("BIL", 1, 91.6)], VAULT)
     assert out and out[0]["kind"] == "reconciliation_check_failed"
+
+
+def test_a_vault_sale_in_flight_is_not_a_mismatch(monkeypatch):
+    # 3 Nov 2026: VOO sold at the broker, ledger not yet booked -> the kill
+    # switch paused every account. A submitted liquidation is a sale in progress.
+    _ledger(monkeypatch, {"BIL": 25.88, "VOO": 3.366159}, selling={"VOO"})
+    broker = [_pos("BIL", 25.88, 91.6), _pos("VOO", 0.000000982, 700.0)]
+    assert rec._vault_mismatches("oracle", broker, VAULT) == []
+    # Once the liquidation is complete the ledger must agree again.
+    _ledger(monkeypatch, {"BIL": 25.88, "VOO": 3.366159})
+    assert [f["symbol"] for f in rec._vault_mismatches("oracle", broker, VAULT)] == ["VOO"]

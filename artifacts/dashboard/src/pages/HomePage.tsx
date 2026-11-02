@@ -394,7 +394,7 @@ export default function HomePage() {
             </div>
           </Panel>
 
-          <div className="pair">
+          <div className="pair accounts">
             {fleetV1.data ? fleetV1.data.accounts.map((a) => (
               <FleetAccountPanel key={a.bot_id} account={a} state={fleetV1.data!} />
             )) : (

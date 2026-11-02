@@ -70,10 +70,13 @@ BOT_PROFILES = {
         # Stage 5 merge (2026-08-11): LatAm (EWZ/EWW/ECH) + Frontier (EEM/EZA/EPOL/GREK/TUR)
         # merged into one 8-ETF Emerging Markets bot. Resolves the two-bots-one-account
         # collision. Jerome account (6da42513) is now the sole account for this bot.
-        "display_name":      "Emerging Markets",
+        # FLEET-V1-C1 owns this account since 3 Nov 2026 (kraken-bot/bullion_strategy.py):
+        # F1's equity core without the cross-asset sleeve. The EM settings below
+        # are history; the runner no longer calls bot3_hard_assets_strategy.
+        "display_name":      "Bullion",
         "db_id":             2,
-        "strategy_type":     "etf_trend_em",
-        "strategy_label":    "EM ETF Trend (EWZ/EWW/ECH/EEM/EZA/EPOL/GREK/TUR)",
+        "strategy_type":     "fleet_v1_c1",
+        "strategy_label":    "FLEET-V1-C1: geared S&P/Nasdaq trend core (F1 without the cross-asset sleeve)",
         # ── Alpaca account (Jerome's dedicated paper account — sole EM bot) ───
         "ALPACA_API_KEY":    os.environ.get("ALPACA_JEROME_API_KEY", ""),
         "ALPACA_SECRET_KEY": os.environ.get("ALPACA_JEROME_SECRET_KEY", ""),

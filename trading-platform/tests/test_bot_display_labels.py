@@ -12,8 +12,8 @@ EXPECTED_LABELS = {
     "jerome_macro": (
         "Bullion",
         "Bullion",
-        "Paused (owner decision pending)",
-        "Bullion · Paused (owner decision pending)",
+        "Equity trend core",
+        "Bullion · Equity trend core",
     ),
 }
 

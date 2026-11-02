@@ -82,21 +82,25 @@ def test_clear_halt_refuses_an_account_that_is_not_halted(monkeypatch):
 
 
 def test_only_fleet_accounts_are_served():
+    from sleeve_runtime.fleet_live import C1, F1
+    assert fleet_v1._variant("oracle") is F1
+    assert fleet_v1._variant("jerome_macro") is C1          # Bullion since 3 Nov 2026
     with pytest.raises(HTTPException) as e:
-        fleet_v1._variant("jerome_macro")
+        fleet_v1._variant("spy_qqq_trend")                   # MOMO-V2 has its own route
     assert e.value.status_code == 404
 
 
-def test_halt_clearing_covers_both_governed_accounts():
-    from sleeve_runtime.fleet_live import F1
+def test_halt_clearing_covers_all_three_governed_accounts():
+    from sleeve_runtime.fleet_live import C1, F1
     from sleeve_runtime.momo_live import STATE_KEY
-    assert fleet_v1.HALT_STATE_KEYS == {"oracle": F1.state_key, "spy_qqq_trend": STATE_KEY}
+    assert fleet_v1.HALT_STATE_KEYS == {"oracle": F1.state_key, "spy_qqq_trend": STATE_KEY,
+                                        "jerome_macro": C1.state_key}
     req = fleet_v1.ClearHaltRequest(confirmation_token="x")
     import os
     os.environ[fleet_v1.CLEAR_CONFIRMATION_ENV_VAR] = "x"
     try:
         with pytest.raises(HTTPException) as e:
-            asyncio.run(fleet_v1.fleet_v1_clear_halt("jerome_macro", req))
+            asyncio.run(fleet_v1.fleet_v1_clear_halt("forex_ai", req))
         assert e.value.status_code == 404
     finally:
         del os.environ[fleet_v1.CLEAR_CONFIRMATION_ENV_VAR]

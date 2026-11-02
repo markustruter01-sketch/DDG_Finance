@@ -2,7 +2,12 @@
 
 Timing (no look-ahead): the strategy sees bars up to and including day t's
 close and returns target weights; they are traded at day t+1's OPEN. A
-symbol with no bar on t+1 keeps its order pending until its next bar.
+symbol with no bar on t+1 keeps its order pending until its next bar; the
+other holdings are left alone meanwhile (fixed 2 Nov 2026: they used to be
+read as weight 0 and sold the next day, which emptied any stock book as soon
+as one name missed a bar). A holding with no bar for DELISTED_AFTER sessions
+is closed at its last close with exit "delisted" (an acquisition pays cash
+at about the last price; a bankruptcy usually prints its collapse first).
 
 Cash earns the T-bill rate; borrowed cash pays T-bill + financing spread;
 shorts pay borrow. Trade costs come from the CostModel. Weights are fractions
@@ -30,6 +35,7 @@ from research_harness.harness.metrics import TRADING_DAYS, CurvePoint, rf_daily_
 from research_harness.harness.sizing import stop_price, target_shares
 
 EPS = 1e-9
+DELISTED_AFTER = 10          # sessions without a bar before a holding is treated as delisted
 
 
 class StrategyError(ValueError):
@@ -109,6 +115,7 @@ def simulate(
     last: dict[str, float] = {}
     episodes: dict[str, dict[str, Any]] = {}
     pending: dict[str, float] | None = None
+    missing: dict[str, int] = {}
     stops: dict[str, float] = {}
 
     def trade(sym: str, qty: float, price: float, day: date, reason: str = "rebalance") -> None:
@@ -141,8 +148,8 @@ def simulate(
                 for s, q in shares.items()
             )
             carry: dict[str, float] = {}
-            for sym in sorted(set(pending) | set(shares)):
-                w = pending.get(sym, 0.0)
+            for sym in sorted(pending):            # held names not in pending keep their size
+                w = pending[sym]
                 bar = by_day[sym].get(day)
                 if bar is None:
                     carry[sym] = w
@@ -171,6 +178,17 @@ def simulate(
                 elif q < 0 and bar["high"] >= stop:
                     trade(sym, -q, max(stop, bar["open"]), day, reason="stop")
                     res.stops_hit += 1
+        # 1c. Delisted holdings: no bar for DELISTED_AFTER sessions -> closed at the last close.
+        for sym in sorted(shares):
+            if day in by_day[sym]:
+                missing[sym] = 0
+            else:
+                missing[sym] = missing.get(sym, 0) + 1
+                if missing[sym] >= DELISTED_AFTER and sym in last:
+                    trade(sym, -shares[sym], last[sym], day, reason="delisted")
+                    if pending is not None:
+                        pending.pop(sym, None)
+                        pending = pending or None
         # 2. Overnight carry: cash interest, financing, short borrow.
         for s, b in ((s, by_day[s].get(day)) for s in bars):
             if b is not None:

@@ -163,3 +163,19 @@ Factual; no rule changed. Items marked **Fable** need a decision at step 3.
   - `fetch.py fred --dataset momo_rates_fred --series DTB3 ...` the same two parts
 - **Run.** `python -m research_harness.explore.momo_v1` (on Replit, where the
   panel is). About 5 minutes, mostly the 500-draw null.
+
+## Amendment 2 — exploration run 1 VOID (Fable 5.1, 2 Nov 2026 ~18:40 Brisbane)
+Run 1 (exploration_log.jsonl, code 954825d) reported M1 9.2% CAGR / Sharpe
+0.56 / max drawdown −15.8% and verdict FAILED. It is void: a defect in
+`harness/portfolio.simulate` made the book sell every holding the day after
+any rebalance in which one name had no bar on the fill day (a carried order
+left the other holdings with an implied target of zero). From January 2020,
+when a December pick stopped trading, the carried order persisted and the
+book was emptied after every rebalance (average gross 24% against a dial
+average of 73%). Diagnosed on the real data, read-only; no rule was touched.
+Fix (same commit as this note): a carried order leaves other holdings alone;
+a holding with no bar for 10 sessions is closed at its last close with exit
+"delisted" (acquisition cash at about the last price; declared judgment
+call). FLEET-V1 is unaffected: its instruments are built on the S&P
+calendar and never miss a bar (verified on its data before run 2).
+Run 2 is the exploration run of record. Nothing else changes.

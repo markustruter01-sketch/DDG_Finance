@@ -354,3 +354,42 @@ def test_parse_fred_csv_handles_both_headers_and_missing_values():
                         {"day": date(2020, 1, 7), "rate": 0.0}]
     with pytest.raises(RuntimeError):
         parse_fred_csv("<html>blocked</html>")
+
+
+# ── 2 Nov 2026: a carried order must not sell the rest of the book ──────────
+def _bars_simple(days, px, skip=()):
+    return [{"day": d, "open": px, "high": px, "low": px, "close": px} for d in days if d not in skip]
+
+
+def test_carried_order_leaves_other_holdings_alone_and_delisting_closes_a_dead_name():
+    from datetime import date, timedelta
+    from research_harness.harness.costs import CostModel
+    from research_harness.harness.portfolio import DELISTED_AFTER, simulate
+
+    days, d = [], date(2020, 1, 1)
+    while len(days) < 40:
+        if d.weekday() < 5:
+            days.append(d)
+        d += timedelta(days=1)
+    # B has no bar on the fill day (days[1]); C stops trading after days[5]
+    bars = {"A": _bars_simple(days, 10.0), "B": _bars_simple(days, 20.0, skip={days[1]}),
+            "C": _bars_simple(days[:6], 30.0)}
+    calls = {"n": 0}
+
+    def strat(day, view):
+        calls["n"] += 1
+        return {"A": 0.3, "B": 0.3, "C": 0.3} if day == days[0] else None
+
+    costs = CostModel(commission_bps=0.0, half_spread_bps=0.0, slippage_bps=0.0,
+                      short_borrow_bps_yr=0.0, financing_spread_bps_yr=0.0)
+    res = simulate(bars, strat, costs=costs, rf_annual=None, start=days[0], end=days[-1])
+    # A and C filled on days[1]; B carried to days[2]. Nothing was sold on days[2].
+    assert not [t for t in res.trades if t["symbol"] in ("A",) ]          # A never closed
+    b_opened = [t for t in res.trades if t["symbol"] == "B"]
+    assert not b_opened                                                    # B still held at the end
+    # C's last bar is days[5]; it is closed as delisted DELISTED_AFTER sessions later, at its last close.
+    c = [t for t in res.trades if t["symbol"] == "C"]
+    assert len(c) == 1 and c[0]["exit"] == "delisted"
+    assert c[0]["close"] == days[5 + DELISTED_AFTER]
+    _, equity, gross = res.curve[-1]
+    assert gross == pytest.approx(0.6, abs=0.02)                          # A and B still held, C gone to cash

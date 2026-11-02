@@ -93,7 +93,9 @@ def explore(put: dict[date, float], spy_tr: dict[date, float], spx: dict[date, f
     a, b = window
     cash = fv.cash_rate(dtb3)
     days = sorted(put)
-    rf = dict(zip(days, rf_daily_for(days, cash) or []))
+    # V2's cash leg is PUT's T-bill collateral (full DTB3), not the account's
+    # idle-cash rate; the account rate applies to the (1 - N) part in model().
+    rf = dict(zip(days, rf_daily_for(days, dtb3) or []))
     v2 = vol_v1.v2_levels(put, spx, rf)
 
     logs: dict[str, list] = {"V1": [], "V2": [], "N1": []}

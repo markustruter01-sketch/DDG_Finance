@@ -1,0 +1,33 @@
+{
+  "id": "FLEET-V1-F1",
+  "registered_at": "2026-11-02 ~16:35 Brisbane, after ONE exploration run (1987-2010), BEFORE any 2011+ row was read",
+  "source_document": "research_harness/explore/FLEET-V1-PLAN.md (incl. Amendment 1 and the step 5 review)",
+  "hypothesis": "A fleet of 65% geared equity trend core (3-vote TSMOM on S&P 500 TR, vol-scaled, up to 1.5x via 2x ETFs, 60/40 S&P/Nasdaq-100, 20% stops) and 35% long-only cross-asset trend (IEF, GLD, DBC, UUP; TSMOM votes >= 2; (0.10/vol63)/4 weights) beats S&P 500 total return on CAGR, Sharpe and max drawdown after costs on unseen data (2011-2020).",
+  "candidate": "FLEET-V1 F1 exactly as the plan declares. Code: research_harness/sleeves/core_v1.py (cid C1), research_harness/sleeves/xasset_v1.py, combined by research_harness/harness/fleet.fleet_curve with constant weights 0.65/0.35 rebalanced daily. Held-out runner: research_harness/heldout/fleet_v1_f1.py. Whole shares (real-ETF era throughout the window); SymbolCosts as in explore/fleet_v1.COSTS; cash earns DTB3 - 0.50% floored at 0.",
+  "candidates_declared": 4,
+  "prior_variants_tried": "At least 15 trend-timing attempts before this plan (GEAR-V2-PLAN's count) + 4 FLEET-V1 candidates = N = 19 trials for the deflated Sharpe ratio.",
+  "selection": "Plan rule (a)-(d) on exploration 1987-01-01..2010-12-31: F1 was the only candidate to satisfy all four (CAGR 10.68% vs B 9.35%; Sharpe excess T-bills 0.583 vs B 0.351, N1 0.340, N2 95th pct 0.472; max drawdown -20.35%, -22.11% after haircut; C1 failed (c) at -36.5%, C2 failed (b),(c),(d), F2 failed (a)). Rolling: F1 beat B's Sharpe in 13 of 15 ten-year windows (pass bar 5 met). Exploration log entry: research_harness/exploration_log.jsonl, code c010d73.",
+  "universe": ["SPY", "SSO", "QQQ", "QLD", "IEF", "GLD", "DBC", "UUP"],
+  "window": "Held-out 2011-01-01 .. 2020-12-31 (the test). 2021-01-01 .. 2026-10-31 is SPENT (read twice before for the same core) and is reported for information only. Bars before 2011 are warm-up and the real-ETF history the signals need.",
+  "lock": {
+    "datasets": {
+      "fleet_idx_y": ["^GSPC", "^NDX", "^SPGSCI", "DX-Y.NYB"],
+      "fleet_etf_y": ["SPY", "SSO", "QQQ", "QLD", "IEF", "GLD", "DBC", "UUP"],
+      "fleet_rates_fred": ["DTB3", "DGS10"],
+      "fleet_shiller": ["SP500"]
+    },
+    "end": "2026-10-31"
+  },
+  "data": {
+    "fleet_idx_y": "a24777e33d989de2304e04bbdd1039ee4212d426b6d36f228b2d2b555533d198",
+    "fleet_etf_y": "8d9d910c5e4950cc2949e1566f938de0b35f9628886d8fbdd66b2f0b2d4e749f",
+    "fleet_rates_fred": "5f77d56a635328c538be0b2dbb3ff69690cdcce7199dbbc764d79bce68c4ee27",
+    "fleet_shiller": "930fe096f5ecf845d30f6baaaeefec2b7e694970a7ea5cec2cd58748d9af70b2",
+    "note": "open-part manifest hashes; the locked parts' hashes are recorded by the held-out run"
+  },
+  "sizing": "Core: E = min(1.5, 1.5 x votes/3 x min(1, 0.15/vol20)), E < 0.10 -> cash; 1x at m(2-E) and 2x at m(E-1) x 0.99 when E > 1. Cross-asset: (0.10/vol63)/4 per line on, cap 0.40, gross <= 1 pro rata.",
+  "leverage": "Up to 1.5x market exposure in the core via SSO/QLD; no borrowing (gross <= 1.0); no shorts.",
+  "costs": "assumed: 0 commission; 5 bp per trade SPY/QQQ/IEF/GLD, 10 bp SSO/QLD/DBC/UUP; SEC fee 0.3 bp on sales; cash DTB3 - 0.50% floored at 0; all included.",
+  "pass_bar": "All over 2011-01-01..2020-12-31 against B (SPY hold) after costs: 1) CAGR >= B's. 2) Sharpe (excess T-bills) >= B's + 0.10. 3) Max drawdown no worse than -25% AND smaller than B's (no haircut: real ETFs throughout). 4) Deflated Sharpe ratio > 0.95 with N = 19, variance of per-period Sharpe across the 4 exploration candidates = 1.3526596822297216e-05, held-out skew and kurtosis. 5) Rolling check met in exploration (13 of 15 >= 70%). Run ONCE; a fail is reported as a fail. Known defects carried: pre-2006 commodity line overstated (irrelevant to this window); Yahoo DX-Y.NYB daily timestamp smear.",
+  "exploration_var_sharpe_per_period": 1.3526596822297216e-05
+}

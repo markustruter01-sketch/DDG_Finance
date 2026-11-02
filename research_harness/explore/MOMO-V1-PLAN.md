@@ -129,3 +129,37 @@ panel (on Replit), `sleeves/momo_v1.py`, `explore/momo_v1.py`, tests
 core_v1, stops). 3. Fable: review, one exploration run, selection,
 registration, one held-out run. 4. Opus: live runtime `sleeve_runtime/momo_live.py`
 on Momentum's account, dashboard panel. 5. Fable: order-path review before merge.
+
+## Amendment 1 — build facts (Opus 5.5, 2 Nov 2026; no real data read)
+Factual; no rule changed. Items marked **Fable** need a decision at step 3.
+- **Survivorship (Fable).** The research panel's stock list comes from the
+  stored Alpaca asset table, which describes listings *today*: experiments
+  18-19's gates drop every stock that is inactive or untradable now, i.e.
+  every stock delisted since 2018 (bankruptcies, buy-outs). "Survivorship-
+  aware" above is therefore not true of the panel as experiments 18-19 used
+  it. `fetch.py momo_panel` requires `--delisted include|exclude` with no
+  default. `include` keeps inactive stocks whose bars exist in the price
+  table (it only helps if the table still holds their history; the pull
+  reports how many stored assets are inactive). The choice is written into
+  the dataset manifest.
+- **Lock.** The legacy lock refuses any read past 2020-12-31 without a
+  registration. MOMO-V1's declared exploration end (2024-12-31) is now an
+  explicit entry in `holdout.DECLARED_EXPLORATION_END`, checked against this
+  file by a test; `simulate`, `BarStore.load` and FLEET-V1's helpers take
+  `plan="MOMO-V1"`. Rows from 2025-01-01 sit in the datasets' locked parts
+  and still need a registry grant.
+- **History rule.** "At least 252 sessions of history" is implemented as
+  253 closes, because 12-1 momentum needs the close 252 sessions ago.
+- **M2's split** is F1's: stocks (2 - E) x 0.99, SSO (E - 1) x 0.99 when E > 1.
+- **Stops.** The simulator's 20% stop (reference = the fill's open) handles
+  exits; the strategy re-derives which names were stopped, from the same
+  bars, only at a mid-month resize, so a stopped name is not re-bought
+  before the next ranking (tested against the simulator).
+- **Data to pull (Replit; datasets stay there, too large for git):**
+  - `fetch.py momo_panel --dataset momo_panel --start 2018-01-01 --end 2026-10-31 --locked-from 2025-01-01 --universe-from 2019-02-01 --delisted <Fable>`
+    (writes both parts; the stock set is every stock in the top-500 universe in any month 2019-02..2026-10,
+    which leaves every monthly universe exactly as on the full panel)
+  - `fetch.py yahoo --dataset momo_etf_y --symbols SPY,SSO,QQQ,QLD,IEF,GLD,DBC,UUP --start 2018-01-01 --end 2024-12-31 --locked-from 2025-01-01`, then the same with `--locked --start 2025-01-01 --end 2026-10-31`
+  - `fetch.py fred --dataset momo_rates_fred --series DTB3 ...` the same two parts
+- **Run.** `python -m research_harness.explore.momo_v1` (on Replit, where the
+  panel is). About 5 minutes, mostly the 500-draw null.

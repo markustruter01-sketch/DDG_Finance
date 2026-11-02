@@ -154,25 +154,26 @@ def corr_to(curve: Sequence[CurvePoint], bench: Sequence[CurvePoint], a: date, b
 
 
 # ── runs ──────────────────────────────────────────────────────────────────────
-def _sim(bars, strategy, rf_cash, start, end, stop_pct=None, *, whole_shares=False, grant=None):
+def _sim(bars, strategy, rf_cash, start, end, stop_pct=None, *, whole_shares=False, grant=None, plan=None):
     """Exploration: fractional shares, no grant. The held-out runner passes
-    whole_shares=HELDOUT_WHOLE_SHARES and its read grant."""
+    whole_shares=HELDOUT_WHOLE_SHARES and its read grant. ``plan``: another
+    plan running F1 as a control inside its own declared exploration window."""
     return simulate(bars, strategy, costs=COSTS, rf_annual=rf_cash, start=start, end=end,
-                    whole_shares=whole_shares, stop_pct=stop_pct, grant=grant)
+                    whole_shares=whole_shares, stop_pct=stop_pct, grant=grant, plan=plan)
 
 
-def run_core(instr, cid, rf_cash, start, end, *, whole_shares=False, grant=None):
+def run_core(instr, cid, rf_cash, start, end, *, whole_shares=False, grant=None, plan=None):
     log: list = []
     bars = {s: instr[s] for s in UNIVERSE[cid] if s in instr}
     return _sim(bars, core_v1.make_strategy(cid, log), rf_cash, start, end, core_v1.STOP_PCT,
-                whole_shares=whole_shares, grant=grant), log
+                whole_shares=whole_shares, grant=grant, plan=plan), log
 
 
-def run_xasset(instr, rf_cash, start, end, *, whole_shares=False, grant=None):
+def run_xasset(instr, rf_cash, start, end, *, whole_shares=False, grant=None, plan=None):
     log: list = []
     bars = {s: instr[s] for s in xasset_v1.LINES if s in instr}
     return _sim(bars, xasset_v1.make_strategy(log), rf_cash, start, end,
-                whole_shares=whole_shares, grant=grant), log
+                whole_shares=whole_shares, grant=grant, plan=plan), log
 
 
 def run_hold(instr, rf_cash, start, end, *, whole_shares=False, grant=None):

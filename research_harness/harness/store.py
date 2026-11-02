@@ -181,10 +181,13 @@ class BarStore:
         end: date,
         registration_id: str | None = None,
         grant: ReadGrant | None = None,
+        plan: str | None = None,
     ) -> list[dict[str, Any]]:
         """Bars with start <= day <= end. Refuses held-out reads unless registered,
-        and reads of a dataset's locked rows unless a grant covers them."""
-        check_window(end, registration_id, grant)
+        and reads of a dataset's locked rows unless a grant covers them.
+        ``plan``: an exploration read inside the plan's declared window
+        (holdout.DECLARED_EXPLORATION_END); locked rows still need a grant."""
+        check_window(end, registration_id, grant, plan)
         meta = self.manifest(dataset)
         out = self._read_rows(self.root / dataset, dataset, symbol, start, end)
         lf = meta.get("locked_from")
@@ -205,8 +208,9 @@ class BarStore:
         end: date,
         registration_id: str | None = None,
         grant: ReadGrant | None = None,
+        plan: str | None = None,
     ) -> dict[date, float]:
         """An annual-rate series (decimal, e.g. 0.05) as {day: rate}."""
         rows = self.load(dataset, series, start=start, end=end, registration_id=registration_id,
-                         grant=grant)
+                         grant=grant, plan=plan)
         return {r["day"]: r["rate"] for r in rows}

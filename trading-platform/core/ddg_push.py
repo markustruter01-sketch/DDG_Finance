@@ -26,7 +26,8 @@ _DETAIL_INSTRUMENTS = {
     "oracle": ["SPY", "QQQ", "SSO", "QLD", "IEF", "GLD", "DBC", "UUP", "SGOV"],
     # MOMO-V2: 50 S&P 500 members chosen monthly (not a fixed list); idle cash in SGOV.
     "spy_qqq_trend": ["SGOV"],
-    "jerome_macro": ["BTC/USD", "ETH/USD", "GLD", "SLV"],
+    # FLEET-V1-C1: the equity core's four ETFs; idle cash parked in SGOV.
+    "jerome_macro": ["SPY", "QQQ", "SSO", "QLD", "SGOV"],
     # Forex AI is paused and has no executable trading universe.
     "forex_ai": [],
 }

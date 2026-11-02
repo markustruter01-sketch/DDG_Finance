@@ -191,6 +191,8 @@ table.ng .money, table.ng th.money { font-family: var(--ng-mono); text-align: ri
 .home-right .chart { flex: none; height: clamp(120px, 16vh, 260px); min-height: 0; }
 .pair { min-height: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .pair > .panel { height: clamp(190px, 24vh, 340px); overflow: auto; }
+.pair.accounts { grid-template-columns: repeat(3, minmax(0, 1fr)); }   /* Atlas, Bullion, Momentum */
+.pair.accounts .panel-head h2 { font-size: 13.5px; }
 .engines { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .engine { gap: 8px; }
 .engine .panel-head { flex-wrap: wrap; row-gap: 2px; }
@@ -232,7 +234,7 @@ table.ng .money, table.ng th.money { font-family: var(--ng-mono); text-align: ri
 }
 @media (max-width: 640px) {
   .home-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .pair { grid-template-columns: 1fr; }
+  .pair, .pair.accounts { grid-template-columns: 1fr; }
   .donut { grid-template-columns: 1fr; }
   .donut-chart { height: 160px; }
 }

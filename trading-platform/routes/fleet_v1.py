@@ -30,8 +30,10 @@ fleet_v1_router = APIRouter()
 REPO_ROOT = Path(__file__).resolve().parents[2]
 EXPLORATION_LOG = REPO_ROOT / "research_harness" / "exploration_log.jsonl"
 LEDGER = REPO_ROOT / "research_harness" / "ledger.jsonl"
-ACCOUNTS = {"oracle": "FLEET-V1-F1"}          # Momentum's account runs MOMO-V2 since 2 Nov (routes/momo_v2.py)
-ROLE = {"oracle": "The fleet (65% equity core + 35% cross-asset)"}
+# Momentum's account runs MOMO-V2 since 2 Nov (routes/momo_v2.py); Bullion runs C1 since 3 Nov.
+ACCOUNTS = {"oracle": "FLEET-V1-F1", "jerome_macro": "FLEET-V1-C1"}
+ROLE = {"oracle": "The fleet (65% equity core + 35% cross-asset)",
+        "jerome_macro": "The equity core alone (F1 without the cross-asset sleeve)"}
 CLEAR_CONFIRMATION_ENV_VAR = "KILL_SWITCH_RESET_CONFIRMATION"    # same owner token as a kill-switch reset
 PLAN_ID = "FLEET-V1"
 REGISTRATION = "FLEET-V1-F1"
@@ -209,7 +211,7 @@ async def fleet_v1_record() -> dict[str, Any]:
 
 
 # Every account whose runtime keeps a drawdown governor in bots_state.metadata.
-HALT_STATE_KEYS = {"oracle": "fleet_v1_f1", "spy_qqq_trend": "momo_v2"}
+HALT_STATE_KEYS = {"oracle": "fleet_v1_f1", "spy_qqq_trend": "momo_v2", "jerome_macro": "fleet_v1_c1"}
 
 
 class ClearHaltRequest(BaseModel):

@@ -17,6 +17,7 @@ export const botColor = (id?: string | null) => (id && BOT_COLORS[id]) || "rgba(
 
 export interface BotIdentity {
   canonicalId: string;
+  code: string;
   displayName: string;
   subtitle: string;
   shortName: string;
@@ -26,6 +27,7 @@ export interface BotIdentity {
 function makeIdentity(id: string, entry?: BotRegistryEntry): BotIdentity {
   return {
     canonicalId: entry?.id ?? id,
+    code: entry?.code || id,
     displayName: entry?.display_name ?? id,
     subtitle: entry?.subtitle ?? "",
     shortName: entry?.short_name ?? id,

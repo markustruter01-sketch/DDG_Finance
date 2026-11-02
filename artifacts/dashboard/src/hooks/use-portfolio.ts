@@ -135,6 +135,7 @@ export interface FleetEquityData {
 
 export interface BotRegistryEntry {
   id: string;
+  code?: string;              // "Bot 1" … the account's standing code; ids never change
   display_name: string;
   subtitle: string;
   short_name: string;

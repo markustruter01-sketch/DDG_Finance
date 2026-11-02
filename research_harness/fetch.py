@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -387,9 +387,72 @@ def fetch_momo_panel(store: BarStore, dataset: str, start: str, end: str, locked
                                positive_fields=("open", "high", "low", "close"), notes=note, locked=True)
 
 
+CBOE_PUT_CSV = "https://cdn.cboe.com/api/global/us_indices/daily_prices/PUT_History.csv"
+
+
+def _parse_cboe_day(text: str) -> date:
+    text = text.strip()
+    for fmt in ("%m/%d/%Y", "%Y-%m-%d", "%m/%d/%y"):
+        try:
+            return datetime.strptime(text, fmt).date()
+        except ValueError:
+            continue
+    raise ValueError(f"unrecognised CBOE date {text!r}")
+
+
+def parse_cboe_index_csv(text: str, symbol: str = "PUT") -> list[dict]:
+    """CBOE's daily index history CSV: optional disclaimer lines, then a header
+    with a DATE column and either CLOSE or the index's own name (PUT), then rows."""
+    import csv as _csv
+
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    start = next((i for i, ln in enumerate(lines) if ln.strip().upper().startswith("DATE")), None)
+    if start is None:
+        raise RuntimeError(f"CBOE {symbol} CSV: no DATE header in the first lines: {lines[:3]}")
+    reader = _csv.reader(lines[start:])
+    header = [h.strip().upper() for h in next(reader)]
+    col = next((header.index(c) for c in ("CLOSE", symbol.upper()) if c in header), None)
+    if col is None:
+        raise RuntimeError(f"CBOE {symbol} CSV: no CLOSE or {symbol} column in {header}")
+    rows = {}
+    for rec in reader:
+        if len(rec) <= col or not rec[0].strip() or not rec[col].strip():
+            continue
+        day = _parse_cboe_day(rec[0])
+        close = float(rec[col].replace(",", ""))
+        if close > 0:
+            rows[day] = {"day": day, "close": close}
+    if not rows:
+        raise RuntimeError(f"CBOE {symbol} CSV contained no rows")
+    return [rows[d] for d in sorted(rows)]
+
+
+def fetch_cboe_put(store: BarStore, dataset: str, start: str, end: str, http_get=None, **lock) -> dict:
+    """The CBOE S&P 500 PutWrite index (PUT), daily closes (VOL-V1-PLAN.md, "Data").
+    There is no declared fallback: if this download fails the plan stops."""
+    if http_get is None:
+        import httpx
+
+        def http_get(url, params=None):
+            return httpx.get(url, params=params, timeout=60, follow_redirects=True,
+                             headers={"User-Agent": "quant-terminal research (VOL-V1 data pull)"})
+    first, last = date.fromisoformat(start), date.fromisoformat(end)
+    resp = http_get(CBOE_PUT_CSV)
+    resp.raise_for_status()
+    rows = [r for r in parse_cboe_index_csv(resp.text, "PUT") if first <= r["day"] <= last]
+    if not rows:
+        raise RuntimeError(f"CBOE PUT: no rows in {start}..{end}")
+    return store.write_dataset(
+        dataset, source=f"CBOE PUT index daily history {CBOE_PUT_CSV} {start}..{end}",
+        bars_by_symbol={"PUT": rows}, fields=("day", "close"),
+        notes="CBOE S&P 500 PutWrite index (PUT) daily close; fully T-bill collateralised, no costs", **lock,
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("kind", choices=("fx", "etf", "tbill", "coinbase", "yahoo", "fred", "shiller", "momo_panel"))
+    ap.add_argument("kind", choices=("fx", "etf", "tbill", "coinbase", "yahoo", "fred", "shiller", "momo_panel",
+                                     "cboe_put"))
     ap.add_argument("--dataset", required=True)
     ap.add_argument("--to")
     ap.add_argument("--symbols")
@@ -421,6 +484,8 @@ def main(argv: list[str] | None = None) -> int:
         m = fetch_momo_panel(store, a.dataset, a.start, a.end, a.locked_from, a.universe_from, a.delisted)
         print(f"open part manifest hash: {store.manifest_hash(a.dataset)}")
         a.locked = True
+    elif a.kind == "cboe_put":
+        m = fetch_cboe_put(store, a.dataset, a.start, a.end, **lock)
     elif a.kind == "coinbase":
         m = fetch_coinbase(store, a.dataset, a.symbols.split(","), a.start, a.end)
     else:

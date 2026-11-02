@@ -394,3 +394,17 @@ mtime_ms = 1790883671050
 storage_uri = "gcs://replit-rams-assets-worf/rams/assets/repl:479b9041-b193-4ed4-a556-02be48b883b3/2b5a2d83-b64d-4480-821e-ba1cfbf4c55c/df29eece-d549-4ca0-bfbb-9339a9183e85"
 storage_version_token = "1790883679134766"
 content_type = "text/html"
+
+[[outputs]]
+id = "glUDHPRyRl27ezlqcwOv7"
+uri = "file://generated-artifacts/momo-panel-fetch-output.txt"
+type = "text"
+title = "MOMO panel fetch output"
+description = "Complete stdout from successful command (a), 1,176 lines."
+logical_id = "5a5796da-1cfb-4581-9b7f-58854609ce27"
+content_hash = "sha256:0cdb1debf096b2208cafee39e5ab88fc8fb9738164d6d1826c4a0ff888cfe4a5"
+size = 69209
+mtime_ms = 1793606015116
+storage_uri = "gcs://replit-rams-assets-worf/rams/assets/repl:479b9041-b193-4ed4-a556-02be48b883b3/5a5796da-1cfb-4581-9b7f-58854609ce27/8be9e488-3171-437c-a680-fa5e9c6184aa"
+storage_version_token = "1793606022487657"
+content_type = "text/plain"

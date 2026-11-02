@@ -1,0 +1,64 @@
+{
+  "dataset": "momo_etf_y",
+  "fetched_at": "2026-11-02T07:51:52.279190+00:00",
+  "fields": [
+    "day",
+    "open",
+    "high",
+    "low",
+    "close"
+  ],
+  "locked_from": "2025-01-01",
+  "notes": "Dividend/split-adjusted OHLC (total-return proxy). The vendor revises adjusted history, so a later pull can differ; the manifest hash pins this one. Index symbols (^...) carry no dividends: adjclose equals close.",
+  "source": "Yahoo chart API v8, adjusted by adjclose/close (as yfinance auto_adjust=True) 2018-01-01..2024-12-31",
+  "symbols": {
+    "DBC": {
+      "first": "2018-01-02",
+      "last": "2024-12-31",
+      "rows": 1761,
+      "sha256": "9edcb093efb7aa5a551351591529469ea0ca7a02b54f2cfc21c7320e5964638e"
+    },
+    "GLD": {
+      "first": "2018-01-02",
+      "last": "2024-12-31",
+      "rows": 1761,
+      "sha256": "b03f0a60542100c9b38a64ccd3f4b4ae95b3b3626fb1a3979a27aa8546bbd667"
+    },
+    "IEF": {
+      "first": "2018-01-02",
+      "last": "2024-12-31",
+      "rows": 1761,
+      "sha256": "a485eac6cb9431d8c6686a7e843a849c513842315c0e1a85f14b7586cbfe7ff3"
+    },
+    "QLD": {
+      "first": "2018-01-02",
+      "last": "2024-12-31",
+      "rows": 1761,
+      "sha256": "9138e1c9e6fff45a2ea3a45dc8c2c8b6a44d2fe19efc1774421c1a72239db0c8"
+    },
+    "QQQ": {
+      "first": "2018-01-02",
+      "last": "2024-12-31",
+      "rows": 1761,
+      "sha256": "55adde21299ea4f261a4883f9f96530c1a0318e13efec36cbf6611f6713e7140"
+    },
+    "SPY": {
+      "first": "2018-01-02",
+      "last": "2024-12-31",
+      "rows": 1761,
+      "sha256": "c4342b845b481fb71f52af0d30cd93d887be9690a02bc80e215035acb7a8073d"
+    },
+    "SSO": {
+      "first": "2018-01-02",
+      "last": "2024-12-31",
+      "rows": 1761,
+      "sha256": "802e8c457c7aabd4588ad250bc2333f56d98d02944673bc05ec9857f13dbb844"
+    },
+    "UUP": {
+      "first": "2018-01-02",
+      "last": "2024-12-31",
+      "rows": 1761,
+      "sha256": "26901d908b8078a1a607be778a901af312c3fa88535907a44e3f1f99ed5387c0"
+    }
+  }
+}

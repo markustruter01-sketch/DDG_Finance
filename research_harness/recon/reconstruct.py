@@ -6,9 +6,11 @@ formulas; from the ETF's first day it is the real ETF (Yahoo dividend-adjusted
 OHLC). The rebuilt part is scaled so the two parts meet exactly on the ETF's
 first day, so returns are continuous and the real-ETF era is the real ETF.
 
-Rebuilt bars are close-to-close (open = previous close, high = low = close),
-as in G4-STRESS-1985: old index data has no reliable opens, so trades fill at
-the previous close and stops can only fire at a close.
+Rebuilt bars are close-only (open = high = low = close): old index data has
+no reliable opens, so a signal read at Monday's close fills at TUESDAY's
+close, and stops can only fire at a close. (G4-STRESS-1985 used open =
+previous close, which fills at the same close the signal was read from -
+a one-session look-ahead; removed here at step 5.)
 
 All series share one calendar: the S&P 500's trading days. Other series are
 carried forward onto it (never backward), so a value is only used on or after
@@ -107,10 +109,13 @@ def add_yield(price: Series, annual_yield: float) -> Series:
 
 
 def bond_duration(y: float, years: int = BOND_MATURITY_YEARS) -> float:
-    """Modified duration of a par bond with semiannual coupons: (1 - (1 + y/2)^-2n) / (y/2)."""
+    """Modified duration, in YEARS, of a par bond with semiannual coupons:
+    (1 - (1 + y/2)^-2n) / (y/2) counts half-year periods, so it is divided by 2.
+    (The plan's formula omitted the /2 - found at step 5 when the rebuilt
+    series showed 2.3x IEF's volatility; see Amendment 1.)"""
     if y <= 1e-9:
         return float(years)
-    return (1 - (1 + y / 2) ** (-2 * years)) / (y / 2)
+    return (1 - (1 + y / 2) ** (-2 * years)) / (y / 2) / 2
 
 
 def bond_tr(yields: Series) -> Series:
@@ -144,12 +149,8 @@ def with_collateral(s: Series, rf_annual: dict[date, float]) -> Series:
 
 # ── bars and splicing ─────────────────────────────────────────────────────────
 def close_to_close(s: Series) -> list[dict[str, Any]]:
-    out, prev = [], None
-    for d, c in s:
-        o = c if prev is None else prev
-        out.append({"day": d, "open": o, "high": c, "low": c, "close": c})
-        prev = c
-    return out
+    """Close-only bars: a next-open fill becomes a next-close fill."""
+    return [{"day": d, "open": c, "high": c, "low": c, "close": c} for d, c in s]
 
 
 def splice(recon: Series, etf_bars: list[dict[str, Any]] | None) -> list[dict[str, Any]]:

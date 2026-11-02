@@ -294,3 +294,35 @@ decisions for step 5.
   labelled m-3).
 - **Shares**: the held-out run uses whole shares; exploration stays fractional.
 - All other judgment calls in Amendment 1 are confirmed.
+
+### Step 5 review (Fable 5.1, 2 Nov 2026, after the data was pulled; no strategy run)
+Calibration ran on open data to 2010-12-31 (`research_harness/data/fleet_calibration_2010.json`).
+Three corrections, all made before any exploration run:
+1. **Duration formula (plan error).** `(1 - (1 + y/2)^-20) / (y/2)` counts
+   half-years; the plan omitted the `/2`. Found because the rebuilt 10-year
+   series showed 17% volatility against IEF's 7.3%. Corrected: 8.6% vs 7.3%,
+   drawdown -14.5% vs -10.4%, return 1.3%/yr BELOW IEF (a constant-maturity
+   par bond has no roll-down). The rebuilt bond line is pessimistic.
+2. **Rebuilt-era fill timing.** Rebuilt bars had open = previous close, so a
+   close-read signal filled at that same close (G4-STRESS convention; a
+   one-session look-ahead). Rebuilt bars are now close-only: fills at the
+   next close.
+3. **Shiller dividend lagged one quarter** (decided above; implemented).
+
+Calibration facts carried into every report:
+- S&P TR vs SPY: corr 0.976, +0.10%/yr (SPY's fee), drawdowns equal. Good.
+- SSO/QLD rebuilds: corr 0.99, drawdown within 0.3 pts. Good.
+- Nasdaq yield: 0% is closest to QQQ 1999-2010 (-0.15%/yr); the declared
+  0.8% overstates by 0.66%/yr. Declared value kept; sensitivities reported.
+- Commodities: the GSCI is a spot index with no roll yield. It beats DBC by
+  3.8%/yr (plain) and 6.1%/yr (+T-bill) over 2006-2010, with a DEEPER
+  drawdown (so no haircut). The pre-2006 commodity line's return is
+  overstated by this order; sleeve 2's standalone figures must be read with it.
+- Dollar: Yahoo's `DX-Y.NYB` daily close is stamped at a different hour from
+  UUP's, so daily correlation is only 0.44, but it is 0.86 weekly, 0.92
+  monthly and 0.95 quarterly, and daily volatility matches UUP's. Adequate
+  for 63/126/252-session votes and vol63 sizing; stated as a known defect.
+- Gold: no calibration possible (line off until GLD, as decided).
+- Shiller's locked part ends 2023-06 (the sheet's last published dividend);
+  irrelevant to exploration and the held-out test, both of which use real
+  SPY for 2011 onwards.

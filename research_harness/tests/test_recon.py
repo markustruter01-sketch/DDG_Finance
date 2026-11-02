@@ -110,8 +110,9 @@ def test_sp500_tr_pays_dividend_once_on_first_session_of_month():
 
 def test_bond_tr_matches_declared_formula():
     y = 0.06
-    d = (1 - (1 + y / 2) ** -20) / (y / 2)
+    d = (1 - (1 + y / 2) ** -20) / (y / 2) / 2          # half-year periods -> years
     assert rc.bond_duration(y) == pytest.approx(d)
+    assert 7 < rc.bond_duration(0.04) < 9                  # a 10-year par bond, not 16
     cal = weekdays(date(2000, 1, 3), 3)
     tr = rc.bond_tr([(cal[0], 0.06), (cal[1], 0.06), (cal[2], 0.07)])
     assert tr[1][1] / tr[0][1] - 1 == pytest.approx(0.06 / 252)
@@ -142,7 +143,7 @@ def test_splice_meets_etf_on_its_first_day():
     assert [b["day"] for b in out] == cal
     assert out[4]["close"] == pytest.approx(50.0 / 1.01)       # rebuilt return kept, level scaled
     assert out[5] == etf[0]                                     # real ETF from its first day
-    assert out[1]["open"] == out[0]["close"]                    # close-to-close bars before
+    assert out[1]["open"] == out[1]["close"]                    # close-only bars: fill at next close
 
 
 def test_splice_without_etf_is_the_rebuilt_series():

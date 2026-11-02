@@ -1,0 +1,28 @@
+{
+  "dataset": "vol_gate_y",
+  "fetched_at": "2026-11-02T21:00:52.550181+00:00",
+  "fields": [
+    "day",
+    "open",
+    "high",
+    "low",
+    "close"
+  ],
+  "locked_from": "2016-01-01",
+  "notes": "Dividend/split-adjusted OHLC (total-return proxy). The vendor revises adjusted history, so a later pull can differ; the manifest hash pins this one. Index symbols (^...) carry no dividends: adjclose equals close.",
+  "source": "Yahoo chart API v8, adjusted by adjclose/close (as yfinance auto_adjust=True) 2005-01-01..2015-12-31",
+  "symbols": {
+    "SPY": {
+      "first": "2005-01-03",
+      "last": "2015-12-31",
+      "rows": 2769,
+      "sha256": "9f61db04f5b31e520051a01f365a908d2e0f4c7942a894fe00a4d10f99369ae5"
+    },
+    "^GSPC": {
+      "first": "2005-01-03",
+      "last": "2015-12-31",
+      "rows": 2769,
+      "sha256": "57966b289c733ffdb514d48238c693bfa2b1369c096ca077b67b8474519c020f"
+    }
+  }
+}

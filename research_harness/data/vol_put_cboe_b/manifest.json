@@ -1,0 +1,19 @@
+{
+  "dataset": "vol_put_cboe_b",
+  "fetched_at": "2026-11-02T21:00:42.777104+00:00",
+  "fields": [
+    "day",
+    "close"
+  ],
+  "locked_from": "2016-01-01",
+  "notes": "CBOE S&P 500 PutWrite index (PUT) daily close; fully T-bill collateralised, no costs",
+  "source": "CBOE PUT index daily history https://cdn.cboe.com/api/global/us_indices/daily_prices/PUT_History.csv 2007-06-29..2015-12-31",
+  "symbols": {
+    "PUT": {
+      "first": "2007-06-29",
+      "last": "2015-12-31",
+      "rows": 2143,
+      "sha256": "2a137d47c74b1e9130ae532b5215c39e6340c218b54608899bd62d4dd32d6b20"
+    }
+  }
+}

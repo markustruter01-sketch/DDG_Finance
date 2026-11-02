@@ -1,0 +1,19 @@
+{
+  "dataset": "vol_rates_fred",
+  "fetched_at": "2026-11-02T21:01:02.571753+00:00",
+  "fields": [
+    "day",
+    "rate"
+  ],
+  "locked_from": "2016-01-01",
+  "notes": "rate is annual, decimal (0.05 = 5%); FRED's missing days ('.') are dropped",
+  "source": "FRED public CSV DTB3 2005-01-01..2015-12-31",
+  "symbols": {
+    "DTB3": {
+      "first": "2005-01-03",
+      "last": "2015-12-31",
+      "rows": 2754,
+      "sha256": "8f6b667fb918eed2879fd2b0657c670b1a9ee9b8aebd06b221668b85b46b0fce"
+    }
+  }
+}

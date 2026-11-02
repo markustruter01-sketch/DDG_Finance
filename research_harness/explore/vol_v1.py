@@ -1,17 +1,18 @@
 """VOL-V1 exploration (plan: research_harness/explore/VOL-V1-PLAN.md).
 
 Runs the candidates (V1 ATM, V2 2% OTM estimate) and the controls (B: S&P 500
-TR held; PUT: the CBOE index ungated; N1: the S&P TR held at the gate's N;
-F1: FLEET-V1-F1) over the exploration window 1988-01-01 .. 2010-12-31 (warm-up
-from 1986-07), applies the plan's selection rule, and appends one record to
-exploration_log.jsonl. Every load ends on 2010-12-31, so no locked row is read.
+TR held; PUT: the CBOE index ungated; N1: the S&P TR held at the gate's N)
+over the exploration window 2007-07-02 .. 2015-12-31 (plan Amendment 1;
+warm-up from 2006-06), applies the plan's selection rule, and appends one
+record to exploration_log.jsonl. Every load ends on 2015-12-31, before the
+datasets' lock, so no locked row is read.
 
     QT_RESEARCH_DATA=research_harness/data python -m research_harness.explore.vol_v1
 
-Data: the CBOE PUT index (dataset ``vol_put_cboe``, pulled with
-``python -m research_harness.fetch cboe_put``); the gate and the S&P series are
-FLEET-V1's datasets. If the PUT dataset is missing the run stops (the plan
-declares no fallback).
+Data (all locked from 2016-01-01): ``vol_put_cboe_b`` (CBOE PUT, daily from
+2007-06-29), ``vol_gate_y`` (SPY adjusted = the dial's S&P TR series, ^GSPC =
+the price index for contract counts), ``vol_rates_fred`` (DTB3). If the PUT
+dataset is missing the run stops (the plan declares no fallback).
 
 Process step 3 (Fable) runs this once on real data. Until then it is only run
 on synthetic data by the tests.
@@ -28,9 +29,7 @@ from typing import Any, Sequence
 
 from research_harness.explore import fleet_v1 as fv
 from research_harness.harness import metrics, overfit
-from research_harness.harness.fleet import fleet_curve
 from research_harness.harness.metrics import CurvePoint, rf_daily_for
-from research_harness.recon import reconstruct as rc
 from research_harness.sleeves import vol_v1
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -38,16 +37,20 @@ LOG_PATH = ROOT / "research_harness" / "exploration_log.jsonl"
 PLAN_ID = "VOL-V1"
 
 # ── declared values (plan) ────────────────────────────────────────────────────
-WARMUP_START = date(1986, 7, 1)
-EXPLORE = (date(1988, 1, 1), date(2010, 12, 31))
-HELDOUT = (date(2011, 1, 1), date(2020, 12, 31))
+WARMUP_START = date(2006, 6, 1)           # Amendment 1: CBOE's daily PUT history starts 2007-06-29
+EXPLORE = (date(2007, 7, 2), date(2015, 12, 31))
+HELDOUT = (date(2016, 1, 1), date(2020, 12, 31))
+LOCKED_FROM = HELDOUT[0]
 CASH_SPREAD = fv.CASH_SPREAD              # cash earns DTB3 - 0.50% a year
-N_TRIALS = 21                             # 2 candidates + FLEET-V1's 19 (shared dial)
+N_TRIALS = 22                             # 2 candidates + FLEET-V1's 19 (shared dial) + 1 amendment
 SELECT = {"sharpe_margin": 0.15, "max_dd_floor": -0.25, "dd_vs_b": 0.6, "cagr_slack": 0.01, "tie": 0.005}
 SIMPLICITY_ORDER = ["V1", "V2"]
-PUT_DATASET = "vol_put_cboe"
+PUT_DATASET = "vol_put_cboe_b"
 PUT_SYMBOL = "PUT"
-DATASETS = {"put": PUT_DATASET, **fv.DATASETS}
+GATE_DATASET = "vol_gate_y"
+GATE_SYMBOL, SPX_SYMBOL = "SPY", "^GSPC"
+RATES_DATASET = "vol_rates_fred"
+DATASETS = {"put": PUT_DATASET, "gate": GATE_DATASET, "rates": RATES_DATASET}
 
 
 def _levels(rows: list[dict]) -> dict[date, float]:
@@ -143,40 +146,24 @@ def explore(put: dict[date, float], spy_tr: dict[date, float], spx: dict[date, f
     return report
 
 
-def f1_control(built: dict[str, Any], dtb3: dict[date, float], end: date) -> list[CurvePoint]:
-    """FLEET-V1-F1 on the reconstructed instruments, as in FLEET-V1's exploration."""
-    rf_cash = fv.cash_rate(dtb3)
-    instr = built["instruments"]
-    c1, _ = fv.run_core(instr, "C1", rf_cash, fv.WARMUP_START, end)
-    s2, _ = fv.run_xasset(instr, rf_cash, fv.WARMUP_START, end)
-    return fleet_curve({"core": c1.curve, "xasset": s2.curve}, fv.FLEET_WEIGHTS)
-
-
 def run(store=None, *, log_path: Path | None = LOG_PATH) -> dict[str, Any]:
     from research_harness.harness.store import BarStore
 
     store = store or BarStore()
-    lo, hi = date(1985, 1, 1), EXPLORE[1]
+    hi = EXPLORE[1]
     try:
         put_rows = store.load(PUT_DATASET, PUT_SYMBOL, start=WARMUP_START, end=hi)
     except FileNotFoundError as exc:
         raise SystemExit(f"VOL-V1 STOPS: the CBOE PUT dataset is not pulled ({exc}). "
                          "The plan declares no fallback.") from exc
-    idx = {s: store.load(fv.DATASETS["index"], s, start=lo, end=hi) for s in rc.INDEX.values()}
-    etfs = {}
-    for s in rc.REAL_ETF:
-        try:
-            etfs[s] = store.load(fv.DATASETS["etf"], s, start=lo, end=hi)
-        except KeyError:
-            etfs[s] = []
-    rates = {s: store.load_rates(fv.DATASETS["rates"], s, start=lo, end=hi) for s in ("DTB3", "DGS10")}
-    shiller = store.load(fv.DATASETS["shiller"], "SP500", start=lo, end=hi)
-    built = rc.build(idx, etfs, rates, shiller)
-    spy_tr = _levels(built["instruments"]["SPY"])
-    spx = _levels(idx[rc.INDEX["SP"]])
-    report = explore(_levels(put_rows), spy_tr, spx, rates["DTB3"],
-                     f1_curve=f1_control(built, rates["DTB3"], hi))
-    out = {"plan": PLAN_ID, "kind": "exploration (1988-2010), one run",
+    for ds in (PUT_DATASET, GATE_DATASET, RATES_DATASET):
+        if store.manifest(ds).get("locked_from") != LOCKED_FROM.isoformat():
+            raise SystemExit(f"VOL-V1 STOPS: {ds} is not locked from {LOCKED_FROM} (plan Amendment 1)")
+    spy_tr = _levels(store.load(GATE_DATASET, GATE_SYMBOL, start=date(2005, 1, 1), end=hi))
+    spx = _levels(store.load(GATE_DATASET, SPX_SYMBOL, start=date(2005, 1, 1), end=hi))
+    dtb3 = store.load_rates(RATES_DATASET, "DTB3", start=date(2005, 1, 1), end=hi)
+    report = explore(_levels(put_rows), spy_tr, spx, dtb3)
+    out = {"plan": PLAN_ID, "kind": "exploration (2007-07..2015-12, plan Amendment 1), one run",
            "data": {ds: store.manifest_hash(ds) for ds in DATASETS.values()},
            "costs": (f"{vol_v1.COST_BPS_PER_LEG:g} bp of notional per roll leg + ${vol_v1.CONTRACT_FEE} per "
                      "contract per leg (two legs a month); cash DTB3 - 0.50% (floored at 0); fractional contracts"),

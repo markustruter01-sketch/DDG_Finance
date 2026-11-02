@@ -199,16 +199,16 @@ def test_the_gate_must_beat_ungated_put():
 
 # ── the runner (synthetic) ────────────────────────────────────────────────────
 def test_explore_runs_end_to_end_on_synthetic_data():
-    days = weekdays(date(1986, 7, 1), 4300)                       # to about 2003
+    days = weekdays(date(2006, 6, 1), 2500)                       # to about 2016
     spy = dict(zip(days, walk(len(days), 4, drift=0.0004)))
-    spx = dict(zip(days, walk(len(days), 5, start=250)))
+    spx = dict(zip(days, walk(len(days), 5, start=1250)))
     put = dict(zip(days, walk(len(days), 6, drift=0.0003, vol=0.006)))
     dtb3 = {days[0]: 0.04}
-    out = ev.explore(put, spy, spx, dtb3, window=(date(1988, 1, 1), days[-1]))
+    out = ev.explore(put, spy, spx, dtb3, window=(ev.EXPLORE[0], days[-1]))
     assert set(out["candidates"]) == {"V1", "V2"}
     assert {"B", "PUT", "N1"} <= set(out["controls"])
     assert out["selection"]["verdict"] in ("SELECTED", "VOL-V1 FAILED")
-    assert out["candidates"]["V1"]["gate"]["rolls"] > 150
+    assert out["candidates"]["V1"]["gate"]["rolls"] > 90
     assert set(out["deflated_sharpe_exploration"]) == {"V1", "V2"}
 
 
@@ -216,6 +216,9 @@ def test_the_run_never_reads_past_the_exploration_window(monkeypatch):
     ends = []
 
     class Store:
+        def manifest(self, ds):
+            return {"locked_from": "2016-01-01"}
+
         def load(self, ds, sym, *, start, end, **k):
             ends.append(end)
             return []
@@ -227,13 +230,22 @@ def test_the_run_never_reads_past_the_exploration_window(monkeypatch):
     class Stop(Exception):
         pass
 
-    def stop(*a, **k):
-        raise Stop
-
-    monkeypatch.setattr(ev.rc, "build", stop)
+    monkeypatch.setattr(ev, "explore", lambda *a, **k: (_ for _ in ()).throw(Stop()))
     with pytest.raises(Stop):
         ev.run(Store(), log_path=None)
-    assert ends and max(ends) == date(2010, 12, 31) < ev.HELDOUT[0]
+    assert ends and max(ends) == date(2015, 12, 31) < ev.HELDOUT[0]
+
+
+def test_the_run_refuses_a_dataset_with_the_wrong_lock():
+    class Store:
+        def manifest(self, ds):
+            return {"locked_from": "2011-01-01"}          # the void run's lock
+
+        def load(self, ds, sym, *, start, end, **k):
+            return [{"day": start, "close": 1.0}]
+
+    with pytest.raises(SystemExit, match="Amendment 1"):
+        ev.run(Store(), log_path=None)
 
 
 def test_the_run_stops_without_the_put_data(tmp_path):
@@ -264,7 +276,7 @@ def test_the_put_pull_writes_an_open_part_that_stops_before_the_held_out(tmp_pat
             pass
 
     store = BarStore(tmp_path)
-    m = fetch.fetch_cboe_put(store, "vol_put_cboe", "1986-06-30", "2010-12-31",
-                             http_get=lambda url, params=None: Resp(), locked_from=date(2011, 1, 1))
-    assert m["locked_from"] == "2011-01-01" and m["symbols"]["PUT"]["rows"] == 2
-    assert store.load("vol_put_cboe", "PUT", start=date(2010, 1, 1), end=date(2010, 12, 31))[-1]["close"] == 501.0
+    m = fetch.fetch_cboe_put(store, "vol_put_cboe_b", "2007-06-29", "2015-12-31",
+                             http_get=lambda url, params=None: Resp(), locked_from=date(2016, 1, 1))
+    assert m["locked_from"] == "2016-01-01" and m["symbols"]["PUT"]["rows"] == 2
+    assert store.load("vol_put_cboe_b", "PUT", start=date(2010, 1, 1), end=date(2010, 12, 31))[-1]["close"] == 501.0

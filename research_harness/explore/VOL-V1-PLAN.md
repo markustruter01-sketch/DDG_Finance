@@ -114,3 +114,32 @@ exploration run, registration, one held-out run. 4. Opus: options executor
 and live runtime, dashboard panel; this is the largest new plumbing on the
 platform and ships last. 5. Fable: order-path review (assignment, cover,
 collateral) before merge.
+
+## Amendment 1 (Fable 5.1, Tue 3 Nov 2026, before any held-out run)
+**Run 1 (2 Nov 2026 19:5x UTC, exploration_log.jsonl) is VOID.** CBOE's free
+PUT history is daily only from 29 Jun 2007; before that the file holds seven
+isolated rows (1991-2004) which the model read as consecutive sessions. The
+plan's declared data does not exist at daily frequency for 1988-2006, so the
+plan as written stops here (as declared under "Data"). Nothing in run 1 is
+used; its figures are artefacts (skew 18, 1,014 "days" over 23 years).
+
+Rather than drop the third strategy, the windows are re-declared to what the
+data supports. Nothing else changes (rules, candidates, controls, costs,
+selection, pass bar). The attempt count becomes **N = 22** (one amendment).
+- **Warm-up** 2006-06-01..2007-06-29 (the dial needs 252 S&P sessions).
+- **Exploration 2007-07-02..2015-12-31** (8.5 years: the 2008 crash, the
+  2010 flash crash, the 2011 drop, 2015).
+- **Held-out 2016-01-01..2020-12-31** (5 years: Feb 2018 and Mar 2020, the
+  two months that hurt put-writing most). Locked rows; one read under a new
+  registration. 2021-2026 spent, information only.
+- **Data:** new datasets with the new lock date (locked_from 2016-01-01):
+  `vol_put_cboe_b` (PUT, from 2007-06-29), `vol_gate_y` (SPY adjusted and
+  ^GSPC from Yahoo, from 2005-01-01), `vol_rates_fred` (DTB3). The old
+  `vol_put_cboe` dataset is left as pulled and is not read again. The F1
+  control is dropped from the exploration run: its instruments live in
+  FLEET-V1's datasets, locked from 2011, and an exploration may not read
+  them; F1's 2011-2020 figures are in the ledger for reference.
+- **Honesty:** this is a short history for a strategy whose losses come a
+  few days a decade. The held-out has one crash. The forward paper year 2027
+  remains the test that counts; the history is a sanity check, and the
+  pass bar is applied to it as declared, a fail being a fail.

@@ -130,7 +130,8 @@ def evaluate_liveness(
                     """
                     SELECT b.bot_id, COALESCE(s.paused, FALSE),
                            h.last_cycle_start, h.last_cycle_end, h.last_success_at,
-                           h.cycle_count, h.consecutive_failures, h.last_error, h.status
+                           h.cycle_count, h.consecutive_failures, h.last_error, h.status,
+                           s.resumed_at
                     FROM unnest(%s::text[]) AS b(bot_id)
                     LEFT JOIN bot_cycle_health h ON h.bot_id = b.bot_id
                     LEFT JOIN bots_state s ON s.bot_id = b.bot_id
@@ -147,7 +148,8 @@ def evaluate_liveness(
             "severity": "critical",
         }]
 
-    for bot_id, paused_from_join, start, end, success_at, count, failures, error, status in rows:
+    for bot_id, paused_from_join, start, end, success_at, count, failures, error, status, *rest in rows:
+        resumed_at = rest[0] if rest else None
         # The query's COALESCE is intentionally fail-closed for missing bots_state.
         # A missing bots_state row must not suppress liveness findings.
         paused = bool(paused_from_join)
@@ -169,7 +171,12 @@ def evaluate_liveness(
                 "severity": "critical",
             })
         interval = float(intervals.get(bot_id, 3600))
-        age = (now - success_at.astimezone(timezone.utc)).total_seconds()
+        # A bot paused for hours has an old last success through no fault of
+        # its own: its clock restarts when it is resumed.
+        reference = success_at.astimezone(timezone.utc)
+        if resumed_at is not None:
+            reference = max(reference, resumed_at.astimezone(timezone.utc))
+        age = (now - reference).total_seconds()
         if age > 3 * interval:
             findings.append({
                 "trigger": "bot_cycle_stale",

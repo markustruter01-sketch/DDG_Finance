@@ -1,0 +1,19 @@
+{
+  "dataset": "momo_rates_fred",
+  "fetched_at": "2026-11-02T07:52:09.352597+00:00",
+  "fields": [
+    "day",
+    "rate"
+  ],
+  "locked_from": "2025-01-01",
+  "notes": "rate is annual, decimal (0.05 = 5%); FRED's missing days ('.') are dropped",
+  "source": "FRED public CSV DTB3 2018-01-01..2024-12-31",
+  "symbols": {
+    "DTB3": {
+      "first": "2018-01-02",
+      "last": "2024-12-31",
+      "rows": 1750,
+      "sha256": "8dbdcf1343e99136dc3076664a0d6c4a1c17f73d72bb1b4b6b3bf542b0471936"
+    }
+  }
+}

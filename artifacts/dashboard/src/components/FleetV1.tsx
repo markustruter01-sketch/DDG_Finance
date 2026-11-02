@@ -2,7 +2,7 @@
  *  Night Glass v5 building blocks only; every value comes from the API. */
 import type { ReactNode } from "react";
 import { Status } from "@/components/Shell";
-import type { Figures, FleetAccount, FleetRecord, FleetState, DrawdownMode, MomoState } from "@/hooks/use-fleet-v1";
+import type { Comparison, Figures, FleetAccount, FleetRecord, FleetState, DrawdownMode, MomoState, VaultSummary } from "@/hooks/use-fleet-v1";
 import { botColor } from "@/lib/bot-identity";
 
 const LINES = ["IEF", "GLD", "DBC", "UUP"] as const;
@@ -216,6 +216,83 @@ export function MomoPanel({ momo, limits }: { momo: MomoState; limits: FleetStat
         {momo.skipped_unaffordable.length > 0 && <> · skipped (price above a 2% slot): {momo.skipped_unaffordable.join(", ")}</>}
         {momo.last_rebalance_done === false && <span className="loss"> · last rebalance incomplete ({momo.attempts} attempts)</span>}
         {momo.errors.length > 0 && <span className="loss"> · {momo.errors[0]}</span>}
+      </div>
+    </section>
+  );
+}
+
+// ── The 2027 comparison: same days, after costs ─────────────────────────────
+export function ComparisonPanel({ data, names }: { data: Comparison | undefined; names: Record<string, string> }) {
+  const ids = Object.keys(names);
+  return (
+    <section className="glass panel comparison" aria-label="The 2027 comparison">
+      <div className="panel-head">
+        <h2>The 2027 comparison · same days</h2>
+        <span className="label">verdict 31 Dec 2027</span>
+      </div>
+      {!data || data.days < 2 ? (
+        <div className="note">Starts with the first two closes after cutover ({data?.since ?? "3 Nov 2026"}).</div>
+      ) : (
+        <div className="table-scroll">
+          <table className="ng">
+            <thead><tr><th>Account</th><th>Return</th><th>S&amp;P same days</th><th>Worst fall</th><th>Sharpe</th></tr></thead>
+            <tbody>
+              {ids.map((id) => {
+                const a = data.accounts[id];
+                return (
+                  <tr key={id}>
+                    <td><span className="dot" style={{ background: botColor(id), marginRight: 8 }} aria-hidden="true" />{names[id]}</td>
+                    <td className="tab">{a ? pct(a.return, 1, true) : "—"}</td>
+                    <td className="tab">{a ? pct(a.spy_same_days, 1, true) : "—"}</td>
+                    <td className="tab">{a ? pct(a.worst_fall, 1) : "—"}</td>
+                    <td className="tab">{a?.sharpe == null ? "—" : a.sharpe.toFixed(2)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <div className="note">{data.days} common days since {data.since} · {data.note} · Sharpe from 20 days</div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ── VAULT-V2: the profit vault ──────────────────────────────────────────────
+const usd = (v: number | null | undefined) =>
+  v == null || !Number.isFinite(v) ? "—" : `${v < 0 ? "−" : ""}$${Math.abs(v).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+
+export function VaultPanel({ vault, names }: { vault: VaultSummary | undefined; names: Record<string, string> }) {
+  const sum = (k: "income_month" | "income_lifetime" | "contributions_year" | "contributions_lifetime") =>
+    vault?.bots.some((b) => b[k] != null) ? vault.bots.reduce((s, b) => s + (b[k] ?? 0), 0) : null;
+  const yields = (vault?.bots ?? []).map((b) => b.yield_30d_realized).filter((y): y is number => y != null);
+  return (
+    <section className="glass panel fleet-account" aria-label="Vault">
+      <div className="panel-head">
+        <h2>Vault · {vault?.asset ?? "BIL"}</h2>
+        {vault?.enabled ? <Status tone="ok" word="On" /> : <Status tone="none" word={vault ? "Off" : "…"} />}
+      </div>
+      <div className="stat">
+        <span className="num">{usd(vault?.total)}</span>
+        <span className="note">{vault?.rule ?? "10% of each month's new high, into T-bills"}</span>
+      </div>
+      <div className="engine-stats">
+        <div className="stat"><span className="label">Income month</span><span className="num-sm">{usd(sum("income_month"))}</span></div>
+        <div className="stat"><span className="label">Income total</span><span className="num-sm">{usd(sum("income_lifetime"))}</span></div>
+        <div className="stat"><span className="label">Yield 30d</span>
+          <span className="num-sm">{yields.length ? pct(yields.reduce((a, b) => a + b, 0) / yields.length, 1) : "—"}</span></div>
+      </div>
+      <ul className="list">
+        {(vault?.bots ?? []).map((b) => (
+          <Row key={b.bot_id} label={names[b.bot_id] ?? b.bot_id} value={usd(b.value)}
+            sub={b.from_mark == null ? "mark set at first close"
+              : b.from_mark >= 0 ? `${pct(b.from_mark, 1)} above its mark` : `${pct(-b.from_mark, 1)} below its mark`} />
+        ))}
+      </ul>
+      <div className="note">
+        Added this year {usd(sum("contributions_year"))} · all time {usd(sum("contributions_lifetime"))} ·
+        next skim {vault?.next_skim ?? "—"} (before the open)
+        {(vault?.bots ?? []).some((b) => b.voo_qty > 0) && <> · VOO from the old vault is being sold into BIL</>}
       </div>
     </section>
   );

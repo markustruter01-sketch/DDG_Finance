@@ -299,6 +299,38 @@ CREATE TABLE IF NOT EXISTS per_bot_vault_holdings (
     updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (bot_id, symbol)
 );
+-- VAULT-V2 (sleeve_runtime/VAULT-V2-SPEC.md): monthly high-water marks, the
+-- skim ledger (one row per account per month) and the one-time VOO sale.
+CREATE TABLE IF NOT EXISTS per_bot_vault_marks (
+    bot_id          TEXT PRIMARY KEY REFERENCES per_bot_vault_accounts(bot_id),
+    high_water_mark NUMERIC NOT NULL,
+    mark_month      TEXT NOT NULL,
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS per_bot_vault_skims (
+    id              BIGSERIAL PRIMARY KEY,
+    bot_id          TEXT NOT NULL REFERENCES per_bot_vault_accounts(bot_id),
+    month           TEXT NOT NULL,
+    as_of           DATE NOT NULL,
+    broker_equity   NUMERIC NOT NULL,
+    vault_value     NUMERIC NOT NULL,
+    trading_equity  NUMERIC NOT NULL,
+    mark_before     NUMERIC NOT NULL,
+    mark_after      NUMERIC NOT NULL,
+    amount          NUMERIC NOT NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (bot_id, month)
+);
+CREATE TABLE IF NOT EXISTS per_bot_vault_liquidations (
+    bot_id          TEXT NOT NULL REFERENCES per_bot_vault_accounts(bot_id),
+    symbol          TEXT NOT NULL,
+    order_id        TEXT,
+    qty             NUMERIC NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'submitted',
+    proceeds_usd    NUMERIC NOT NULL DEFAULT 0,
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (bot_id, symbol)
+);
 
 -- Ratchet stops
 CREATE TABLE IF NOT EXISTS ratchet_stops (

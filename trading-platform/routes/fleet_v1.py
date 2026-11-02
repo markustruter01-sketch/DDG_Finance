@@ -51,11 +51,15 @@ def _read_state(bot_id: str) -> dict[str, Any]:
 
 
 def since_cutover(st: dict[str, Any]) -> dict[str, Any] | None:
-    """Pure: the account's sleeve-equity return and SPY's price return since cutover."""
+    """Pure: the account's return and SPY's price return since cutover. The
+    account return is on total equity including the vault (VAULT-V2 section
+    3) when both marks carry it, else on sleeve equity (marks before VAULT-V2)."""
     first, last = st.get("cutover") or {}, st.get("mark") or {}
+    key = "total" if first.get("total") and last.get("total") else "equity"
     try:
         return {"from": first["day"], "to": last["day"],
-                "account_return": last["equity"] / first["equity"] - 1,
+                "account_return": last[key] / first[key] - 1,
+                "basis": "total equity incl. vault" if key == "total" else "sleeve equity",
                 "spy_price_return": last["spy"] / first["spy"] - 1,
                 "note": "SPY is price return (adjusted closes; dividends after cutover are not in it)"}
     except (KeyError, TypeError, ZeroDivisionError):

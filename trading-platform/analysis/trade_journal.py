@@ -195,21 +195,8 @@ def close_trade(
             f"Trade journal | Closed {trade_id} → {status} "
             f"({pnl_percentage:+.2f}%) via {exit_reason or 'unknown'}"
         )
-        resolved_bot = bot_id or {
-            "momentum_equity": "oracle",
-            "momentum_etf": "spy_qqq_trend",
-        }.get(asset_class)
-        if resolved_bot and realized_pnl is not None:
-            try:
-                from execution.per_bot_vault import record_profitable_close
-                record_profitable_close(
-                    bot_id=resolved_bot,
-                    source_trade_id=trade_id,
-                    realized_profit=float(realized_pnl),
-                )
-            except Exception as exc:
-                logger.critical(f"Trade journal | per-bot vault hook failed for {trade_id}: {exc}")
-                raise
+        # VAULT-V2 retired the per-trade vault skim; the vault now takes 10% of
+        # each account's monthly new high on equity (execution/per_bot_vault.py).
 
 
 # ── log_post_mortem ────────────────────────────────────────────────────────

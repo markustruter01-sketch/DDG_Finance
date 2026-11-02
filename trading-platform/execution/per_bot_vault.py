@@ -1,8 +1,14 @@
-"""Inactive per-bot profit vault accounting.
+"""Per-bot profit vault (VAULT-V2, sleeve_runtime/VAULT-V2-SPEC.md).
 
-This module is intentionally separate from the retired global JEPQ/HWM vault in
-profit_sweep.py.  It is safe to import from close paths while disabled:
-disabled mode performs no database writes and never calls a broker.
+Each account's vault is tagged cash and BIL inside its own Alpaca account.
+Rule (VAULT-V2): on the first run of each month, before the open, skim 10% of
+the account's new high-water gain on trading equity (broker equity minus the
+vault) into the vault, then reset the mark to post-skim trading equity. The
+vault holds BIL only; the VOO left by VAULT-V1 is sold once and rebought as
+BIL. The per-trade skim and the quarterly 50/50 rebalance are retired.
+
+Separate from the retired global JEPQ/HWM vault in profit_sweep.py. Disabled
+mode (PER_BOT_VAULT_ENABLED not true) performs no writes and no broker calls.
 """
 
 from __future__ import annotations
@@ -16,8 +22,8 @@ from loguru import logger
 
 # Deliberately remains an Alpaca-only allowlist; forex_ai has no Alpaca vault.
 ACTIVE_BOT_IDS = ("oracle", "spy_qqq_trend", "jerome_macro")
-SKIM_RATE = 0.20
-SEED_RATE = 0.05
+SKIM_RATE = 0.10          # VAULT-V2: share of each month's new high-water gain
+SEED_RATE = 0.05          # VAULT-V1 activation seed (history; activation code unchanged)
 MIN_TRADE_NOTIONAL = 1.0
 VAULT_BIL_SYMBOL = "BIL"
 VAULT_VOO_SYMBOL = "VOO"
@@ -64,15 +70,37 @@ def _vault_client_order_id(bot_id: str, queue_id: str) -> str:
     return prefix[:48]
 
 
+def hwm_skim(trading_equity: float, mark: float) -> tuple[float, float]:
+    """VAULT-V2 rule: (skim, new mark). 10% of the gain above the mark; the mark
+    resets to post-skim trading equity. At or below the mark nothing moves."""
+    equity, mark = float(trading_equity), float(mark)
+    if equity <= mark:
+        return 0.0, mark
+    skim = round((equity - mark) * SKIM_RATE, 2)
+    return skim, round(equity - skim, 2)
+
+
+def plan_skim(*, month: str, trading_equity: float, mark: float | None,
+              mark_month: str | None, skimmed_months: set[str]) -> dict[str, Any]:
+    """Pure decision for one account on one run. `month` is the run's NY month
+    (YYYY-MM); the run is before the open, so equity is the previous close."""
+    if mark is None:
+        return {"action": "seed", "mark_after": round(float(trading_equity), 2), "amount": 0.0}
+    if month in skimmed_months or mark_month == month:
+        return {"action": "none", "reason": "done_this_month" if month in skimmed_months else "seeded_this_month"}
+    amount, mark_after = hwm_skim(trading_equity, mark)
+    return {"action": "skim" if amount > 0 else "below_mark", "amount": amount,
+            "mark_before": round(float(mark), 2), "mark_after": mark_after}
+
+
 def calculate_skim(realized_profit: float) -> float:
-    """Return 20% of positive realized profit, never a negative contribution."""
-    return round(max(0.0, float(realized_profit)) * SKIM_RATE, 2)
+    """VAULT-V1 per-trade rate, kept only for the verification report's history."""
+    return round(max(0.0, float(realized_profit)) * 0.20, 2)
 
 
 def split_contribution(skim_amount: float) -> tuple[float, float]:
-    """Split a contribution equally between BIL and VOO."""
-    half = round(max(0.0, float(skim_amount)) / 2.0, 2)
-    return half, round(max(0.0, float(skim_amount)) - half, 2)
+    """VAULT-V2: every contribution goes to BIL. Returns (bil, voo=0)."""
+    return round(max(0.0, float(skim_amount)), 2), 0.0
 
 
 def deployment_plan(
@@ -92,14 +120,14 @@ def deployment_plan(
     return {"action": "planned", "bil_notional": bil, "voo_notional": voo}
 
 
-def rebalance_due(last_rebalance: date | None, as_of: date | None = None) -> bool:
-    """Quarterly cadence check, independent of market/broker state."""
-    today = as_of or datetime.now(timezone.utc).date()
-    if last_rebalance is None:
-        return True
-    return (today.year, (today.month - 1) // 3) > (
-        last_rebalance.year, (last_rebalance.month - 1) // 3
-    )
+def next_skim_day(today: date) -> date:
+    """First weekday of next month (exchange holidays not modelled: the job then
+    runs that morning anyway, on the previous close)."""
+    from datetime import timedelta
+    d = date(today.year + (today.month == 12), today.month % 12 + 1, 1)
+    while d.weekday() >= 5:
+        d += timedelta(days=1)
+    return d
 
 
 def activation_plan(
@@ -128,18 +156,18 @@ def trading_return_pct(trading_capital: float, activation_equity: float) -> floa
 
 
 def worked_example() -> dict[str, float]:
-    """Deterministic accounting example used by the verification harness."""
-    starting = 100.0
-    profit = 10.0
-    skim = calculate_skim(profit)
-    bil, voo = split_contribution(skim)
+    """Deterministic VAULT-V2 example used by the verification harness."""
+    mark, equity = 100_000.0, 103_000.0
+    skim, mark_after = hwm_skim(equity, mark)
+    down_skim, down_mark = hwm_skim(98_000.0, mark_after)
     return {
-        "starting_trading_capital": starting,
-        "profit": profit,
+        "mark": mark,
+        "trading_equity": equity,
         "skim": skim,
-        "bil_allocated": bil,
-        "voo_allocated": voo,
-        "trading_capital_after_skim": starting + profit - skim,
+        "mark_after": mark_after,
+        "next_month_trading_equity": 98_000.0,
+        "next_month_skim": down_skim,
+        "next_month_mark": down_mark,
     }
 
 
@@ -214,6 +242,36 @@ def ensure_schema() -> None:
         symbol              TEXT NOT NULL CHECK (symbol IN ('BIL', 'VOO')),
         qty                 NUMERIC NOT NULL DEFAULT 0,
         cost_basis_usd      NUMERIC NOT NULL DEFAULT 0,
+        updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (bot_id, symbol)
+    );
+    CREATE TABLE IF NOT EXISTS per_bot_vault_marks (
+        bot_id              TEXT PRIMARY KEY REFERENCES per_bot_vault_accounts(bot_id),
+        high_water_mark     NUMERIC NOT NULL,
+        mark_month          TEXT NOT NULL,
+        updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS per_bot_vault_skims (
+        id                  BIGSERIAL PRIMARY KEY,
+        bot_id              TEXT NOT NULL REFERENCES per_bot_vault_accounts(bot_id),
+        month               TEXT NOT NULL,
+        as_of               DATE NOT NULL,
+        broker_equity       NUMERIC NOT NULL,
+        vault_value         NUMERIC NOT NULL,
+        trading_equity      NUMERIC NOT NULL,
+        mark_before         NUMERIC NOT NULL,
+        mark_after          NUMERIC NOT NULL,
+        amount              NUMERIC NOT NULL,
+        created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (bot_id, month)
+    );
+    CREATE TABLE IF NOT EXISTS per_bot_vault_liquidations (
+        bot_id              TEXT NOT NULL REFERENCES per_bot_vault_accounts(bot_id),
+        symbol              TEXT NOT NULL,
+        order_id            TEXT,
+        qty                 NUMERIC NOT NULL,
+        status              TEXT NOT NULL DEFAULT 'submitted',
+        proceeds_usd        NUMERIC NOT NULL DEFAULT 0,
         updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         PRIMARY KEY (bot_id, symbol)
     );
@@ -585,12 +643,14 @@ def run_deployment_cycle(*, market_open: bool, minimum_notional: float = MIN_TRA
     if not vault_enabled():
         return {"status": "blocked", "reason": "inactive", "orders": []}
     reconciliation = reconcile_deployment_orders()
+    liquidation = run_voo_liquidation(market_open=market_open)
     if not market_open:
         return {
             "status": "deferred",
             "reason": "market_closed",
             "orders": [],
             "reconciliation": reconciliation,
+            "liquidation": liquidation,
         }
     from db.postgres import get_conn, is_pg_available
     if not is_pg_available():
@@ -613,13 +673,16 @@ def run_deployment_cycle(*, market_open: bool, minimum_notional: float = MIN_TRA
     for bot_id, pending_cash, pending_bil, pending_voo, bil_order, voo_order, attempts in rows:
         pending_cash = float(pending_cash or 0)
         attempts = int(attempts or 0)
-        if pending_cash and pending_cash < 2 * minimum_notional and not (pending_bil or pending_voo):
+        if pending_cash and pending_cash < minimum_notional and not (pending_bil or pending_voo):
             results.append({"bot_id": bot_id, "status": "deferred", "reason": "below_minimum"})
             continue
-        if pending_cash:
-            bil_addition, voo_addition = split_contribution(pending_cash)
-            bil = round(float(pending_bil or 0) + bil_addition, 2)
-            voo = round(float(pending_voo or 0) + voo_addition, 2)
+        # VAULT-V2: everything is bought as BIL. A VOO amount still pending from
+        # VAULT-V1 moves to BIL unless a VOO buy is still open at the broker.
+        fold_voo = float(pending_voo or 0) if not voo_order else 0.0
+        if pending_cash or fold_voo:
+            bil_addition, _ = split_contribution(pending_cash)
+            bil = round(float(pending_bil or 0) + bil_addition + fold_voo, 2)
+            voo = round(float(pending_voo or 0) - fold_voo, 2)
             with get_conn() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
@@ -687,7 +750,7 @@ def run_deployment_cycle(*, market_open: bool, minimum_notional: float = MIN_TRA
                 # Keep the same deterministic ID for the next cycle. The request
                 # may have reached Alpaca even if the response or DB write failed.
                 break
-    return {"status": "complete", "orders": results}
+    return {"status": "complete", "orders": results, "liquidation": liquidation}
 
 
 def get_vault_inspection(
@@ -921,7 +984,7 @@ def preview_deployment_cycle(
         if market_open:
             if (
                 projected_cash
-                and projected_cash < 2 * minimum_notional
+                and projected_cash < minimum_notional
                 and not pending[VAULT_BIL_SYMBOL]
                 and not pending[VAULT_VOO_SYMBOL]
             ):
@@ -931,14 +994,14 @@ def preview_deployment_cycle(
                         "pending_cash_usd": round(projected_cash, 2),
                     }
                 )
-            elif projected_cash:
-                bil_addition, voo_addition = split_contribution(projected_cash)
+            elif projected_cash or (pending[VAULT_VOO_SYMBOL] and not order_ids[VAULT_VOO_SYMBOL]):
+                # Same as run_deployment_cycle: cash and any VAULT-V1 VOO amount go to BIL.
+                fold_voo = pending[VAULT_VOO_SYMBOL] if not order_ids[VAULT_VOO_SYMBOL] else 0.0
+                bil_addition, _ = split_contribution(projected_cash)
                 pending[VAULT_BIL_SYMBOL] = round(
-                    pending[VAULT_BIL_SYMBOL] + bil_addition, 2
+                    pending[VAULT_BIL_SYMBOL] + bil_addition + fold_voo, 2
                 )
-                pending[VAULT_VOO_SYMBOL] = round(
-                    pending[VAULT_VOO_SYMBOL] + voo_addition, 2
-                )
+                pending[VAULT_VOO_SYMBOL] = round(pending[VAULT_VOO_SYMBOL] - fold_voo, 2)
                 projected_cash = 0.0
                 split_cash = True
 
@@ -1025,108 +1088,397 @@ def preview_deployment_cycle(
     }
 
 
-def run_quarterly_rebalance(*, market_open: bool) -> dict[str, Any]:
-    """Quarterly 50/50 planner; only explicitly tagged vault holdings qualify."""
+# VAULT-V2 retired the quarterly 50/50 rebalance and the per-trade hook
+# (record_profitable_close): profit is measured monthly on equity instead.
+
+
+# ── VAULT-V2: sell the VAULT-V1 VOO once and rebuy it as BIL ────────────────
+
+def _submit_vault_sell(bot_id: str, symbol: str, qty: float, tag: str) -> dict[str, Any]:
+    """Sell vault-owned shares, never more than the broker position."""
     if not vault_enabled():
-        return {"status": "blocked", "reason": "inactive"}
-    if not market_open:
-        return {"status": "deferred", "reason": "market_closed"}
+        raise RuntimeError("vault is inactive")
+    from alpaca.trading.client import TradingClient
+    from alpaca.trading.enums import OrderSide, TimeInForce
+    from alpaca.trading.requests import MarketOrderRequest
+    from core.order_ids import is_duplicate_client_order_id_error
+
+    key_name, secret_name = ACCOUNT_ENV[bot_id]
+    key, secret = os.environ.get(key_name, ""), os.environ.get(secret_name, "")
+    if not key or not secret:
+        raise RuntimeError(f"missing account credentials for {bot_id}")
+    client = TradingClient(key, secret, paper=True)
+    held = 0.0
+    for pos in client.get_all_positions():
+        if str(getattr(pos, "symbol", "")).upper() == symbol:
+            held = float(getattr(pos, "qty", 0) or 0)
+    qty = round(min(float(qty), held), 9)
+    if qty <= 0:
+        return {"status": "skipped", "reason": "no_broker_position", "qty": 0.0}
+    client_id = _vault_client_order_id(bot_id, tag)
+    request = MarketOrderRequest(symbol=symbol, qty=qty, side=OrderSide.SELL,
+                                 time_in_force=TimeInForce.DAY, client_order_id=client_id)
+    try:
+        order = client.submit_order(request)
+    except Exception as exc:
+        if not is_duplicate_client_order_id_error(exc):
+            raise
+        order = client.get_order_by_client_id(client_id)
+    return {"order_id": str(order.id), "client_order_id": client_id,
+            "status": _order_status_value(order), "qty": qty}
+
+
+def run_voo_liquidation(*, market_open: bool) -> dict[str, Any]:
+    """One-time transition: sell each vault's VOO; proceeds become pending vault
+    cash, which the deployment cycle buys as BIL. Partial or failed sells are
+    retried; a completed sell is never repeated."""
+    if not vault_enabled():
+        return {"status": "blocked", "reason": "inactive", "bots": []}
+    from db.postgres import get_conn, is_pg_available
+    if not is_pg_available():
+        return {"status": "blocked", "reason": "database_unavailable", "bots": []}
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT a.bot_id, COALESCE(h.qty, 0), h.cost_basis_usd, l.order_id, l.status, q.voo_order_id
+                FROM per_bot_vault_accounts a
+                LEFT JOIN per_bot_vault_holdings h ON h.bot_id = a.bot_id AND h.symbol = 'VOO'
+                LEFT JOIN per_bot_vault_liquidations l ON l.bot_id = a.bot_id AND l.symbol = 'VOO'
+                LEFT JOIN per_bot_vault_deployment_queue q ON q.bot_id = a.bot_id
+                WHERE a.activation_enabled = TRUE
+                ORDER BY a.bot_id
+                """
+            )
+            rows = cur.fetchall()
+    out: list[dict[str, Any]] = []
+    for bot_id, qty, cost_basis, order_id, status, open_voo_buy in rows:
+        qty, cost_basis = float(qty or 0), float(cost_basis or 0)
+        try:
+            if status == "submitted" and order_id:
+                order = _read_vault_order(bot_id, order_id)
+                if order["status"] not in TERMINAL_ORDER_STATUSES:
+                    out.append({"bot_id": bot_id, "action": "wait", "order_id": order_id})
+                    continue
+                if order.get("replaced_by"):
+                    with get_conn() as conn:
+                        with conn.cursor() as cur:
+                            cur.execute("UPDATE per_bot_vault_liquidations SET order_id = %s, updated_at = NOW() "
+                                        "WHERE bot_id = %s AND symbol = 'VOO'", (order["replaced_by"], bot_id))
+                    out.append({"bot_id": bot_id, "action": "wait", "order_id": order["replaced_by"]})
+                    continue
+                sold = min(qty, float(order["filled_qty"]))
+                proceeds = round(sold * float(order["filled_avg_price"]), 2)
+                left = max(0.0, qty - sold)
+                with get_conn() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "UPDATE per_bot_vault_holdings SET qty = %s, cost_basis_usd = %s, updated_at = NOW() "
+                            "WHERE bot_id = %s AND symbol = 'VOO'",
+                            (left, round(cost_basis * (left / qty), 2) if qty else 0.0, bot_id))
+                        cur.execute("UPDATE per_bot_vault_accounts SET cash_usd = cash_usd + %s, updated_at = NOW() "
+                                    "WHERE bot_id = %s", (proceeds, bot_id))
+                        cur.execute(
+                            """
+                            INSERT INTO per_bot_vault_deployment_queue (bot_id, pending_cash_usd)
+                            VALUES (%s, %s)
+                            ON CONFLICT (bot_id) DO UPDATE
+                            SET pending_cash_usd = per_bot_vault_deployment_queue.pending_cash_usd + EXCLUDED.pending_cash_usd,
+                                status = CASE WHEN per_bot_vault_deployment_queue.bil_order_id IS NOT NULL
+                                              THEN 'submitted' ELSE 'pending' END,
+                                updated_at = NOW()
+                            """, (bot_id, proceeds))
+                        if left > 1e-6:
+                            # Partial fill or cancel: forget this order so the next cycle sells the rest.
+                            cur.execute("DELETE FROM per_bot_vault_liquidations WHERE bot_id = %s AND symbol = 'VOO'",
+                                        (bot_id,))
+                        else:
+                            cur.execute("UPDATE per_bot_vault_liquidations SET status = 'complete', "
+                                        "proceeds_usd = proceeds_usd + %s, updated_at = NOW() "
+                                        "WHERE bot_id = %s AND symbol = 'VOO'", (proceeds, bot_id))
+                logger.info(f"PerBotVault | {bot_id} sold {sold:.6f} VOO for ${proceeds:.2f}; queued for BIL")
+                out.append({"bot_id": bot_id, "action": "sold", "qty": sold, "proceeds": proceeds, "left": left})
+                continue
+            if status == "complete" or qty <= 1e-6:
+                continue
+            if not market_open or open_voo_buy:
+                out.append({"bot_id": bot_id, "action": "deferred",
+                            "reason": "market_closed" if not market_open else "open_voo_buy"})
+                continue
+            if not _order_budget_left(bot_id):
+                out.append({"bot_id": bot_id, "action": "blocked", "reason": "daily_order_cap"})
+                continue
+            order = _submit_vault_sell(bot_id, VAULT_VOO_SYMBOL, qty, f"sell-voo-{datetime.now(timezone.utc):%Y%m%d%H%M}")
+            if order.get("status") == "skipped":
+                logger.critical(f"PerBotVault | {bot_id} vault says {qty} VOO but the broker holds none")
+                out.append({"bot_id": bot_id, "action": "skipped", "reason": order["reason"]})
+                continue
+            _count_order(bot_id)
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        INSERT INTO per_bot_vault_liquidations (bot_id, symbol, order_id, qty, status)
+                        VALUES (%s, 'VOO', %s, %s, 'submitted')
+                        ON CONFLICT (bot_id, symbol) DO UPDATE
+                        SET order_id = EXCLUDED.order_id, qty = EXCLUDED.qty, status = 'submitted', updated_at = NOW()
+                        """, (bot_id, order["order_id"], order["qty"]))
+            out.append({"bot_id": bot_id, "action": "submitted", **order})
+        except Exception as exc:
+            logger.error(f"PerBotVault | VOO liquidation failed for {bot_id}: {exc}")
+            out.append({"bot_id": bot_id, "action": "error", "error": str(exc)})
+    return {"status": "complete", "bots": out}
+
+
+# ── VAULT-V2: the monthly high-water skim ───────────────────────────────────
+
+def _broker_equity(bot_id: str) -> float:
+    from alpaca.trading.client import TradingClient
+    key_name, secret_name = ACCOUNT_ENV[bot_id]
+    key, secret = os.environ.get(key_name, ""), os.environ.get(secret_name, "")
+    if not key or not secret:
+        raise RuntimeError(f"missing account credentials for {bot_id}")
+    equity = float(TradingClient(key, secret, paper=True).get_account().equity or 0)
+    if equity <= 0:
+        raise RuntimeError(f"broker returned no equity for {bot_id}")
+    return equity
+
+
+def _ny_now() -> datetime:
+    from zoneinfo import ZoneInfo
+    return datetime.now(ZoneInfo("America/New_York"))
+
+
+def run_monthly_skim(*, now: datetime | None = None) -> dict[str, Any]:
+    """Daily, before the open. Records each account's vault value and trading
+    equity; on the first run of a month, skims 10% of the new high-water gain.
+    One ledger row per account per month (also when nothing moves)."""
+    if not vault_enabled():
+        return {"status": "blocked", "reason": "inactive", "bots": []}
+    from db.postgres import get_conn, is_pg_available
+    if not is_pg_available():
+        return {"status": "blocked", "reason": "database_unavailable", "bots": []}
+    ensure_schema()
+    now = now or _ny_now()
+    today, month = now.date(), now.strftime("%Y-%m")
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT a.bot_id, a.cash_usd, a.cumulative_contributions, m.high_water_mark, m.mark_month,
+                       COALESCE(SUM(h.qty) FILTER (WHERE h.symbol = 'BIL'), 0),
+                       COALESCE(SUM(h.qty) FILTER (WHERE h.symbol = 'VOO'), 0)
+                FROM per_bot_vault_accounts a
+                LEFT JOIN per_bot_vault_marks m ON m.bot_id = a.bot_id
+                LEFT JOIN per_bot_vault_holdings h ON h.bot_id = a.bot_id
+                WHERE a.activation_enabled = TRUE
+                GROUP BY a.bot_id, a.cash_usd, a.cumulative_contributions, m.high_water_mark, m.mark_month
+                ORDER BY a.bot_id
+                """
+            )
+            rows = cur.fetchall()
+            cur.execute("SELECT bot_id, month FROM per_bot_vault_skims WHERE month = %s", (month,))
+            skimmed = {r[0] for r in cur.fetchall()}
+    out: list[dict[str, Any]] = []
+    for bot_id, cash, contributed, mark, mark_month, bil_qty, voo_qty in rows:
+        try:
+            held = {s: float(q) for s, q in ((VAULT_BIL_SYMBOL, bil_qty), (VAULT_VOO_SYMBOL, voo_qty)) if float(q) > 0}
+            prices = _latest_vault_prices(bot_id, set(held))
+            vault_value = round(float(cash or 0) + sum(q * prices[s] for s, q in held.items()), 2)
+            equity = _broker_equity(bot_id)
+            trading = round(equity - vault_value, 2)
+            if trading <= 0:
+                raise RuntimeError(f"trading equity {trading} not positive (equity {equity}, vault {vault_value})")
+            plan = plan_skim(month=month, trading_equity=trading,
+                             mark=None if mark is None else float(mark), mark_month=mark_month,
+                             skimmed_months={month} if bot_id in skimmed else set())
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        INSERT INTO per_bot_vault_value_history
+                            (bot_id, trading_capital, cumulative_contributions, vault_value, combined_total)
+                        VALUES (%s, %s, %s, %s, %s)
+                        """, (bot_id, trading, float(contributed or 0), vault_value, equity))
+                    if plan["action"] == "seed":
+                        cur.execute(
+                            "INSERT INTO per_bot_vault_marks (bot_id, high_water_mark, mark_month) VALUES (%s, %s, %s) "
+                            "ON CONFLICT (bot_id) DO NOTHING", (bot_id, plan["mark_after"], month))
+                    elif plan["action"] in ("skim", "below_mark"):
+                        cur.execute(
+                            """
+                            INSERT INTO per_bot_vault_skims
+                                (bot_id, month, as_of, broker_equity, vault_value, trading_equity,
+                                 mark_before, mark_after, amount)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            ON CONFLICT (bot_id, month) DO NOTHING
+                            RETURNING id
+                            """, (bot_id, month, today, equity, vault_value, trading,
+                                  plan["mark_before"], plan["mark_after"], plan["amount"]))
+                        if cur.fetchone() is None:
+                            out.append({"bot_id": bot_id, "action": "none", "reason": "done_this_month"})
+                            continue
+                        cur.execute("UPDATE per_bot_vault_marks SET high_water_mark = %s, mark_month = %s, "
+                                    "updated_at = NOW() WHERE bot_id = %s", (plan["mark_after"], month, bot_id))
+                        if plan["amount"] > 0:
+                            amount = plan["amount"]
+                            cur.execute(
+                                """
+                                INSERT INTO per_bot_vault_contributions
+                                    (bot_id, source_trade_id, realized_profit, skim_amount,
+                                     bil_allocated, voo_allocated, cash_accrued)
+                                VALUES (%s, %s, %s, %s, %s, 0, %s)
+                                ON CONFLICT (bot_id, source_trade_id) DO NOTHING
+                                """, (bot_id, f"hwm-{month}", round(trading - plan["mark_before"], 2),
+                                      amount, amount, amount))
+                            cur.execute(
+                                """
+                                UPDATE per_bot_vault_accounts
+                                SET cash_usd = cash_usd + %s,
+                                    cumulative_contributions = cumulative_contributions + %s,
+                                    trading_capital = %s, updated_at = NOW()
+                                WHERE bot_id = %s
+                                """, (amount, amount, plan["mark_after"], bot_id))
+                            cur.execute(
+                                """
+                                INSERT INTO per_bot_vault_deployment_queue (bot_id, pending_cash_usd)
+                                VALUES (%s, %s)
+                                ON CONFLICT (bot_id) DO UPDATE
+                                SET pending_cash_usd = per_bot_vault_deployment_queue.pending_cash_usd + EXCLUDED.pending_cash_usd,
+                                    status = CASE WHEN per_bot_vault_deployment_queue.bil_order_id IS NOT NULL
+                                                  THEN 'submitted' ELSE 'pending' END,
+                                    updated_at = NOW()
+                                """, (bot_id, amount))
+            if plan["action"] == "skim":
+                logger.info(f"PerBotVault | {bot_id} {month}: skimmed ${plan['amount']:.2f} "
+                            f"(trading ${trading:,.2f} over mark ${plan['mark_before']:,.2f})")
+            out.append({"bot_id": bot_id, "trading_equity": trading, "vault_value": vault_value, **plan})
+        except Exception as exc:
+            logger.error(f"PerBotVault | monthly skim failed for {bot_id}: {exc}")
+            try:
+                from core.degradation_tracker import record_degradation
+                record_degradation(component="per_bot_vault", severity="warning", error_type="monthly_skim",
+                                   message=f"Vault skim/mark read failed: {type(exc).__name__}", bot_id=bot_id)
+            except Exception:
+                pass
+            out.append({"bot_id": bot_id, "action": "error", "error": str(exc)})
+    return {"status": "complete", "month": month, "bots": out}
+
+
+def summary_view(*, today: date, accounts: list[dict[str, Any]], history: dict[str, list[dict[str, Any]]],
+                 contributions: dict[str, list[dict[str, Any]]], bil_symbol: str = VAULT_BIL_SYMBOL) -> dict[str, Any]:
+    """Pure: the dashboard's vault card from DB rows (no broker calls).
+
+    accounts: bot_id, seed_amount, cumulative_contributions, mark, mark_month,
+      bil_qty, voo_qty. history (oldest first): recorded_at (date),
+      trading_capital, vault_value, combined_total. contributions: created_at
+      (date), skim_amount."""
+    from datetime import timedelta
+    bots = []
+    for a in accounts:
+        rows = history.get(a["bot_id"], [])
+        last = rows[-1] if rows else None
+        value = float(last["vault_value"]) if last else None
+        principal = float(a["seed_amount"] or 0) + float(a["cumulative_contributions"] or 0)
+        contrib = contributions.get(a["bot_id"], [])
+        month_start = today.replace(day=1)
+        this_month = [r for r in rows if r["recorded_at"] >= month_start]
+        added_month = sum(float(c["skim_amount"]) for c in contrib if c["created_at"] >= month_start)
+        income_month = (round(value - float(this_month[0]["vault_value"]) - added_month, 2)
+                        if value is not None and this_month else None)
+        window = [r for r in rows if r["recorded_at"] >= today - timedelta(days=30)]
+        yield_30d = None
+        if value is not None and len(window) >= 15 and float(window[0]["vault_value"]) > 0:
+            days = max(1, (window[-1]["recorded_at"] - window[0]["recorded_at"]).days)
+            added = sum(float(c["skim_amount"]) for c in contrib if c["created_at"] > window[0]["recorded_at"])
+            yield_30d = round((value - float(window[0]["vault_value"]) - added)
+                              / float(window[0]["vault_value"]) * 365 / days, 4)
+        trading = float(last["trading_capital"]) if last else None
+        mark = None if a.get("mark") is None else float(a["mark"])
+        bots.append({
+            "bot_id": a["bot_id"],
+            "value": value,
+            "as_of": last["recorded_at"].isoformat() if last else None,
+            "bil_qty": float(a["bil_qty"] or 0),
+            "voo_qty": float(a["voo_qty"] or 0),
+            "money_in": round(principal, 2),
+            "income_lifetime": round(value - principal, 2) if value is not None else None,
+            "income_month": income_month,
+            "yield_30d_realized": yield_30d,
+            "contributions_year": round(sum(float(c["skim_amount"]) for c in contrib
+                                            if c["created_at"].year == today.year), 2),
+            "contributions_lifetime": round(float(a["cumulative_contributions"] or 0), 2),
+            "trading_equity": trading,
+            "total_equity": float(last["combined_total"]) if last else None,
+            "high_water_mark": mark,
+            "from_mark": round(trading / mark - 1, 4) if trading is not None and mark else None,
+        })
+    vals = [b["value"] for b in bots if b["value"] is not None]
     return {
-        "status": "planned",
-        "target": {"BIL": 0.50, "VOO": 0.50},
-        "scope": "per_bot_vault_holdings_only",
-        "order_prefix": VAULT_ORDER_PREFIX,
+        "rule": f"{SKIM_RATE:.0%} of each month's new high on trading equity, into {bil_symbol}",
+        "asset": bil_symbol,
+        "next_skim": next_skim_day(today).isoformat(),
+        "total": round(sum(vals), 2) if vals else None,
+        "bots": bots,
     }
 
 
-def record_profitable_close(
-    *,
-    bot_id: str,
-    source_trade_id: str,
-    realized_profit: float,
-    trading_capital_after_close: float | None = None,
-) -> dict[str, Any]:
-    """Record one winning close when activated; disabled mode is a true no-op."""
-    skim = calculate_skim(realized_profit)
-    if skim <= 0:
-        return {"recorded": False, "reason": "no_profit", "skim_amount": 0.0}
-    if not vault_enabled():
-        return {"recorded": False, "reason": "inactive", "skim_amount": skim}
-    if bot_id not in ACTIVE_BOT_IDS:
-        return {"recorded": False, "reason": "unknown_bot", "skim_amount": skim}
-    if not source_trade_id:
-        return {"recorded": False, "reason": "missing_source_trade_id", "skim_amount": skim}
-
+def get_vault_summary(today: date | None = None) -> dict[str, Any]:
+    """Read the vault card's rows; every figure was written by run_monthly_skim."""
     from db.postgres import get_conn, is_pg_available
-
     if not is_pg_available():
-        return {"recorded": False, "reason": "database_unavailable", "skim_amount": skim}
-    bil, voo = split_contribution(skim)
-    try:
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT activation_enabled FROM per_bot_vault_accounts WHERE bot_id = %s FOR UPDATE",
-                    (bot_id,),
-                )
-                account = cur.fetchone()
-                if not account or not account[0]:
-                    return {"recorded": False, "reason": "not_activated", "skim_amount": skim}
-                cur.execute(
-                    """
-                    INSERT INTO per_bot_vault_contributions
-                        (bot_id, source_trade_id, realized_profit, skim_amount,
-                         bil_allocated, voo_allocated, cash_accrued)
-                    VALUES (%s, %s, %s, %s, %s, %s, 0)
-                    ON CONFLICT (bot_id, source_trade_id) DO NOTHING
-                    RETURNING id
-                    """,
-                    (bot_id, source_trade_id, realized_profit, skim, bil, voo),
-                )
-                inserted = cur.fetchone()
-                if not inserted:
-                    return {"recorded": False, "reason": "duplicate", "skim_amount": skim}
-                cur.execute(
-                    """
-                    UPDATE per_bot_vault_accounts
-                    SET cash_usd = cash_usd + %s,
-                        trading_capital = trading_capital + %s - %s,
-                        cumulative_contributions = cumulative_contributions + %s,
-                        updated_at = NOW()
-                    WHERE bot_id = %s AND activation_enabled = TRUE
-                    """,
-                    (skim, realized_profit, skim, skim, bot_id),
-                )
-                cur.execute(
-                    """
-                    INSERT INTO per_bot_vault_deployment_queue (bot_id, pending_cash_usd)
-                    VALUES (%s, %s)
-                    ON CONFLICT (bot_id) DO UPDATE
-                    SET pending_cash_usd =
-                            per_bot_vault_deployment_queue.pending_cash_usd
-                            + EXCLUDED.pending_cash_usd,
-                        status = CASE
-                            WHEN per_bot_vault_deployment_queue.bil_order_id IS NOT NULL
-                              OR per_bot_vault_deployment_queue.voo_order_id IS NOT NULL
-                            THEN 'submitted' ELSE 'pending'
-                        END,
-                        updated_at = NOW()
-                    """,
-                    (bot_id, skim),
-                )
-        return {
-            "recorded": True,
-            "bot_id": bot_id,
-            "source_trade_id": source_trade_id,
-            "realized_profit": round(float(realized_profit), 2),
-            "skim_amount": skim,
-            "bil_allocated": bil,
-            "voo_allocated": voo,
-            "cash_accrued": skim,
-        }
-    except Exception as exc:
-        logger.error(f"PerBotVault | contribution failed for {bot_id}/{source_trade_id}: {exc}")
-        return {"recorded": False, "reason": "error", "detail": str(exc), "skim_amount": skim}
+        return {"enabled": vault_enabled(), "error": "database_unavailable", "bots": []}
+    ensure_schema()
+    today = today or _ny_now().date()
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT a.bot_id, a.seed_amount, a.cumulative_contributions,
+                       m.high_water_mark AS mark, m.mark_month,
+                       COALESCE(SUM(h.qty) FILTER (WHERE h.symbol = 'BIL'), 0) AS bil_qty,
+                       COALESCE(SUM(h.qty) FILTER (WHERE h.symbol = 'VOO'), 0) AS voo_qty
+                FROM per_bot_vault_accounts a
+                LEFT JOIN per_bot_vault_marks m ON m.bot_id = a.bot_id
+                LEFT JOIN per_bot_vault_holdings h ON h.bot_id = a.bot_id
+                WHERE a.activation_enabled = TRUE
+                GROUP BY a.bot_id, a.seed_amount, a.cumulative_contributions, m.high_water_mark, m.mark_month
+                ORDER BY a.bot_id
+                """
+            )
+            accounts = [_row_dict(cur, r) for r in cur.fetchall()]
+            cur.execute(
+                """
+                SELECT bot_id, (recorded_at AT TIME ZONE 'America/New_York')::date AS recorded_at,
+                       trading_capital, vault_value, combined_total
+                FROM per_bot_vault_value_history
+                WHERE recorded_at >= NOW() - INTERVAL '40 days'
+                ORDER BY recorded_at
+                """
+            )
+            history: dict[str, list[dict[str, Any]]] = {}
+            for r in cur.fetchall():
+                row = _row_dict(cur, r)
+                history.setdefault(row["bot_id"], []).append(row)
+            cur.execute(
+                """
+                SELECT bot_id, (created_at AT TIME ZONE 'America/New_York')::date AS created_at, skim_amount
+                FROM per_bot_vault_contributions
+                ORDER BY created_at
+                """
+            )
+            contributions: dict[str, list[dict[str, Any]]] = {}
+            for r in cur.fetchall():
+                row = _row_dict(cur, r)
+                contributions.setdefault(row["bot_id"], []).append(row)
+            cur.execute("SELECT bot_id, month, as_of, trading_equity, mark_before, mark_after, amount "
+                        "FROM per_bot_vault_skims ORDER BY as_of DESC LIMIT 36")
+            ledger = [_row_dict(cur, r) for r in cur.fetchall()]
+    out = summary_view(today=today, accounts=accounts, history=history, contributions=contributions)
+    out["enabled"] = vault_enabled()
+    out["ledger"] = [{k: (v.isoformat() if hasattr(v, "isoformat") else float(v) if k not in ("bot_id", "month") else v)
+                      for k, v in r.items()} for r in ledger]
+    return out
 
 
 def _latest_vault_prices(bot_id: str, symbols: set[str]) -> dict[str, float]:
@@ -1237,8 +1589,9 @@ def get_vault_report(bot_id: str | None = None) -> dict[str, Any]:
 def verification_report() -> dict[str, Any]:
     example = worked_example()
     return {
+        "rule": "VAULT-V2: 10% of each month's new high-water gain on trading equity, into BIL",
         "example": example,
-        "losing_trade": {"profit": -10.0, "skim": calculate_skim(-10.0), "expected": 0.0},
+        "below_mark": {"trading_equity": 99_000.0, "mark": 100_000.0, "skim": hwm_skim(99_000.0, 100_000.0)[0]},
         "trading_return_example": trading_return_pct(108.0, 100.0),
         "deployment_when_inactive": deployment_plan(10.0, market_open=True),
         "seed_preview": seed_preview(),

@@ -58,6 +58,7 @@ function TopBar({ actions }: { actions?: ReactNode }) {
         {NAV.map((n) => (
           <Link key={n.path} href={n.path} aria-current={active(n.path) ? "page" : undefined}>{n.label}</Link>
         ))}
+        <a href={`${import.meta.env.BASE_URL}paper.html`} target="_blank" rel="noopener" title="The research paper: why three accounts, what the evidence is, how 2027 is judged">Paper</a>
       </nav>
       <div className="statuses glass" aria-label="Platform status">
         <span className="label">Paper accounts</span>

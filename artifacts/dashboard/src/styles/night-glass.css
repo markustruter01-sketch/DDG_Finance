@@ -188,6 +188,9 @@ table.ng .money, table.ng th.money { font-family: var(--ng-mono); text-align: ri
 .engine-chart { flex: 0 0 64px; min-height: 64px; }
 .engine-invested { display: flex; justify-content: space-between; align-items: baseline; }
 .engine-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding-top: 8px; border-top: 1px solid var(--ng-hairline); }
+.fleet-account { min-height: 0; overflow: auto; gap: 8px; }
+.fleet-account .list li { min-height: 26px; }
+.fleet-account .engine-stats { border-top: 0; padding-top: 0; }
 .donut { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); align-items: center; gap: 12px; }
 .donut-center .num-sm { font-size: clamp(11px, 0.9vw, 20px); }
 .donut-legend .small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

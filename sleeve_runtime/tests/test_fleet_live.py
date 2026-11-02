@@ -288,3 +288,22 @@ def test_drawdown_limits_match_the_platforms_risk_limits():
     spec.loader.exec_module(mod)
     assert (mod.SOFT_DRAWDOWN, mod.HARD_DRAWDOWN) == (SOFT, HARD)
     assert mod.ENFORCE_DRAWDOWN_LIMITS is True
+
+
+def test_daily_mark_records_cutover_once_and_a_mark_per_session():
+    bars = _bars()
+    st = fl.daily_mark({}, bars, 100_000.0)
+    assert st["cutover"] == st["mark"] and st["mark"]["day"] == bars["SPY"][-1]["day"].isoformat()
+    assert fl.daily_mark(st, bars, 101_000.0) is None                 # same session: unchanged
+    later = {s: v + [{"day": date(2026, 10, 26), "close": v[-1]["close"] * 1.01}] for s, v in bars.items()}
+    st2 = fl.daily_mark(st, later, 102_000.0)
+    assert st2["cutover"] == st["cutover"] and st2["mark"]["equity"] == 102_000.0
+
+
+def test_cycle_writes_the_daily_mark():
+    bars = _bars()
+    eng = _engine(bars, {}, 100_000.0, [])
+    _, state, _ = _run(eng, bars)
+    assert state["cutover"]["equity"] == pytest.approx(100_000.0, rel=1e-6)
+    last_completed = [b for b in bars["SPY"] if b["day"] <= LAST][-1]     # today's bar is still forming
+    assert state["mark"] == {**state["mark"], "day": LAST.isoformat(), "spy": last_completed["close"]}

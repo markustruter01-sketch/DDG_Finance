@@ -66,3 +66,14 @@ The API serves these from the ledger, the exploration log and the runtime state;
 
 ## Review before merge to the live account (Fable)
 Order path end to end, the parity test, and the risk governor. Opus requests this review in the PR; it does not merge to the account without it.
+
+## Build notes (Opus 5.5, 2 Nov 2026) — for the Fable review
+Where the build differs from the text above, and why:
+1. **Forex is NOT deleted.** Fleet equity (`core/fleet_equity.py`) sums every registered bot including the OANDA NAV, and the kill switch's high-water mark is the historical maximum of that sum (`execution/reconciliation.py`). Removing forex would drop ~$100k from fleet equity at once and read as a ~25% fleet drawdown to the now-armed kill switch. Instead: `FOREX_COUNCIL_ENABLED` and `FOREX_TRADING_ENABLED` are False (no AI calls, no orders); the bot stays registered and paused as a read-only NAV monitor. Removing it needs a high-water-mark rebase: owner decision, separate PR.
+2. **The LLM pipeline is cut at its entry points, not module by module.** `POST /run`, `run_pipeline`, the after-hours crypto cycle and the dead `_intraday_cycle` job are gone; `core/pipeline.py` keeps only the read-only state the status routes report and the post-mortem. `analysis/analyzer.py`, `execution/executor.py`, `ratchet_stop.py` and friends are now unreachable from any route or job but are still imported by other modules; deleting them is a follow-up once the trading-platform test suite can be run on Replit.
+3. **Two forex modules that `research_harness` imports stay** (`forex_quant_desk.py`, `forex_baseline_backtest.py`): research_harness is off-limits.
+4. **Drawdown is per account, from Alpaca's `last_equity`** (the previous close), including any vault holdings. Fleet-level limits (risk governor 15%, kill switch 22%) use the same numbers on the fleet's sum. If the kill switch trips first it pauses everything and keeps positions under their stops (it never liquidates); the per-account hard halt is the one that goes to cash.
+5. **Clearing a hard halt** uses the existing kill-switch reset token (`KILL_SWITCH_RESET_CONFIRMATION`); the high-water mark restarts at the account's equity at that moment.
+6. **Since-cutover comparison** uses SPY's adjusted close as recorded each session, so dividends after cutover are not in it (labelled "SPY price only").
+7. **Kill switch armed by default** in code (`settings.kill_switch_armed`, invariants). If Replit's secrets set `KILL_SWITCH_ARMED=false`, the secret still wins; check it.
+8. Dashboard: Home's bottom-right pair is now the two FLEET-V1 accounts (signal, targets, drawdown, vs SPY); Bench gains the FLEET-V1 record above the research catalogue; Controls gains drawdown limits and halt clearing. The catalogue, pause controls and emergency stop are unchanged.

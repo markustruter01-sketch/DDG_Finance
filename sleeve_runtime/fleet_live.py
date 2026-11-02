@@ -228,6 +228,21 @@ def fleet_due(bars, today_ny: date, state: dict[str, Any], mode: str) -> tuple[d
     return signal_day, core, key
 
 
+def daily_mark(state: dict[str, Any], bars, sleeve_equity: float) -> dict[str, Any] | None:
+    """Once per session: the account's sleeve equity and SPY's close, plus the
+    first such mark (the cutover). Returns the new state, or None if unchanged.
+    SPY's close is from the adjusted series, so later dividends are not in
+    the comparison: it is a price-return benchmark, labelled as such."""
+    spy = bars.get(SIGNAL) or []
+    if not spy or sleeve_equity <= 0:
+        return None
+    mark = {"day": spy[-1]["day"].isoformat(), "spy": float(spy[-1]["close"]),
+            "equity": round(float(sleeve_equity), 2)}
+    if (state.get("mark") or {}).get("day") == mark["day"]:
+        return None
+    return {**state, "mark": mark, "cutover": state.get("cutover") or mark}
+
+
 def fetch_fleet_bars(fetch_bars: BarFetcher, held: dict[str, float], now: datetime,
                      variant: FleetVariant):
     """The variant's symbols plus anything held (legacy holdings get a price to sell)."""
@@ -283,6 +298,10 @@ def run_fleet_cycle(
     status = "no rebalance due"
     cap = sleeve_capital(account, live, vault=vault, cash_park=cash_park)
     bars = fetch_fleet_bars(fetch_bars, cap.held, now, variant)
+    marked = daily_mark(state, bars, cap.equity)
+    if marked is not None:
+        state = marked
+        write_state(state)
     due = fleet_due(bars, today_ny, state, mode)
     if due is not None:
         signal_day, core, key = due

@@ -12,6 +12,8 @@ import {
 import { parseCatalogResponse } from "@/lib/benchApi";
 import { Shell, Status } from "@/components/Shell";
 import { botColor } from "@/lib/bot-identity";
+import { FleetRecordPanel } from "@/components/FleetV1";
+import { useFleetV1Record } from "@/hooks/use-fleet-v1";
 
 type Experiment = {
   id: string | number;
@@ -251,6 +253,7 @@ export default function BenchPage() {
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const fleetRecord = useFleetV1Record();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -423,6 +426,12 @@ export default function BenchPage() {
           </div>
           <span className="label">Cannot start research or place orders</span>
         </div>
+
+        {fleetRecord.data ? <FleetRecordPanel record={fleetRecord.data} /> : fleetRecord.isError ? (
+          <section className="glass panel" role="alert">
+            <Status tone="problem" word="FLEET-V1 record unavailable" />
+          </section>
+        ) : null}
 
         {error ? (
           <section className="glass panel" role="alert" data-testid="status-bench-error">

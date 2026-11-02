@@ -4,6 +4,8 @@ import { OctagonX, Pause, Play, RefreshCw } from "lucide-react";
 import { api } from "@/hooks/use-trading-client";
 import { botColor, formatBotLabel, useBotIdentity } from "@/lib/bot-identity";
 import { Shell, Status, bneTime } from "@/components/Shell";
+import { useClearHalt, useFleetV1State, type FleetAccount } from "@/hooks/use-fleet-v1";
+import { pct } from "@/components/FleetV1";
 
 // Controls for the live platform. bots_state.paused is the only pause switch;
 // the runner treats a missing or unreadable row as paused.
@@ -116,6 +118,64 @@ function EmergencyStop({ tripped }: { tripped: boolean }) {
   );
 }
 
+function HaltRow({ account }: { account: FleetAccount }) {
+  const [token, setToken] = useState("");
+  const clear = useClearHalt(account.bot_id);
+  const dd = account.drawdown;
+  return (
+    <li className="control-row" data-testid={`row-halt-${account.bot_id}`}>
+      <div className="grow">
+        <div className="card-title">{account.registration}</div>
+        <div className="note">
+          Drawdown {pct(dd.drawdown)} from high-water mark {dd.high_water_mark == null ? "—" : `$${Math.round(dd.high_water_mark).toLocaleString("en-AU")}`}
+          {dd.as_of ? ` · as of ${dd.as_of} close` : ""}
+          {dd.cleared_at ? ` · last cleared ${bneTime(dd.cleared_at)} by ${dd.cleared_by}` : ""}
+        </div>
+        {clear.isError && <div className="note"><span className="loss">Not cleared: {errorText(clear.error)}</span></div>}
+      </div>
+      {dd.halted ? <Status tone="problem" word="Halted (all cash)" />
+        : dd.mode === "soft" ? <Status tone="late" word="Half size" /> : <Status tone="ok" word="Normal" />}
+      {dd.halted && (
+        <div className="control-actions">
+          <input className="input" type="password" value={token} onChange={(e) => setToken(e.target.value)}
+            placeholder="Owner confirmation" aria-label={`Confirmation to clear ${account.registration}`} />
+          <button className="btn" disabled={!token || clear.isPending} data-testid={`button-clear-halt-${account.bot_id}`}
+            onClick={() => {
+              if (window.confirm(`Clear the halt on ${account.registration}? It trades again at the next cycle, and its high-water mark restarts at today's equity.`)) {
+                clear.mutate(token, { onSettled: () => setToken("") });
+              }
+            }}>
+            {clear.isPending ? "Clearing…" : "Clear halt"}
+          </button>
+        </div>
+      )}
+    </li>
+  );
+}
+
+function DrawdownLimits() {
+  const fleet = useFleetV1State();
+  if (fleet.isError) {
+    return <section className="glass panel" role="alert"><Status tone="problem" word="FLEET-V1 state unreadable" /></section>;
+  }
+  if (!fleet.data) return null;
+  const { limits, kill_switch: ks } = fleet.data;
+  return (
+    <section className="glass panel" aria-label="Drawdown limits">
+      <div className="panel-head">
+        <h2>Drawdown limits</h2>
+        <Status tone={ks.tripped ? "problem" : ks.armed ? "ok" : "late"}
+          word={ks.tripped ? "Kill switch tripped" : ks.armed ? "Kill switch armed" : "Kill switch NOT armed"} />
+      </div>
+      <p className="body" style={{ margin: 0 }}>
+        {limits.enforced ? "Enforced" : "Record only"}: above {pct(limits.soft, 0)} {limits.soft_action}; above {pct(limits.hard, 0)} {limits.hard_action}.
+        {!ks.armed && " The kill switch is disarmed by the KILL_SWITCH_ARMED secret; arming it is an owner action in Replit's secrets."}
+      </p>
+      <ul className="list">{fleet.data.accounts.map((a) => <HaltRow key={a.bot_id} account={a} />)}</ul>
+    </section>
+  );
+}
+
 export default function ControlsPage() {
   const state = useQuery({
     queryKey: PAUSE_KEY,
@@ -146,6 +206,7 @@ export default function ControlsPage() {
               <div className="panel-head"><h2>Bots</h2><span className="label">{state.data.bots.length} bots</span></div>
               <ul className="list">{state.data.bots.map((row) => <BotRow key={row.bot_id} row={row} />)}</ul>
             </section>
+            <DrawdownLimits />
             <EmergencyStop tripped={state.data.kill_switch_tripped} />
           </>
         )}

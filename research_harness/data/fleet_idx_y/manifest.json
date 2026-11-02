@@ -1,0 +1,46 @@
+{
+  "dataset": "fleet_idx_y",
+  "fetched_at": "2026-11-02T05:48:57.980877+00:00",
+  "fields": [
+    "day",
+    "open",
+    "high",
+    "low",
+    "close"
+  ],
+  "locked_from": "2011-01-01",
+  "notes": "Dividend/split-adjusted OHLC (total-return proxy). The vendor revises adjusted history, so a later pull can differ; the manifest hash pins this one. Index symbols (^...) carry no dividends: adjclose equals close.",
+  "source": "Yahoo chart API v8, adjusted by adjclose/close (as yfinance auto_adjust=True) 1985-01-01..2010-12-31",
+  "symbols": {
+    "DX-Y.NYB": {
+      "first": "1985-01-02",
+      "last": "2010-12-31",
+      "rows": 6698,
+      "sha256": "9dcc981e69634c41c1002863ddf7eb91af5866f0a9565bff36465b54ffa115a4"
+    },
+    "GC=F": {
+      "first": "2000-08-29",
+      "last": "2010-12-31",
+      "rows": 2587,
+      "sha256": "55d46a663b11984e6f1a45cd0689e50de1d83620c6c7225605aa7812f642b812"
+    },
+    "^GSPC": {
+      "first": "1985-01-02",
+      "last": "2010-12-31",
+      "rows": 6558,
+      "sha256": "868c3ba7ca4616618c896a32f8cd635b4f66c89735129a3aa5da8eb223667d03"
+    },
+    "^NDX": {
+      "first": "1985-10-01",
+      "last": "2010-12-31",
+      "rows": 6370,
+      "sha256": "8c474d326810e938b8854df6d2078ccbdedfd1ebd8a114de08ef86b25cc5c55a"
+    },
+    "^SPGSCI": {
+      "first": "1985-01-02",
+      "last": "2010-12-31",
+      "rows": 6557,
+      "sha256": "98bd53d9157d190e1296b99bac7cb42b61fdb8a35a66013ee09c5c6c7108f087"
+    }
+  }
+}

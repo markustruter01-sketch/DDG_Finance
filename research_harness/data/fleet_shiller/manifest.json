@@ -1,0 +1,20 @@
+{
+  "dataset": "fleet_shiller",
+  "fetched_at": "2026-11-02T05:49:44.865237+00:00",
+  "fields": [
+    "day",
+    "price",
+    "dividend"
+  ],
+  "locked_from": "2011-01-01",
+  "notes": "monthly; day = 1st of the month; dividend = annual rate in index points",
+  "source": "Shiller ie_data.xls (econ.yale.edu) sheet Data 1985-01-01..2010-12-31",
+  "symbols": {
+    "SP500": {
+      "first": "1985-01-01",
+      "last": "2010-12-01",
+      "rows": 312,
+      "sha256": "301868977d51854335bd587d8fcf50b35a326e3ad5f3285f2044f1447054ccdb"
+    }
+  }
+}

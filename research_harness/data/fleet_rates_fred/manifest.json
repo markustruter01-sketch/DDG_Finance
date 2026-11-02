@@ -1,0 +1,25 @@
+{
+  "dataset": "fleet_rates_fred",
+  "fetched_at": "2026-11-02T05:49:33.886218+00:00",
+  "fields": [
+    "day",
+    "rate"
+  ],
+  "locked_from": "2011-01-01",
+  "notes": "rate is annual, decimal (0.05 = 5%); FRED's missing days ('.') are dropped",
+  "source": "FRED public CSV DTB3,DGS10 1985-01-01..2010-12-31",
+  "symbols": {
+    "DGS10": {
+      "first": "1985-01-02",
+      "last": "2010-12-31",
+      "rows": 6503,
+      "sha256": "e2b27fe16377fc1367ada22186a18d51ae44bf2c9211a8866cf413737eff2114"
+    },
+    "DTB3": {
+      "first": "1985-01-02",
+      "last": "2010-12-31",
+      "rows": 6503,
+      "sha256": "f31f8e44abf7152e27632444c579955c8ae74dd951ca3dbf79a9888ae1ed99e7"
+    }
+  }
+}

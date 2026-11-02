@@ -121,7 +121,42 @@ function EmergencyStop({ tripped }: { tripped: boolean }) {
         <div className="small">Done. Pending orders cancelled: {trip.data?.cancelled_orders ?? 0}. {trip.data?.action}</div>
       )}
       {trip.isError && <div className="small"><span className="loss">Failed: {errorText(trip.error)}</span></div>}
+      {tripped && <KillReset />}
     </section>
+  );
+}
+
+/** Clears the kill switch's latch. Owner only: the server checks the token
+ *  against its KILL_SWITCH_RESET_CONFIRMATION secret and writes a reset
+ *  event. Bots stay paused until resumed one by one above. */
+function KillReset() {
+  const qc = useQueryClient();
+  const [token, setToken] = useState("");
+  const reset = useMutation({
+    mutationFn: async () => (await api.post("/kill/reset", { confirmation_token: token })).data as { status: string },
+    onSettled: () => {
+      setToken("");
+      qc.invalidateQueries({ queryKey: PAUSE_KEY });
+      qc.invalidateQueries({ queryKey: ["/fleet-v1/state"] });
+    },
+  });
+  return (
+    <div className="halt-row" style={{ borderTop: "1px solid var(--ng-hairline)", paddingTop: 10 }}>
+      <p className="body" style={{ margin: "0 0 8px" }}>
+        The kill switch is tripped: every account is paused. Once the cause is fixed, clear the latch with the
+        owner's reset token, then resume the accounts above. Nothing is bought or sold by the reset.
+      </p>
+      <div className="control-actions">
+        <input className="input" type="password" value={token} onChange={(e) => setToken(e.target.value)}
+          placeholder="Reset token" aria-label="Kill switch reset token" data-testid="input-kill-reset-token" />
+        <button className="btn" data-testid="button-kill-reset" disabled={!token || reset.isPending}
+          onClick={() => reset.mutate()}>
+          {reset.isPending ? "Clearing…" : "Clear the kill switch"}
+        </button>
+      </div>
+      {reset.isSuccess && <div className="small">Cleared. Resume the accounts above when ready.</div>}
+      {reset.isError && <div className="small"><span className="loss">Refused: {errorText(reset.error)}</span></div>}
+    </div>
   );
 }
 

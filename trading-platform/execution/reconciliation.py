@@ -465,6 +465,24 @@ def _vault_ledger(bot_id: str) -> tuple[dict[str, float], dict[str, float]]:
     return qty, pending
 
 
+def _vault_sales_in_flight(bot_id: str) -> set[str]:
+    """Vault symbols with a sell order submitted but not yet booked
+    (per_bot_vault_liquidations, VAULT-V2's one-time VOO sale). Between the
+    broker's fill and the next deployment cycle the ledger still shows the
+    shares; that gap is a sale in progress, not a mismatch (3 Nov 2026: the
+    kill switch tripped on exactly this and paused every account)."""
+    from db.postgres import get_conn
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT symbol FROM per_bot_vault_liquidations "
+                            "WHERE bot_id = %s AND status = 'submitted'", (bot_id,))
+                return {canonical_symbol(s) for (s,) in cur.fetchall()}
+    except Exception as exc:                     # table not created yet: nothing in flight
+        logger.debug(f"Reconciliation | liquidation read for {bot_id}: {exc}")
+        return set()
+
+
 def _vault_mismatches(bot_id: str, broker: list[dict[str, Any]],
                       vault_symbols: set[str]) -> list[dict[str, Any]]:
     """Broker vault holdings vs the vault ledger. Only quantities go in the
@@ -476,9 +494,12 @@ def _vault_mismatches(bot_id: str, broker: list[dict[str, Any]],
     except Exception as exc:
         logger.warning(f"Reconciliation | vault ledger read failed for {bot_id}: {exc}")
         return [_reconciliation_check_failed("vault_ledger_read", exc, bot_id)]
+    selling = _vault_sales_in_flight(bot_id)
     held = {canonical_symbol(p.get("symbol")): p for p in broker}
     out = []
     for symbol in sorted(vault_symbols):
+        if symbol in selling:
+            continue
         p = held.get(symbol)
         broker_qty = abs(float(p.get("qty") or 0)) if p else 0.0
         vault_qty = ledger.get(symbol, 0.0)

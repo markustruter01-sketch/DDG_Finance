@@ -82,6 +82,7 @@ def broker(monkeypatch):
     monkeypatch.setattr(vault, "_submit_vault_buy", submit)
     monkeypatch.setattr(vault, "_read_vault_order", read)
     monkeypatch.setattr(vault, "_orders_today", {}, raising=False)
+    monkeypatch.setattr(vault, "run_voo_liquidation", lambda **_k: {"status": "skipped_in_test"})
     return submitted
 
 
@@ -119,18 +120,17 @@ def _state():
 def test_stuck_queue_buys_once_records_the_fill_and_stops(broker, stuck_queue):
     for _ in range(6):                                    # 90 minutes of market-hours cycles
         vault.run_deployment_cycle(market_open=True)
-    assert broker == ["BIL", "VOO"]                       # one buy each, not one per cycle
+    # VAULT-V2: the leftover VOO amount is bought as BIL, in one order, once.
+    assert broker == ["BIL"]
     pending_bil, pending_voo, status, held = _state()
-    assert pending_bil < vault.MIN_TRADE_NOTIONAL and pending_voo < vault.MIN_TRADE_NOTIONAL
+    assert pending_bil < vault.MIN_TRADE_NOTIONAL and pending_voo == 0
     assert status == "complete"
-    assert held["BIL"] == pytest.approx(25.250485556 + 5.22 / 91.598, abs=1e-4)
-    assert held["VOO"] == pytest.approx(3.28414826 + 5.21 / 710.584, abs=1e-5)
+    assert held["BIL"] == pytest.approx(25.250485556 + (5.22 + 5.21) / 91.598, abs=1e-4)
+    assert held["VOO"] == pytest.approx(3.28414826, abs=1e-8)   # sold only by the liquidation step
 
 
 def test_daily_cap_stops_a_runaway(broker, stuck_queue, monkeypatch):
-    monkeypatch.setattr(vault, "DAILY_ORDER_CAP", 1)
-    vault.run_deployment_cycle(market_open=True)
-    assert broker == ["BIL"]                              # VOO refused by the breaker
+    monkeypatch.setattr(vault, "DAILY_ORDER_CAP", 0)
     out = vault.run_deployment_cycle(market_open=True)
-    assert broker == ["BIL"]
+    assert broker == []
     assert any(r.get("reason") == "daily_order_cap" for r in out["orders"])

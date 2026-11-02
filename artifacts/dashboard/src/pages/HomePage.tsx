@@ -2,13 +2,15 @@
  * DDG Finance home (Night Glass v5): one screen on desktop, stacked on phones.
  * All money and return figures are server values (Rule 27); the client only
  * formats them, sums market values for the holdings mix and divides equity by
- * fleet equity for allocation shares. The bottom-right pair is FLEET-V1's two
- * accounts: signal, targets, drawdown mode and return against SPY since cutover.
+ * fleet equity for allocation shares. Three paper accounts are compared to
+ * the end of 2027 (Atlas: FLEET-V1-F1, Momentum: MOMO-V2, Bullion); the race
+ * chart and the comparison table come from /fleet/comparison, the vault card
+ * from /vault/per-bot/summary.
  */
 import { useMemo, type ReactNode } from "react";
 import { Download } from "lucide-react";
 import {
-  Area, AreaChart, Bar, BarChart, Cell, Pie, PieChart, ReferenceLine,
+  Area, AreaChart, Bar, BarChart, Cell, Line, LineChart, Pie, PieChart, ReferenceLine,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { Shell, Status } from "@/components/Shell";
@@ -18,8 +20,11 @@ import { useRiskMetrics } from "@/hooks/use-performance";
 import { useExportReport } from "@/hooks/use-report";
 import { useBotHistory, type BotDay } from "@/hooks/use-bot-history";
 import { botColor } from "@/lib/bot-identity";
-import { useFleetV1State, useMomoV2State } from "@/hooks/use-fleet-v1";
-import { FleetAccountPanel, MomoPanel } from "@/components/FleetV1";
+import { useComparison, useFleetV1State, useMomoV2State, useVaultSummary } from "@/hooks/use-fleet-v1";
+import { ComparisonPanel, FleetAccountPanel, MomoPanel, VaultPanel } from "@/components/FleetV1";
+
+// The three accounts in the 2027 comparison. Forex (OANDA) is paused and off the page.
+const ACCOUNTS = ["oracle", "spy_qqq_trend", "jerome_macro"] as const;
 
 // Chart colours = the brand four (same values as styles/night-glass/tokens.css).
 // Each account has its own colour (lib/bot-identity BOT_COLORS). Only losses get a
@@ -202,11 +207,13 @@ export default function HomePage() {
   const risk = useRiskMetrics();
   const fleetV1 = useFleetV1State();
   const momo = useMomoV2State();
+  const comparison = useComparison();
+  const vault = useVaultSummary();
   const report = useExportReport();
 
   const engines: Engine[] = useMemo(() => {
     const bots = (registry.data?.bots ?? [])
-      .filter((b) => b.status !== "retired")
+      .filter((b) => b.status !== "retired" && (ACCOUNTS as readonly string[]).includes(b.id))
       .sort((a, b) => a.display_order - b.display_order);
     return bots.map((b) => ({
       id: b.id,
@@ -220,10 +227,8 @@ export default function HomePage() {
     }));
   }, [registry.data, fleet, botHistory.data, positionsByBot]);
 
-  const allocation = engines
-    .filter((e) => e.slice?.equity != null && e.slice.equity > 0)
-    .map((e) => ({ name: e.name, value: e.slice!.equity, color: e.shade }));
-  const allocTotal = allocation.reduce((s, d) => s + d.value, 0);
+  const names = Object.fromEntries(ACCOUNTS.map((id) => [id, engines.find((e) => e.id === id)?.name ?? id]));
+  const race = comparison.data?.rows ?? [];
 
   const holdings = HOLDING_GROUPS.map((name, i) => ({
     name,
@@ -298,6 +303,32 @@ export default function HomePage() {
 
       <div className="home-main">
         <div className="home-left">
+          {race.length > 1 ? (
+            <Panel title={`Since ${shortDate(String(race[0].date))} · return by account`} className="fleet-panel" aside={
+              <span className="key">
+                {engines.map((e) => <span key={e.id}><i style={{ background: e.shade }} />{e.name}</span>)}
+                <span><i style={{ background: FLEET }} />S&amp;P 500</span>
+              </span>
+            }>
+              <div className="chart">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={race} margin={{ top: 10, right: 6, bottom: 0, left: 6 }}>
+                    <XAxis dataKey="date" tickFormatter={shortDate} minTickGap={48} tick={{ fill: AXIS, fontSize: 11 }}
+                      axisLine={{ stroke: HAIRLINE }} tickLine={false} />
+                    <YAxis width={52} tickFormatter={(v: number) => `${(v * 100).toFixed(0)}%`}
+                      tick={{ fill: AXIS, fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <ReferenceLine y={0} stroke={HAIRLINE} />
+                    <Tooltip cursor={{ stroke: HAIRLINE }} content={<Tip title={shortDate}
+                      fmt={(v, row) => `${row.name === "spy" ? "S&P 500" : names[String(row.name)] ?? row.name}: ${signedPct(v * 100, 1)}`} />} />
+                    {engines.map((e) => (
+                      <Line key={e.id} dataKey={e.id} name={e.id} stroke={e.shade} strokeWidth={1.5} dot={false} isAnimationActive={false} />
+                    ))}
+                    <Line dataKey="spy" name="spy" stroke={FLEET} strokeWidth={1.5} dot={false} isAnimationActive={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </Panel>
+          ) : (
           <Panel title="Fleet equity · daily close" className="fleet-panel" aside={
             <span className="label">{fleetCurve.length ? `${shortDate(fleetCurve[0].date)} – ${shortDate(fleetCurve.at(-1)!.date)}` : ""}</span>
           }>
@@ -320,6 +351,8 @@ export default function HomePage() {
               ) : <Empty>No fleet history yet. The first point is saved at tonight's close.</Empty>}
             </div>
           </Panel>
+          )}
+          <ComparisonPanel data={comparison.data} names={names} />
           <div className="engines">
             {engines.length
               ? engines.map((e) => <EngineCard key={e.id} e={e} mktOpen={mktOpen} />)
@@ -329,12 +362,7 @@ export default function HomePage() {
 
         <div className="home-right">
           <div className="pair">
-            <Panel title="Allocation by engine">
-              {allocation.length ? (
-                <Donut data={allocation} total={allocTotal}
-                  center={<><span className="label">Total</span><span className="num-sm">{fmtEq(allocTotal)}</span></>} />
-              ) : <Empty>No engine equity reported yet.</Empty>}
-            </Panel>
+            <VaultPanel vault={vault.data} names={names} />
             <Panel title="Holdings mix">
               {holdings.length ? (
                 <Donut data={holdings} total={holdingsTotal}
@@ -343,7 +371,7 @@ export default function HomePage() {
             </Panel>
           </div>
 
-          <Panel title="Daily return by engine" aside={returnEngines.length ? (
+          <Panel title="Daily return by account" aside={returnEngines.length ? (
             <span className="key">{returnEngines.map((e) => <span key={e.id}><i style={{ background: e.shade }} />{e.name}</span>)}</span>
           ) : undefined}>
             <div className="chart">

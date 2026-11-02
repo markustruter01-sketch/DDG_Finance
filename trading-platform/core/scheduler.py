@@ -520,21 +520,16 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
     logger.info("Scheduler | Registered: gear_v1_g4_shadow (16:40 NY weekdays, no orders)")
 
     scheduler.add_job(
-        func=_per_bot_vault_quarterly_rebalance,
-        trigger=CronTrigger(
-            month="1,4,7,10",
-            day="1-7",
-            day_of_week="mon-fri",
-            hour=9,
-            minute=45,
-            timezone="America/New_York",
-        ),
-        id="per_bot_vault_quarterly_rebalance",
-        name="Per-Bot Vault Quarterly 50/50 Rebalance",
+        func=_per_bot_vault_monthly_skim,
+        trigger=CronTrigger(day_of_week="mon-fri", hour=8, minute=45, timezone="America/New_York"),
+        id="per_bot_vault_monthly_skim",
+        name="Per-Bot Vault: daily mark, monthly 10% high-water skim (before the open)",
         replace_existing=True,
-        misfire_grace_time=3600,
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=1800,
     )
-    logger.info("Scheduler | Registered: per_bot_vault_quarterly_rebalance (quarterly, fail-closed)")
+    logger.info("Scheduler | Registered: per_bot_vault_monthly_skim (08:45 NY weekdays; skims on the month's first run)")
 
     logger.info("Scheduler | daily_audit runs via postmortem chain (no fixed cron)")
     logger.info("Scheduler | crypto_cycle retired — Oracle only trades NYSE market hours")
@@ -1153,14 +1148,15 @@ async def _daily_bot_returns_snapshot() -> None:
         logger.error(f"Scheduler | daily_bot_returns_snapshot FAILED: {exc}")
 
 
-async def _per_bot_vault_quarterly_rebalance() -> None:
-    """Quarterly planner restricted to per_bot_vault_holdings."""
+async def _per_bot_vault_monthly_skim() -> None:
+    """VAULT-V2: record vault value and trading equity; skim on the month's first run."""
     try:
-        from execution.per_bot_vault import run_quarterly_rebalance
-        result = await asyncio.to_thread(run_quarterly_rebalance, market_open=is_market_open())
-        logger.info(f"Scheduler | per_bot_vault_quarterly_rebalance: {result.get('status')}")
+        from execution.per_bot_vault import run_monthly_skim
+        result = await asyncio.to_thread(run_monthly_skim)
+        logger.info(f"Scheduler | per_bot_vault_monthly_skim: {result.get('status')} "
+                    f"{[(b.get('bot_id'), b.get('action')) for b in result.get('bots', [])]}")
     except Exception as exc:
-        logger.error(f"Scheduler | per_bot_vault_quarterly_rebalance FAILED: {exc}")
+        logger.error(f"Scheduler | per_bot_vault_monthly_skim FAILED: {exc}")
 
 
 async def _nightly_walk_forward() -> None:

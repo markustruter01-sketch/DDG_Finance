@@ -358,7 +358,8 @@ def test_duplicate_submit_adopts_existing_order(monkeypatch):
     assert FakeClient.lookup_calls == 1
 
 
-def test_trade_journal_routes_skim_to_explicit_closing_bot(monkeypatch):
+def test_trade_journal_close_no_longer_skims_per_trade(monkeypatch):
+    """VAULT-V2 retired the per-trade hook; closing a winner moves nothing."""
     class JournalCursor:
         def __init__(self):
             self.rowcount = -1
@@ -392,12 +393,7 @@ def test_trade_journal_routes_skim_to_explicit_closing_bot(monkeypatch):
     _install_db_fake(monkeypatch, _FakeConnection(cursor))
     from analysis import trade_journal
 
-    credited_bots = []
-    monkeypatch.setattr(
-        vault,
-        "record_profitable_close",
-        lambda **kwargs: credited_bots.append(kwargs["bot_id"]),
-    )
+    assert not hasattr(vault, "record_profitable_close")
 
     trade_journal.close_trade(
         trade_id="ETF-oracle-SPY-20261002",
@@ -406,7 +402,8 @@ def test_trade_journal_routes_skim_to_explicit_closing_bot(monkeypatch):
         bot_id="oracle",
     )
 
-    assert credited_bots == ["oracle"]
+    # Only the journal's own two statements ran: no vault writes.
+    assert [sql.split()[0] for sql, _ in cursor.executed] == ["select", "update"]
 
 
 def test_vault_report_includes_broker_marked_holdings(monkeypatch):
@@ -513,7 +510,7 @@ def test_vault_inspection_reads_queue_orders_and_skims_only(monkeypatch):
 
 
 def test_deployment_preview_is_read_only_and_does_not_submit(monkeypatch):
-    row = _queue_row(pending_cash_usd=0.98)
+    row = _queue_row(pending_cash_usd=0.97)
     cursor = _FakeCursor(queue_rows=[row], read_only=True)
     _install_db_fake(monkeypatch, _FakeConnection(cursor))
     monkeypatch.setattr(vault, "vault_enabled", lambda: True)
@@ -538,8 +535,9 @@ def test_deployment_preview_is_read_only_and_does_not_submit(monkeypatch):
     assert preview["would_submit"] == []
     assert preview["queues"][0]["projected_status"] == "pending"
     assert preview["queues"][0]["pending_cash_usd"] == 0.0
-    assert preview["queues"][0]["pending_bil_usd"] == 0.5
-    assert preview["queues"][0]["pending_voo_usd"] == 0.5
+    # VAULT-V2: cash and the leftover VOO amount both go to BIL (0.01 + 0.97 + 0.01).
+    assert preview["queues"][0]["pending_bil_usd"] == 0.99
+    assert preview["queues"][0]["pending_voo_usd"] == 0.0
     assert row["bil_order_id"] == "bil-order"
     assert row["voo_order_id"] == "voo-order"
     assert all(sql.startswith("select") for sql, _params in cursor.executed)

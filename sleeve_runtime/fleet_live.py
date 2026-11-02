@@ -228,16 +228,21 @@ def fleet_due(bars, today_ny: date, state: dict[str, Any], mode: str) -> tuple[d
     return signal_day, core, key
 
 
-def daily_mark(state: dict[str, Any], bars, sleeve_equity: float) -> dict[str, Any] | None:
+def daily_mark(state: dict[str, Any], bars, sleeve_equity: float,
+               total_equity: float | None = None) -> dict[str, Any] | None:
     """Once per session: the account's sleeve equity and SPY's close, plus the
     first such mark (the cutover). Returns the new state, or None if unchanged.
     SPY's close is from the adjusted series, so later dividends are not in
-    the comparison: it is a price-return benchmark, labelled as such."""
+    the comparison: it is a price-return benchmark, labelled as such.
+    `total_equity` is broker equity including the vault (VAULT-V2 section 3:
+    performance is reported on it, so a skim never makes an account look worse)."""
     spy = bars.get(SIGNAL) or []
     if not spy or sleeve_equity <= 0:
         return None
     mark = {"day": spy[-1]["day"].isoformat(), "spy": float(spy[-1]["close"]),
             "equity": round(float(sleeve_equity), 2)}
+    if total_equity:
+        mark["total"] = round(float(total_equity), 2)
     if (state.get("mark") or {}).get("day") == mark["day"]:
         return None
     return {**state, "mark": mark, "cutover": state.get("cutover") or mark}
@@ -298,7 +303,7 @@ def run_fleet_cycle(
     status = "no rebalance due"
     cap = sleeve_capital(account, live, vault=vault, cash_park=cash_park)
     bars = fetch_fleet_bars(fetch_bars, cap.held, now, variant)
-    marked = daily_mark(state, bars, cap.equity)
+    marked = daily_mark(state, bars, cap.equity, float(account["equity"]))
     if marked is not None:
         state = marked
         write_state(state)

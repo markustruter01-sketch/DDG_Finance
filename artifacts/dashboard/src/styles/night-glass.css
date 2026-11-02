@@ -137,6 +137,13 @@ table.ng .money, table.ng th.money { font-family: var(--ng-mono); text-align: ri
 @media (max-width: 1100px), (max-height: 700px) {
   .ng-page.fit { height: auto; overflow: visible; }
   .ng-page.fit .ng-wrap { height: auto; }
+  /* Fixed chart heights when the page scrolls. A 100%-high chart inside an
+     auto-height page measures itself, grows a few pixels, and measures again:
+     the page crept downward forever (the "melting" page, Nov 2026). */
+  .ng-page.fit .chart { flex: none; height: 220px; }
+  .ng-page.fit .engine-chart { height: 64px; }
+  .ng-page.fit .donut-chart { height: 160px; }
+  .ng-page.fit .home-left, .ng-page.fit .home-right { grid-template-rows: none; grid-auto-rows: auto; }
 }
 @media (max-width: 900px) {
   .ng-page.photo { background-attachment: scroll; }
@@ -176,11 +183,13 @@ table.ng .money, table.ng th.money { font-family: var(--ng-mono); text-align: ri
 .home-hero { flex: 0 0 auto; }
 .home-stats { flex: 1 1 640px; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 12px 20px; }
 .home-main { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 12px; }
-.home-left { min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr) minmax(0, auto); gap: 12px; }
+.home-left { min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr) minmax(0, auto) minmax(0, auto); gap: 12px; }
+.comparison { gap: 6px; }
+.comparison table.ng td, .comparison table.ng th { white-space: nowrap; }
 .home-right { min-height: 0; display: grid; grid-template-rows: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .pair { min-height: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .fleet-panel .chart { min-height: 140px; }
-.engines { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.engines { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .engine { gap: 8px; }
 .engine .panel-head { flex-wrap: wrap; row-gap: 2px; }
 .engine-name { min-width: 0; flex: 1 1 120px; }
@@ -210,7 +219,7 @@ table.ng .money, table.ng th.money { font-family: var(--ng-mono); text-align: ri
   .engine-stats .num-sm { font-size: 15px; }
 }
 @media (max-width: 1100px) {
-  .engines { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .engines { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .home-main { grid-template-columns: minmax(0, 1fr); }
   .home-right, .home-left { grid-template-rows: none; }
   .home-right .chart, .fleet-panel .chart { min-height: 200px; }
@@ -219,7 +228,7 @@ table.ng .money, table.ng th.money { font-family: var(--ng-mono); text-align: ri
   .home-right, .home-left { grid-template-rows: none; }
   .home-right .chart, .fleet-panel .chart { min-height: 200px; }
 }
-@media (max-width: 560px) {
+@media (max-width: 760px) {
   .engines { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 640px) {

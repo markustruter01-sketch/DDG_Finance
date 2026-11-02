@@ -221,7 +221,7 @@ def run_momo_cycle(
         state.get("selection_day") or signal_day.isoformat())
     b = brakes(book_index(bars, names, selection_day, signal_day))
 
-    marked = fleet_live.daily_mark(state, bars, cap.equity)
+    marked = fleet_live.daily_mark(state, bars, cap.equity, float(account["equity"]))
     if marked is not None:
         state = marked
         write_state(state)

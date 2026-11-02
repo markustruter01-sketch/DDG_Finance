@@ -36,6 +36,43 @@ class CostModel:
     def trade_cost(self, traded_notional: float) -> float:
         return abs(traded_notional) * self.per_trade_bps / 1e4
 
+    def trade_cost_for(self, symbol: str, traded_notional: float) -> float:
+        """Same cost for every symbol (the simulator calls this form)."""
+        return self.trade_cost(traded_notional)
+
+    def label(self) -> str:
+        if not self.omitted:
+            return "all costs included"
+        return "OPTIMISTIC: omits " + ", ".join(self.omitted)
+
+
+@dataclass(frozen=True)
+class SymbolCosts:
+    """Per-symbol trading costs (FLEET-V1 onwards).
+
+    per_trade_bps: commission + half-spread + slippage per traded notional, by
+        symbol. A symbol missing from the map is an error, not a default.
+    sell_fee_bps: charged on sales only (the SEC fee).
+    """
+    per_trade_bps: dict[str, float]
+    sell_fee_bps: float
+    short_borrow_bps_yr: float
+    financing_spread_bps_yr: float
+    omitted: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if any(v < 0 for v in self.per_trade_bps.values()) or self.sell_fee_bps < 0:
+            raise ValueError("costs must be >= 0")
+        unknown = set(self.omitted) - set(KNOWN_COSTS)
+        if unknown:
+            raise ValueError(f"unknown omitted costs: {sorted(unknown)}")
+
+    def trade_cost_for(self, symbol: str, traded_notional: float) -> float:
+        if symbol not in self.per_trade_bps:
+            raise KeyError(f"no trading cost declared for {symbol}")
+        bps = self.per_trade_bps[symbol] + (self.sell_fee_bps if traded_notional < 0 else 0.0)
+        return abs(traded_notional) * bps / 1e4
+
     def label(self) -> str:
         if not self.omitted:
             return "all costs included"

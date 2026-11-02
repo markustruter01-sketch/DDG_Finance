@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Callable
 
-from research_harness.harness.costs import CostModel
+from research_harness.harness.costs import CostModel, SymbolCosts
 from research_harness.harness.holdout import check_window
 from research_harness.harness.metrics import TRADING_DAYS, CurvePoint, rf_daily_for
 from research_harness.harness.sizing import stop_price, target_shares
@@ -81,7 +81,7 @@ def simulate(
     bars: dict[str, list[dict[str, Any]]],
     strategy: Strategy,
     *,
-    costs: CostModel,
+    costs: CostModel | SymbolCosts,
     rf_annual: dict[date, float] | None,
     start: date,
     end: date,
@@ -113,7 +113,7 @@ def simulate(
     def trade(sym: str, qty: float, price: float, day: date, reason: str = "rebalance") -> None:
         nonlocal cash
         notional = qty * price
-        cost = costs.trade_cost(notional)
+        cost = costs.trade_cost_for(sym, notional)
         cash -= notional + cost
         res.fills += 1
         res.traded_notional += abs(notional)

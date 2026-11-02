@@ -7,6 +7,13 @@ Run from the repo root in the Replit workspace (needs vendor keys):
     python -m research_harness.fetch coinbase --dataset crypto_daily_cb_2026-10-22 --symbols BTC-USD,ETH-USD --start 2014-01-01 --end 2026-10-15
     python -m research_harness.fetch yahoo --dataset gear_etf_ych_2026-10-22 --symbols SPY,QQQ,SSO,QLD --start 1998-01-01 --end 2026-10-15
 
+Locked datasets (FLEET-V1 onwards) are pulled in two commands: the open part
+with --locked-from (every row must end before that date), then, separately,
+the locked part with --locked (rows from that date; they land in _locked/):
+    python -m research_harness.fetch fred    --dataset fleet_fred_2026-11-02 --series DTB3,DGS10 --start 1985-01-01 --end 2010-12-31 --locked-from 2011-01-01
+    python -m research_harness.fetch fred    --dataset fleet_fred_2026-11-02 --series DTB3,DGS10 --start 2011-01-01 --end 2026-10-31 --locked
+    python -m research_harness.fetch shiller --dataset fleet_shiller_2026-11-02 --start 1985-01-01 --end 2010-12-31 --locked-from 2011-01-01
+
 Datasets are immutable: a new pull gets a new dataset name.
 """
 
@@ -145,7 +152,7 @@ def parse_yahoo_chart(payload: dict, first: date, last: date) -> list[dict]:
 
 
 def fetch_yahoo_chart(store: BarStore, dataset: str, symbols: list[str], start: str, end: str,
-                      http_get=None, pause: float = 0.5) -> dict:
+                      http_get=None, pause: float = 0.5, **lock) -> dict:
     """Same vendor and adjustment as fetch_etf, through Yahoo's chart endpoint
     directly (the yfinance library stopped returning data in the Replit
     workspace on 22 Oct 2026 while this endpoint still answered)."""
@@ -173,7 +180,9 @@ def fetch_yahoo_chart(store: BarStore, dataset: str, symbols: list[str], start: 
         dataset, source=f"Yahoo chart API v8, adjusted by adjclose/close (as yfinance auto_adjust=True) {start}..{end}",
         bars_by_symbol=data,
         notes=("Dividend/split-adjusted OHLC (total-return proxy). The vendor revises "
-               "adjusted history, so a later pull can differ; the manifest hash pins this one."),
+               "adjusted history, so a later pull can differ; the manifest hash pins this one. "
+               "Index symbols (^...) carry no dividends: adjclose equals close."),
+        **lock,
     )
 
 
@@ -193,46 +202,128 @@ def parse_fred_csv(text: str) -> list[dict]:
     return rows
 
 
+FRED_CSV = "https://fred.stlouisfed.org/graph/fredgraph.csv"
+
+
+def fetch_fred(store: BarStore, dataset: str, series: list[str], start: str, end: str,
+               http_get=None, **lock) -> dict:
+    """Percent-rate series (DTB3, DGS10, ...) from FRED's public CSV endpoint
+    (no API key needed), stored as annual decimals in a 'rate' field."""
+    if http_get is None:
+        import httpx
+
+        def http_get(url, params):
+            return httpx.get(url, params=params, timeout=60, follow_redirects=True)
+    first, last = date.fromisoformat(start), date.fromisoformat(end)
+    data = {}
+    for s in series:
+        resp = http_get(FRED_CSV, {"id": s, "cosd": start, "coed": end})
+        resp.raise_for_status()
+        rows = [r for r in parse_fred_csv(resp.text) if first <= r["day"] <= last]
+        if not rows:
+            raise RuntimeError(f"FRED {s}: no observations in {start}..{end}")
+        data[s] = rows
+    return store.write_dataset(
+        dataset, source=f"FRED public CSV {','.join(series)} {start}..{end}",
+        bars_by_symbol=data, fields=("day", "rate"), positive_fields=(),
+        notes="rate is annual, decimal (0.05 = 5%); FRED's missing days ('.') are dropped", **lock,
+    )
+
+
 def fetch_tbill(store: BarStore, dataset: str, start: str, end: str) -> dict:
     """DTB3 from FRED's public CSV endpoint (no API key needed)."""
-    import httpx
+    return fetch_fred(store, dataset, ["DTB3"], start, end)
 
-    url = "https://fred.stlouisfed.org/graph/fredgraph.csv"
-    resp = httpx.get(url, params={"id": "DTB3", "cosd": start, "coed": end},
-                     timeout=60, follow_redirects=True)
+
+SHILLER_XLS = "http://www.econ.yale.edu/~shiller/data/ie_data.xls"
+
+
+def parse_shiller_rows(rows: list[list], first: date, last: date) -> list[dict]:
+    """Shiller's 'Data' sheet rows -> monthly {day (1st of month), price, dividend}.
+
+    Column 0 is the date as a float (1987.01 = January, 1987.1 = October),
+    column 1 the monthly average S&P composite price, column 2 the dividend
+    (annual rate, index points). Rows without a positive price and dividend
+    (headers, the latest months whose dividend is not yet published) are
+    skipped."""
+    out = []
+    for r in rows:
+        if len(r) < 3 or not isinstance(r[0], (int, float)):
+            continue
+        year = int(r[0])
+        month = int(round((r[0] - year) * 100))
+        if not 1 <= month <= 12:
+            continue
+        try:
+            price, div = float(r[1]), float(r[2])
+        except (TypeError, ValueError):
+            continue
+        if price <= 0 or div <= 0:
+            continue
+        day = date(year, month, 1)
+        if first <= day <= last:
+            out.append({"day": day, "price": price, "dividend": div})
+    return sorted({b["day"]: b for b in out}.values(), key=lambda b: b["day"])
+
+
+def fetch_shiller(store: BarStore, dataset: str, start: str, end: str, **lock) -> dict:
+    """S&P composite monthly price and dividend from Robert Shiller's ie_data.xls.
+    Needs the free xlrd package (pip install --no-user --target /tmp/pylib xlrd,
+    then PYTHONPATH=/tmp/pylib); it is not a project dependency."""
+    import tempfile
+
+    import requests
+    import xlrd
+
+    resp = requests.get(SHILLER_XLS, timeout=60, headers={"User-Agent": "Mozilla/5.0"})
     resp.raise_for_status()
-    rows = [r for r in parse_fred_csv(resp.text)
-            if date.fromisoformat(start) <= r["day"] <= date.fromisoformat(end)]
+    with tempfile.NamedTemporaryFile(suffix=".xls") as fh:
+        fh.write(resp.content)
+        fh.flush()
+        sheet = xlrd.open_workbook(fh.name).sheet_by_name("Data")
+        rows = [sheet.row_values(i) for i in range(sheet.nrows)]
+    data = parse_shiller_rows(rows, date.fromisoformat(start), date.fromisoformat(end))
+    if not data:
+        raise RuntimeError("Shiller: no rows in range")
     return store.write_dataset(
-        dataset, source=f"FRED DTB3 public CSV (3-month T-bill, secondary market, discount basis) {start}..{end}",
-        bars_by_symbol={"DTB3": rows}, fields=("day", "rate"), positive_fields=(),
-        notes="rate is annual, decimal (0.05 = 5%)",
+        dataset, source=f"Shiller ie_data.xls (econ.yale.edu) sheet Data {start}..{end}",
+        bars_by_symbol={"SP500": data}, fields=("day", "price", "dividend"),
+        notes="monthly; day = 1st of the month; dividend = annual rate in index points", **lock,
     )
 
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("kind", choices=("fx", "etf", "tbill", "coinbase", "yahoo"))
+    ap.add_argument("kind", choices=("fx", "etf", "tbill", "coinbase", "yahoo", "fred", "shiller"))
     ap.add_argument("--dataset", required=True)
     ap.add_argument("--to")
     ap.add_argument("--symbols")
+    ap.add_argument("--series")
     ap.add_argument("--start")
     ap.add_argument("--end")
+    ap.add_argument("--locked-from", help="open part: every row must end before this date")
+    ap.add_argument("--locked", action="store_true", help="write the locked part of an open dataset")
     a = ap.parse_args(argv)
     store = BarStore()
+    lock = {"locked": True} if a.locked else (
+        {"locked_from": date.fromisoformat(a.locked_from)} if a.locked_from else {})
     if a.kind == "fx":
         m = fetch_fx(store, a.dataset, a.to)
     elif a.kind == "etf":
         m = fetch_etf(store, a.dataset, a.symbols.split(","), a.start, a.end)
     elif a.kind == "yahoo":
-        m = fetch_yahoo_chart(store, a.dataset, a.symbols.split(","), a.start, a.end)
+        m = fetch_yahoo_chart(store, a.dataset, a.symbols.split(","), a.start, a.end, **lock)
+    elif a.kind == "fred":
+        m = fetch_fred(store, a.dataset, a.series.split(","), a.start, a.end, **lock)
+    elif a.kind == "shiller":
+        m = fetch_shiller(store, a.dataset, a.start, a.end, **lock)
     elif a.kind == "coinbase":
         m = fetch_coinbase(store, a.dataset, a.symbols.split(","), a.start, a.end)
     else:
         m = fetch_tbill(store, a.dataset, a.start, a.end)
     for sym, e in m["symbols"].items():
         print(f"{sym}: {e['rows']} rows {e['first']}..{e['last']} sha256={e['sha256'][:12]}")
-    print(f"manifest hash: {store.manifest_hash(a.dataset)}")
+    print(f"manifest hash: {store.locked_manifest_hash(a.dataset) if a.locked else store.manifest_hash(a.dataset)}")
     return 0
 
 

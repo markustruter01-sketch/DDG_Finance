@@ -55,7 +55,7 @@ function BotRow({ row }: { row: PauseRow }) {
     <li className="control-row" data-testid={`row-bot-${row.bot_id}`}>
       <div className="grow">
         <div className="card-title"><span className="dot" style={{ background: botColor(row.bot_id), marginRight: 8, verticalAlign: "middle" }} aria-hidden="true" />{formatBotLabel(identity)}</div>
-        <div className="label">{row.bot_id}</div>
+        <div className="label">{identity.code}</div>
         {row.pause_reason && row.paused !== false && (
           <div className="note">Reason: {row.pause_reason}{row.paused_at ? ` · since ${bneTime(row.paused_at)}` : ""}</div>
         )}

@@ -40,6 +40,11 @@ class BotEntry:
     
     # Backward compat — historical IDs that map to this bot
     legacy_aliases: tuple = field(default_factory=tuple)
+    # The account's standing code (Markus, 3 Nov 2026): "Bot 1/2/3" is how the
+    # accounts are referred to in conversation and on Controls, whatever the
+    # display name or the strategy of the day. Internal ids never change; they
+    # are keys in the database, the broker ledgers and the secrets.
+    code: str = ""
     
     # Schedule
     trading_hours: str = "24_7"      # "nyse_only" | "24_7" | "forex_session" | "macro_cycle"
@@ -57,6 +62,7 @@ class BotEntry:
 BOT_REGISTRY: dict[str, BotEntry] = {
     "oracle": BotEntry(
         id="oracle",
+        code="Bot 1",
         display_name="Atlas",
         short_name="Atlas",
         icon="🔮",
@@ -81,6 +87,7 @@ BOT_REGISTRY: dict[str, BotEntry] = {
     ),
     "spy_qqq_trend": BotEntry(
         id="spy_qqq_trend",
+        code="Bot 2",
         display_name="Momentum",
         short_name="Momentum",
         icon="📈",
@@ -99,6 +106,7 @@ BOT_REGISTRY: dict[str, BotEntry] = {
     ),
     "jerome_macro": BotEntry(
         id="jerome_macro",
+        code="Bot 3",
         display_name="Bullion",
         short_name="Bullion",
         icon="🏛️",
@@ -135,6 +143,7 @@ BOT_REGISTRY: dict[str, BotEntry] = {
     ),
     "forex_ai": BotEntry(
         id="forex_ai",
+        code="Bot 4",
         display_name="Forex",
         short_name="Forex",
         icon="💱",

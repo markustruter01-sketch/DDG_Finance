@@ -697,8 +697,60 @@ def _cancel_non_protective(snapshot: dict[str, Any]) -> int:
     return cancelled
 
 
+# A broker/ledger mismatch is about ONE account's records, so it pauses that
+# bot only and does not latch the fleet (Markus, 7 Nov 2026: a Forex records
+# slip had frozen all four bots for four days). Everything else stays fleet-wide.
+BOT_SCOPED_TRIGGERS = frozenset({"broker_ledger_mismatch"})
+
+
+def _bot_scoped(trigger: dict[str, Any]) -> bool:
+    return trigger.get("trigger") in BOT_SCOPED_TRIGGERS and trigger.get("bot_id") in ACTIVE_BOTS
+
+
+def _pause_bots(bots: list[str], triggers: list[dict[str, Any]], snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Pause only the named bots and cancel only their non-stop orders. No latch."""
+    from core.bot_state import set_paused
+    failed = []
+    for bot_id in bots:
+        try:
+            set_paused(bot_id, True, reason="broker_ledger_mismatch")
+        except Exception as exc:
+            failed.append(bot_id)
+            logger.critical(f"Kill switch | FAILED to pause {bot_id}: {exc}")
+    scoped = {**snapshot, "accounts": [a for a in snapshot.get("accounts", []) if a.get("bot_id") in bots]}
+    cancelled = _cancel_non_protective(scoped)
+    action = f"paused_bots={','.join(bots)};cancelled_non_protective={cancelled};protective_stops_preserved"
+    if failed:
+        action += f";PAUSE_FAILED={','.join(failed)}"
+    for trigger in triggers:
+        logger.critical(f"KILL SWITCH (one bot) | {trigger}")
+        try:
+            from core.degradation_tracker import record_degradation
+            record_degradation(
+                component="kill_switch", severity="critical", error_type="bot_paused_ledger_mismatch",
+                message=f"Paused {trigger.get('bot_id')}: broker and ledger disagree"[:300],
+                detail=json.dumps({**trigger, "action": action}, default=str)[:2000],
+                bot_id=str(trigger.get("bot_id")))
+        except Exception as exc:
+            logger.critical(f"Kill switch | degradation record failed: {type(exc).__name__}")
+        try:
+            from notifications.condition_alerts import alert_condition
+            alert_condition(
+                source="kill_switch", condition="broker_ledger_mismatch", bot_id=str(trigger.get("bot_id")),
+                title=f"Bot paused: {trigger.get('bot_id')} broker/ledger mismatch",
+                description=("Only this bot was paused; the other bots keep running. "
+                             f"Evidence: {json.dumps(trigger, default=str, sort_keys=True)}"),
+                fields=[{"name": "Action", "value": action, "inline": False}])
+        except Exception as exc:
+            logger.critical(f"Kill switch | alert dispatch failed: {type(exc).__name__}")
+    return {"tripped": False, "paused_bots": bots, "triggers": triggers, "cancelled": cancelled, "action": action}
+
+
 def trip(triggers: list[dict[str, Any]], snapshot: dict[str, Any]) -> dict[str, Any]:
-    """Latch the switch, pause all bots, and cancel only non-stop orders."""
+    """Latch the switch, pause all bots, and cancel only non-stop orders.
+    If every trigger is a single bot's broker/ledger mismatch, pause just those bots."""
+    if triggers and all(_bot_scoped(t) for t in triggers):
+        return _pause_bots(sorted({str(t["bot_id"]) for t in triggers}), triggers, snapshot)
     _state["tripped"] = True
     reason = "; ".join(str(t.get("trigger")) for t in triggers)
     pause_failed = _set_all_paused(reason)

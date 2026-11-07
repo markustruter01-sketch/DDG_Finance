@@ -197,3 +197,26 @@ def test_pg_store_round_trip():
     assert store.already_executed(DAY) and store.last_nav() == 100000.0
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute("DROP TABLE forex_execution_log, forex_ai_trades, forex_decision_ledger")
+
+
+def test_sync_marks_only_trades_oanda_reports_closed_with_oandas_close_time():
+    import forex_execution as fe
+
+    class Reader:
+        def open_trades(self): return [{"id": "21"}]
+        def trade(self, trade_id):
+            return {"45": {"state": "CLOSED", "closeTime": "2026-11-06T13:30:11.345570370Z",
+                           "realizedPL": "-511.8981", "averageClosePrice": "1.40990"},
+                    "8": {"state": "OPEN"}}[trade_id]
+
+    class Store:
+        def __init__(self): self.ids, self.closed = {"21", "45", "8"}, []
+        def open_trade_ids(self): return set(self.ids)
+        def mark_closed(self, ids, when): self.closed.append((ids, when)); self.ids -= set(ids)
+
+    store = Store()
+    out = fe.sync_closed_trades(Reader(), store, NOW)
+    assert [c["trade_id"] for c in out] == ["45"] and out[0]["realized_pl"] == "-511.8981"
+    assert store.closed[0][1].isoformat() == "2026-11-06T13:30:11.345570+00:00"
+    assert store.ids == {"21", "8"}  # still open at OANDA / not reported closed: untouched
+    assert fe._oanda_time("bad") is None

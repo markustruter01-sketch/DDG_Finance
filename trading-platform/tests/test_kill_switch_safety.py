@@ -496,3 +496,37 @@ def test_reset_stays_tripped_when_reset_cannot_be_saved(monkeypatch):
         ks.reset(confirmation_token="tok")
     assert ks.is_tripped() is True
     ks._state["tripped"] = False
+
+
+def test_ledger_mismatch_on_one_bot_pauses_only_that_bot_and_does_not_latch(monkeypatch):
+    paused, cancelled, events, all_paused = [], [], [], []
+    monkeypatch.setattr(bot_state, "set_paused", lambda bot, value, reason=None: paused.append((bot, value, reason)))
+    monkeypatch.setattr(ks, "_set_all_paused", lambda reason: all_paused.append(reason))
+    monkeypatch.setattr(ks, "_write_event", lambda *args: events.append(args))
+    client = type("Client", (), {"cancel_order_by_id": lambda self, order_id: cancelled.append(order_id)})()
+    other = type("Client", (), {"cancel_order_by_id": lambda self, order_id: cancelled.append("WRONG")})()
+    snapshot = {"accounts": [
+        {"bot_id": "forex_ai", "_client": client, "orders": [{"id": "lim", "side": "buy", "type": "limit"}]},
+        {"bot_id": "oracle", "_client": other, "orders": [{"id": "x", "side": "buy", "type": "limit"}]},
+    ]}
+    ks._state["tripped"] = False
+    result = ks.trip([{"trigger": "broker_ledger_mismatch", "bot_id": "forex_ai", "trade_id": "45",
+                       "kind": "ledger_trade_without_oanda"}], snapshot)
+    assert result["tripped"] is False and result["paused_bots"] == ["forex_ai"]
+    assert paused == [("forex_ai", True, "broker_ledger_mismatch")]
+    assert cancelled == ["lim"] and not events and not all_paused
+    assert ks.is_tripped() is False
+
+
+def test_mixed_or_fleet_triggers_still_pause_everything(monkeypatch):
+    all_paused = []
+    monkeypatch.setattr(ks, "_set_all_paused", lambda reason: all_paused.append(reason))
+    monkeypatch.setattr(ks, "_write_event", lambda *args: None)
+    for triggers in (
+        [{"trigger": "broker_ledger_mismatch", "bot_id": "forex_ai"}, {"trigger": "negative_cash"}],
+        [{"trigger": "broker_ledger_mismatch", "bot_id": "fleet"}],
+        [{"trigger": "broker_ledger_mismatch"}],
+    ):
+        assert ks.trip(triggers, {"accounts": []})["tripped"] is True
+    assert len(all_paused) == 3
+    ks._state["tripped"] = False

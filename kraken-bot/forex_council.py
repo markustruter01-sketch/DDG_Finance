@@ -1,4 +1,9 @@
-"""Forex AI council: two council members and a decision-maker.
+"""Forex AI council: three equal AIs vote (Markus, 7 Nov 2026).
+
+Each member gets the same pack, makes its own call per pair without seeing the
+others, and the calls are tallied in code (tally): 3-0 trades full size, 2-1
+trades half size with the tighter stop, a three-way split stays out. With only
+two members answering, they must agree; with fewer, no new trades.
 
 Pack version 2 (Markus, 7 Nov 2026): the council is judged forward-only, from
 live markets, so the old anonymising (shuffled labels, no dates, no currency
@@ -26,6 +31,7 @@ from __future__ import annotations
 import json
 import os
 import re
+from collections import Counter
 from typing import Any, Callable
 from urllib.parse import urlparse
 
@@ -83,7 +89,7 @@ PROVIDERS: dict[str, dict[str, Any]] = {
         # Reasoning model: room for its answer after any hidden reasoning.
         "max_tokens": 4000,
     },
-    "decision_maker": {
+    "member_3": {
         "provider": "gemini",
         "url": "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
         "model": "gemini-3-flash-preview",
@@ -93,6 +99,9 @@ PROVIDERS: dict[str, dict[str, Any]] = {
         "max_tokens": 8192,
     },
 }
+VOTERS = tuple(PROVIDERS)
+MIN_VOTERS = 2
+COUNCIL_VERSION = 3
 
 
 class CouncilError(RuntimeError):
@@ -213,25 +222,15 @@ _COMMON = (
 )
 
 COUNCIL_SYSTEM = _COMMON + (
-    ' Give one call per pair: {"calls":[{"pair":"EUR_USD","direction":"long|short|flat",'
-    '"strategy":"trend|carry|mean_reversion|event|stay_out","conviction":1-5,'
+    " You are one of three equal voters; form your own independent view. stop_atr_multiple is where "
+    "you would put the protective stop, in multiples of the average daily range (1.0-4.0). "
+    'Give one call per pair: {"calls":[{"pair":"EUR_USD","direction":"long|short|flat",'
+    '"strategy":"trend|carry|mean_reversion|event|stay_out","conviction":1-5,"stop_atr_multiple":1.0-4.0,'
     '"reason":"max 200 characters: the evidence for this call",'
     '"why_not_others":"max 240 characters: why this strategy beats the other options for this pair today",'
     '"expected_move_pct":-10.0 to 10.0,"horizon_days":1-20,'
     '"expected_path":"max 200 characters: how you expect the trade to play out"}]}.'
 )
-
-DECISION_SYSTEM = _COMMON + (
-    " You also get two independent council views per pair. Make the final call per pair. "
-    'Reply: {"decisions":[{"pair":"EUR_USD","direction":"long|short|flat",'
-    '"strategy":"trend|carry|mean_reversion|event|stay_out","conviction":1-5,'
-    '"stop_atr_multiple":1.0-4.0,"sided_with":"member_1|member_2|both|neither",'
-    '"reason":"max 200 characters: why this view over the other",'
-    '"why_not_others":"max 240 characters: why this strategy beats the other options",'
-    '"expected_move_pct":-10.0 to 10.0,"horizon_days":1-20,'
-    '"expected_path":"max 200 characters: how you expect the trade to play out"}]}.'
-)
-
 
 # ── Reply validation ────────────────────────────────────────────────────────
 
@@ -280,7 +279,7 @@ def parse_council_reply(raw: str, pairs: list[str]) -> list[dict[str, Any]]:
     calls = data.get("calls")
     if set(data) != {"calls"} or not isinstance(calls, list):
         raise CouncilError("council reply must be {calls:[...]}")
-    keys = {"pair", "direction", "strategy", "conviction", "reason", "why_not_others",
+    keys = {"pair", "direction", "strategy", "conviction", "stop_atr_multiple", "reason", "why_not_others",
             "expected_move_pct", "horizon_days", "expected_path"}
     parsed = {}
     for call in calls:
@@ -295,6 +294,7 @@ def parse_council_reply(raw: str, pairs: list[str]) -> list[dict[str, Any]]:
             "direction": call["direction"],
             "strategy": _strategy(call["direction"], call["strategy"]),
             "conviction": _int_in(call["conviction"], *CONVICTION_RANGE, "conviction"),
+            "stop_atr_multiple": _stop(call["stop_atr_multiple"]),
             "reason": clean_reason(call["reason"]),
             "why_not_others": clean_reason(call["why_not_others"], WHY_NOT_MAX_CHARS),
             **_prediction(call),
@@ -304,42 +304,44 @@ def parse_council_reply(raw: str, pairs: list[str]) -> list[dict[str, Any]]:
     return [parsed[p] for p in pairs]
 
 
-def parse_decision_reply(raw: str, pairs: list[str]) -> list[dict[str, Any]]:
-    data = _json_object(raw)
-    decisions = data.get("decisions")
-    if set(data) != {"decisions"} or not isinstance(decisions, list):
-        raise CouncilError("decision reply must be {decisions:[...]}")
-    keys = {"pair", "direction", "strategy", "conviction", "stop_atr_multiple", "sided_with",
-            "reason", "why_not_others", "expected_move_pct", "horizon_days", "expected_path"}
-    parsed = {}
-    for item in decisions:
-        if not isinstance(item, dict) or set(item) != keys:
-            raise CouncilError("decision has wrong fields")
-        if item["pair"] not in pairs or item["pair"] in parsed:
-            raise CouncilError("decision pair unknown or repeated")
-        if item["direction"] not in DIRECTIONS:
-            raise CouncilError("decision direction invalid")
-        if item["sided_with"] not in ("member_1", "member_2", "both", "neither"):
-            raise CouncilError("decision sided_with invalid")
-        stop = item["stop_atr_multiple"]
-        if isinstance(stop, bool) or not isinstance(stop, (int, float)) or not (
-            STOP_ATR_RANGE[0] <= stop <= STOP_ATR_RANGE[1]
-        ):
-            raise CouncilError("stop_atr_multiple out of range")
-        parsed[item["pair"]] = {
-            "pair": item["pair"],
-            "direction": item["direction"],
-            "strategy": _strategy(item["direction"], item["strategy"]),
-            "conviction": _int_in(item["conviction"], *CONVICTION_RANGE, "conviction"),
-            "stop_atr_multiple": float(stop),
-            "sided_with": item["sided_with"],
-            "reason": clean_reason(item["reason"]),
-            "why_not_others": clean_reason(item["why_not_others"], WHY_NOT_MAX_CHARS),
-            **_prediction(item),
-        }
-    if set(parsed) != set(pairs):
-        raise CouncilError("decision reply must cover every pair exactly once")
-    return [parsed[p] for p in pairs]
+def _stop(value: Any) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not (
+        STOP_ATR_RANGE[0] <= value <= STOP_ATR_RANGE[1]
+    ):
+        raise CouncilError("stop_atr_multiple out of range")
+    return float(value)
+
+
+def tally(views: dict[str, list[dict[str, Any]]], pairs: list[str]) -> list[dict[str, Any]]:
+    """The vote, per pair. Majority direction wins; no majority = stay out.
+    A trade is half size unless all three agree, and takes the tightest stop,
+    the lowest conviction and the most common strategy among the winners.
+    Reasons and prediction come from the most confident winner."""
+    out = []
+    for pair in pairs:
+        calls = {r: next(c for c in views[r] if c["pair"] == pair) for r in VOTERS if r in views}
+        votes = {r: c["direction"] for r, c in calls.items()}
+        direction, n = Counter(votes.values()).most_common(1)[0]
+        if n < 2:
+            out.append({"pair": pair, "direction": "flat", "strategy": "stay_out", "conviction": 1,
+                        "votes": votes, "outcome": "split", "half_size": False,
+                        "reason": "No majority: the AIs disagree, so stay out.", "why_not_others": ""})
+            continue
+        winners = [calls[r] for r in VOTERS if votes.get(r) == direction]
+        lead = max(winners, key=lambda c: c["conviction"])  # first in voter order on a tie
+        strategies = Counter(c["strategy"] for c in winners).most_common()
+        strategy = strategies[0][0] if strategies[0][1] > 1 or len(strategies) == 1 else lead["strategy"]
+        out.append({
+            "pair": pair, "direction": direction, "strategy": strategy,
+            "conviction": min(c["conviction"] for c in winners),
+            "stop_atr_multiple": min(c["stop_atr_multiple"] for c in winners),
+            "votes": votes, "outcome": f"{n}-{len(calls) - n}",
+            "half_size": direction != "flat" and n < len(VOTERS),
+            "reason": lead["reason"], "why_not_others": lead["why_not_others"],
+            "expected_move_pct": lead["expected_move_pct"], "horizon_days": lead["horizon_days"],
+            "expected_path": lead["expected_path"],
+        })
+    return out
 
 
 def _json_object(raw: str) -> dict[str, Any]:
@@ -522,7 +524,7 @@ def run_council(
     today: str = "",
     transport: Transport | None = None,
 ) -> dict[str, Any]:
-    """Run members 1 and 2, then the decision-maker. Never raises; every failure
+    """Ask all three members, then tally their votes. Never raises; every failure
     is recorded and fails closed. Returns the full cycle record for the ledger."""
     record: dict[str, Any] = {"calls": [], "errors": [], "decisions": [], "status": "no_trade"}
     baseline = {r["pair"]: r["baseline"]["direction"] for r in sheet_rows}
@@ -542,31 +544,19 @@ def run_council(
     user = json.dumps(pack, separators=(",", ":"))
 
     views: dict[str, list[dict[str, Any]]] = {}
-    for role in ("member_1", "member_2"):
+    for role in VOTERS:
         try:
             views[role] = _call_and_parse(
                 role, COUNCIL_SYSTEM, user, parse_council_reply, pairs, record, transport,
             )
         except CouncilError as exc:
             record["errors"].append(f"{role}: {exc}")
-    if not views:
-        record["errors"].append("both council members unavailable: no new trades")
-        return record
-    record["low_confidence"] = len(views) == 1
-
-    council_input = json.dumps(
-        {"pack": pack, "council": {role: views[role] for role in views}},
-        separators=(",", ":"),
-    )
-    try:
-        decisions = _call_and_parse(
-            "decision_maker", DECISION_SYSTEM, council_input, parse_decision_reply,
-            pairs, record, transport,
-        )
-    except CouncilError as exc:
-        record["errors"].append(f"decision_maker: {exc}; no new trades")
+    record["council_version"] = COUNCIL_VERSION
+    record["low_confidence"] = len(views) < len(VOTERS)
+    if len(views) < MIN_VOTERS:
+        record["errors"].append(f"only {len(views)} of {len(VOTERS)} AIs answered: no new trades")
         return record
 
-    record["decisions"] = [{**d, "baseline": baseline[d["pair"]]} for d in decisions]
+    record["decisions"] = [{**d, "baseline": baseline[d["pair"]]} for d in tally(views, pairs)]
     record["status"] = "shadow"
     return record

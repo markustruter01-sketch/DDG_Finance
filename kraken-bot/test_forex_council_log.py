@@ -38,7 +38,9 @@ def test_day_detail_shows_news_members_decisions_and_trades():
     assert (m1["expected_move_pct"], m1["horizon_days"], m1["expected_path"]) == (-0.5, 5, "slides lower")
     assert "member_2" not in d["members"]  # unreadable reply is left out, not guessed
     assert d["decisions"][0]["sided_with"] == "member_1"
-    assert d["trades"] == [{"pair": "EUR_USD", "direction": "short", "strategy": "trend", "conviction": 3}]
+    assert d["trades"] == [{"pair": "EUR_USD", "direction": "short", "strategy": "trend", "conviction": 3,
+                            "outcome": None}]
+    assert d["council_version"] == 2
     assert d["executed"] is True and d["pack_version"] == 2
 
 

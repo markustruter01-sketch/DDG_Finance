@@ -22,7 +22,10 @@ from forex_council import CouncilError, STRATEGIES, _json_object
 
 NEW_YORK = ZoneInfo("America/New_York")
 HORIZONS = (1, 5, 20)
-SOURCES = ("member_1", "member_2", "decision_maker", "baseline")
+# "decision_maker" is the final call: the vote result from council v3 on,
+# the decider's call before. Members are scored on their own calls.
+MEMBERS = ("member_1", "member_2", "member_3")
+SOURCES = (*MEMBERS, "decision_maker", "baseline")
 CANDLES_FOR_SCORING = 60
 
 
@@ -46,7 +49,7 @@ def source_calls(record: dict[str, Any]) -> dict[str, dict[str, str]]:
         "baseline": dict(record.get("baseline") or {}),
         "decision_maker": {d["pair"]: d["direction"] for d in record.get("decisions") or []},
     }
-    for role in ("member_1", "member_2"):
+    for role in MEMBERS:
         for call in record.get("calls") or []:
             if call.get("role") != role:
                 continue
@@ -76,7 +79,7 @@ def prediction_calls(record: dict[str, Any]) -> dict[str, dict[str, tuple[float,
     out["decision_maker"] = pick(record.get("decisions") or [], lambda c: c.get("pair"))
     for call in record.get("calls") or []:
         role = call.get("role")
-        if role not in ("member_1", "member_2"):
+        if role not in MEMBERS:
             continue
         try:
             calls = _json_object(call.get("raw", "")).get("calls") or []

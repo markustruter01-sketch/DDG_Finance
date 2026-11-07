@@ -4,6 +4,7 @@ practice-account execution when the bot is unpaused and trading is enabled."""
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 
 import math
 from typing import Any, Callable
@@ -206,8 +207,26 @@ def _maybe_execute(sheet: dict[str, Any], factory: Callable[[], Any], max_gross:
         return f"failed: {type(exc).__name__}"
 
 
+def _sync_ledger(client: Any, store: Any | None) -> str:
+    """Close ledger rows OANDA has closed, every cycle, paused or not. Never raises."""
+    try:
+        from forex_execution import PgForexStore, sync_closed_trades
+        if store is None:
+            from db.postgres import get_conn
+            store = PgForexStore(get_conn)
+        closed = sync_closed_trades(client, store, datetime.now(timezone.utc))
+        for c in closed:
+            logger.warning(f"FOREX ledger | trade {c['trade_id']} closed at OANDA {c['closed_at']} "
+                           f"P&L {c['realized_pl']}: marked closed")
+        return f"closed {len(closed)}"
+    except (Exception, SystemExit) as exc:  # db.postgres exits on bad config at import
+        logger.warning(f"FOREX ledger | sync skipped: {type(exc).__name__}")
+        return f"failed: {type(exc).__name__}"
+
+
 def run_forex_cycle(
     *,
+    ledger_store: Any | None = None,
     profile: dict[str, Any] | None = None,
     db_id: int | None = None,
     client_factory: Callable[[], Any] | None = None,
@@ -234,6 +253,7 @@ def run_forex_cycle(
         positions = client.open_positions()
         if not isinstance(positions, list):
             raise ValueError("OANDA open positions response must be a list")
+        ledger_sync = _sync_ledger(client, ledger_store)
         try:
             sheet = build_signal_sheet(client)
         except Exception as exc:  # the sheet must never stop the account monitor
@@ -280,4 +300,5 @@ def run_forex_cycle(
         "signal_sheet": sheet,
         "council": council_status,
         "execution": execution_status,
+        "ledger_sync": ledger_sync,
     }

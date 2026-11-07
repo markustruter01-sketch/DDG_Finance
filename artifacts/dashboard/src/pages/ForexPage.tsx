@@ -11,11 +11,12 @@ import { Shell, Status } from "@/components/Shell";
 type Call = { pair: string; direction: string; strategy?: string | null; conviction?: number | null;
   reason?: string | null; why_not_others?: string | null;
   expected_move_pct?: number | null; horizon_days?: number | null; expected_path?: string | null };
-type Decision = Call & { stop_atr_multiple?: number; sided_with?: string; baseline?: string };
+type Decision = Call & { stop_atr_multiple?: number; sided_with?: string; baseline?: string;
+  votes?: Record<string, string>; outcome?: string; half_size?: boolean };
 type DaySummary = { trading_day: string; status: string; low_confidence: boolean; news_count: number;
   errors: number; trades: Call[]; executed: boolean };
 type DayDetail = DaySummary & {
-  pack_version: number; record_sha256: string;
+  pack_version: number; council_version?: number; record_sha256: string;
   news: { source: string; about: string; title: string; hours_ago: number }[];
   news_sources: { name: string; status: string }[];
   members: Record<string, { provider?: string; model?: string; calls: Call[] }>;
@@ -29,12 +30,17 @@ type Scorecard = { days: Record<string, number>; sources: Record<string, Record<
 
 const PAGE = 10;
 const SOURCE_NAME: Record<string, string> = {
-  member_1: "Member 1", member_2: "Member 2", decision_maker: "Decider (final call)", baseline: "Baseline rule",
+  member_1: "Member 1", member_2: "Member 2", member_3: "Member 3", decision_maker: "Final call", baseline: "Baseline rule",
 };
 const STRATEGY_NAME: Record<string, string> = {
   trend: "Trend", carry: "Carry", mean_reversion: "Mean reversion", event: "News / event", stay_out: "Stay out",
 };
 const SIDED: Record<string, string> = { member_1: "Member 1", member_2: "Member 2", both: "Both", neither: "Neither" };
+// Council v3 vote ("3-0" full size, "2-1" half size, "split" stay out); older days show who the decider sided with.
+const voteText = (x: Decision) =>
+  !x.outcome ? `Decider sided with ${SIDED[x.sided_with ?? ""] ?? "—"}`
+    : x.outcome === "split" ? "Split · stay out"
+    : `${x.outcome}${x.direction === "flat" ? "" : x.half_size ? " · half size" : " · full size"}`;
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : "Request failed");
 const callText = (c?: Call) =>
@@ -123,23 +129,23 @@ function DayDetailPanel({ day }: { day: string }) {
   if (detail.isLoading) return <div className="note">Reading {day}…</div>;
   if (detail.isError || !detail.data) return <Status tone="problem" word={`Could not read ${day}: ${errorText(detail.error)}`} />;
   const d = detail.data;
-  const m1 = d.members.member_1, m2 = d.members.member_2;
+  const roles = ["member_1", "member_2", "member_3"].filter((r) => r !== "member_3" || (d.council_version ?? 2) >= 3);
   const byPair = (calls?: Call[]) => Object.fromEntries((calls ?? []).map((c) => [c.pair, c]));
-  const c1 = byPair(m1?.calls), c2 = byPair(m2?.calls);
+  const memberCalls = Object.fromEntries(roles.map((r) => [r, byPair(d.members[r]?.calls)]));
   return (
     <>
       <section className="glass panel" aria-label={`Decisions on ${day}`}>
         <div className="panel-head">
           <h2>{day} · decisions</h2>
           <span className="label">
-            {d.status === "shadow" ? "Decided" : "No trades"}{d.low_confidence ? " · one member missing (half size)" : ""}
+            {d.status === "shadow" ? "Decided" : "No trades"}{d.low_confidence ? " · an AI missing" : ""}
             {d.executed ? " · carried out" : ""}
           </span>
         </div>
         <div className="table-scroll">
           <table className="ng">
-            <thead><tr><th>Pair</th><th>Final call</th><th>Why</th><th>Why this strategy</th><th>Sided with</th>
-              <th>Member 1{m1?.model ? ` · ${m1.model}` : ""}</th><th>Member 2{m2?.model ? ` · ${m2.model}` : ""}</th><th>Baseline</th></tr></thead>
+            <thead><tr><th>Pair</th><th>Final call</th><th>Vote</th><th>Why</th><th>Why this strategy</th>
+              {roles.map((r) => <th key={r}>{SOURCE_NAME[r]}{d.members[r]?.model ? ` · ${d.members[r]?.model}` : ""}</th>)}<th>Baseline</th></tr></thead>
             <tbody>
               {d.decisions.map((x) => (
                 <tr key={x.pair}>
@@ -147,13 +153,15 @@ function DayDetailPanel({ day }: { day: string }) {
                   <td>{callText(x)}{x.stop_atr_multiple ? <div className="note">stop {x.stop_atr_multiple}× daily range</div> : null}<Prediction c={x} /></td>
                   <td className="small">{x.reason || "—"}</td>
                   <td className="small">{x.why_not_others || (d.pack_version < 2 ? "Not recorded before 7 Nov" : "—")}</td>
-                  <td>{SIDED[x.sided_with ?? ""] ?? "—"}</td>
-                  <td className="small">{callText(c1[x.pair])}<div className="note">{c1[x.pair]?.reason ?? ""}</div>{c1[x.pair]?.why_not_others ? <div className="note">Why: {c1[x.pair]?.why_not_others}</div> : null}<Prediction c={c1[x.pair]} /></td>
-                  <td className="small">{callText(c2[x.pair])}<div className="note">{c2[x.pair]?.reason ?? ""}</div>{c2[x.pair]?.why_not_others ? <div className="note">Why: {c2[x.pair]?.why_not_others}</div> : null}<Prediction c={c2[x.pair]} /></td>
+                  <td style={{ whiteSpace: "nowrap" }}>{voteText(x)}</td>
+                  {roles.map((r) => {
+                    const c = memberCalls[r][x.pair];
+                    return <td key={r} className="small">{callText(c)}<div className="note">{c?.reason ?? ""}</div>{c?.why_not_others ? <div className="note">Why: {c.why_not_others}</div> : null}<Prediction c={c} /></td>;
+                  })}
                   <td>{x.baseline === "flat" ? "Stay out" : x.baseline === "long" ? "Buy" : x.baseline === "short" ? "Sell" : "—"}</td>
                 </tr>
               ))}
-              {!d.decisions.length && <tr><td colSpan={8} className="note">No final decision this day.{d.errors_list.length ? ` ${d.errors_list.join(" · ")}` : ""}</td></tr>}
+              {!d.decisions.length && <tr><td colSpan={6 + roles.length} className="note">No final decision this day.{d.errors_list.length ? ` ${d.errors_list.join(" · ")}` : ""}</td></tr>}
             </tbody>
           </table>
         </div>
@@ -202,9 +210,10 @@ export default function ForexPage() {
           </button>
         </div>
         <p className="small" style={{ margin: 0, maxWidth: 820 }}>
-          Every New York trading day, two AIs each read the prices and the day's central-bank and world news, pick a
-          strategy for every currency pair, explain why it beat the others and predict how the trade will play out. A third AI makes the final call. Rules then
-          size every trade and attach a stop. Paper money on the OANDA practice account.
+          Every New York trading day, three AIs each read the prices and the day's central-bank and world news, and on
+          their own pick a direction and strategy for every currency pair, say why it beat the others and predict how
+          the trade will play out. Then they vote: 3-0 trades full size, 2-1 half size, a three-way split stays out.
+          Rules then size every trade and attach a stop. Paper money on the OANDA practice account.
         </p>
 
         <ScorecardPanel />

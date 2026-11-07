@@ -48,15 +48,18 @@ NEWS = {
 }
 
 
-def _call(pair, direction="short", strategy="trend"):
-    return {"pair": pair, "direction": direction, "strategy": strategy, "conviction": 2,
+def _call(pair, direction="short", strategy="trend", conviction=2, stop=2.0):
+    return {"pair": pair, "direction": direction, "strategy": strategy, "conviction": conviction,
+            "stop_atr_multiple": stop,
             "reason": "momentum weak", "why_not_others": "carry is small and no fresh news",
             "expected_move_pct": -0.8, "horizon_days": 5, "expected_path": "drifts lower as the dollar firms"}
 
 
 class FakeTransport:
-    def __init__(self, *, fail=()):
+    """All three members answer; each host's direction can be set."""
+    def __init__(self, *, fail=(), dirs=None):
         self.fail = set(fail)
+        self.dirs = dirs or {}
         self.sent = []
 
     def __call__(self, url, headers, body):
@@ -64,16 +67,18 @@ class FakeTransport:
         host = url.split("/")[2]
         if host in self.fail:
             raise fc.CouncilError("provider returned HTTP 503")
+        direction = self.dirs.get(host, "long")
+        strategy = "stay_out" if direction == "flat" else "carry"
         if host == "generativelanguage.googleapis.com":
-            pairs = [p["pair"] for p in json.loads(body["contents"][0]["parts"][0]["text"])["pack"]["pairs"]]
-            return _gemini_reply({"decisions": [
-                {"pair": p, "direction": "long", "strategy": "carry", "conviction": 3, "stop_atr_multiple": 2.0,
-                 "sided_with": "both", "reason": "EUR trend <script>x</script> agrees https://evil.example",
+            pairs = [p["pair"] for p in json.loads(body["contents"][0]["parts"][0]["text"])["pairs"]]
+            return _gemini_reply({"calls": [
+                {**_call(p, direction, strategy, conviction=3, stop=1.5),
+                 "reason": "EUR trend <script>x</script> agrees https://evil.example",
                  "why_not_others": "trend is flat; carry pays",
                  "expected_move_pct": 0.6, "horizon_days": 10, "expected_path": "grinds up while rates hold"}
                 for p in pairs]})
         pairs = [p["pair"] for p in json.loads(body["messages"][1]["content"])["pairs"]]
-        return _openai_reply({"calls": [_call(p) for p in pairs]})
+        return _openai_reply({"calls": [_call(p, direction, strategy) for p in pairs]})
 
 
 def test_pack_has_real_pairs_date_news_and_matches_the_allowlist():
@@ -116,8 +121,11 @@ def test_full_cycle_records_strategy_and_why_and_cleans_reasons(keys):
     assert record["news_sources"] == NEWS["sources"]
     assert {d["pair"] for d in record["decisions"]} == set(qd.FOREX_PAIRS)
     first = record["decisions"][0]
-    assert first["strategy"] == "carry" and first["why_not_others"] == "trend is flat; carry pays"
+    assert first["outcome"] == "3-0" and first["half_size"] is False and first["direction"] == "long"
+    assert first["strategy"] == "carry" and first["why_not_others"] == "trend is flat; carry pays"  # most confident: member_3
     assert "http" not in first["reason"] and "<" not in first["reason"]
+    assert first["stop_atr_multiple"] == 1.5 and first["conviction"] == 2  # tightest stop, lowest conviction
+    assert record["council_version"] == 3
     hosts = [url.split("/")[2] for url, _, _ in transport.sent]
     assert hosts == ["api.groq.com", "openrouter.ai", "generativelanguage.googleapis.com"]
     # The models see the headlines and the strategy menu.
@@ -132,24 +140,55 @@ def test_full_cycle_records_strategy_and_why_and_cleans_reasons(keys):
     assert "response_format" not in transport.sent[1][2]
     assert transport.sent[0][2]["response_format"] == {"type": "json_object"}
     assert all(h["User-Agent"] == fc.USER_AGENT for _, h, _ in transport.sent)
-    # Decision-maker sees only structured council fields.
-    dm_input = json.loads(transport.sent[2][2]["contents"][0]["parts"][0]["text"])
-    assert set(dm_input["council"]["member_1"][0]) == {
-        "pair", "direction", "strategy", "conviction", "reason", "why_not_others",
-        "expected_move_pct", "horizon_days", "expected_path"}
+    # All three see the same pack and nothing from each other.
+    gemini_input = json.loads(transport.sent[2][2]["contents"][0]["parts"][0]["text"])
+    assert gemini_input == member_input
 
 
-def test_one_member_down_runs_low_confidence(keys):
-    record = fc.run_council(_sheet(), today="2026-11-09", transport=FakeTransport(fail={"openrouter.ai"}))
-    assert record["status"] == "shadow" and record["low_confidence"] is True
-    assert any("member_2" in e for e in record["errors"])
+def test_one_member_down_two_must_agree(keys):
+    agree = fc.run_council(_sheet(), today="2026-11-09", transport=FakeTransport(fail={"openrouter.ai"}))
+    assert agree["status"] == "shadow" and agree["low_confidence"] is True
+    assert agree["decisions"][0]["outcome"] == "2-0" and agree["decisions"][0]["half_size"] is True
+    assert any("member_2" in e for e in agree["errors"])
+    split = fc.run_council(_sheet(), today="2026-11-09", transport=FakeTransport(
+        fail={"openrouter.ai"}, dirs={"api.groq.com": "short"}))
+    assert all(d["outcome"] == "split" and d["direction"] == "flat" for d in split["decisions"])
 
 
-def test_both_members_down_or_decision_maker_down_means_no_trade(keys):
-    both = fc.run_council(_sheet(), today="2026-11-09", transport=FakeTransport(fail={"api.groq.com", "openrouter.ai"}))
-    dm = fc.run_council(_sheet(), today="2026-11-09", transport=FakeTransport(fail={"generativelanguage.googleapis.com"}))
-    assert both["status"] == dm["status"] == "no_trade"
-    assert both["decisions"] == dm["decisions"] == []
+def test_two_members_down_means_no_trade(keys):
+    record = fc.run_council(_sheet(), today="2026-11-09", transport=FakeTransport(fail={"api.groq.com", "openrouter.ai"}))
+    assert record["status"] == "no_trade" and record["decisions"] == []
+    assert any("only 1 of 3" in e for e in record["errors"])
+
+
+def _view(direction, strategy="trend", conviction=2, stop=2.0, reason=""):
+    c = {**_call("EUR_USD", direction, strategy, conviction, stop), "reason": reason}
+    return [fc.parse_council_reply(json.dumps({"calls": [c]}), ["EUR_USD"])[0]]
+
+
+def test_tally_two_one_trades_half_size_with_tightest_stop():
+    d = fc.tally({"member_1": _view("long", "trend", 4, 3.0, "m1"), "member_2": _view("short", "carry"),
+                  "member_3": _view("long", "event", 2, 1.5, "m3")}, ["EUR_USD"])[0]
+    assert (d["direction"], d["outcome"], d["half_size"]) == ("long", "2-1", True)
+    assert d["stop_atr_multiple"] == 1.5 and d["conviction"] == 2
+    assert d["strategy"] == "trend" and d["reason"] == "m1"  # winners' strategies differ: most confident winner's
+    assert d["votes"] == {"member_1": "long", "member_2": "short", "member_3": "long"}
+
+
+def test_tally_split_stays_out_and_flat_majority_is_flat():
+    split = fc.tally({"member_1": _view("long"), "member_2": _view("short"),
+                      "member_3": _view("flat", "stay_out")}, ["EUR_USD"])[0]
+    assert (split["direction"], split["outcome"], split["half_size"]) == ("flat", "split", False)
+    assert "expected_move_pct" not in split  # no shared prediction to score
+    flat = fc.tally({"member_1": _view("flat", "stay_out"), "member_2": _view("flat", "stay_out"),
+                     "member_3": _view("long")}, ["EUR_USD"])[0]
+    assert (flat["direction"], flat["outcome"], flat["half_size"]) == ("flat", "2-1", False)
+
+
+def test_tally_most_common_winning_strategy():
+    d = fc.tally({"member_1": _view("short", "trend"), "member_2": _view("short", "carry", 5),
+                  "member_3": _view("short", "trend")}, ["EUR_USD"])[0]
+    assert (d["strategy"], d["outcome"], d["half_size"]) == ("trend", "3-0", False)
 
 
 def test_unpinned_openrouter_and_missing_keys_fail_closed(monkeypatch):
@@ -186,12 +225,9 @@ def test_flat_with_stay_out_is_accepted():
     assert parsed[0]["strategy"] == "stay_out"
 
 
-def test_decision_stop_multiple_is_range_checked():
-    reply = {"decisions": [{"pair": "EUR_USD", "direction": "long", "strategy": "trend", "conviction": 3,
-                            "stop_atr_multiple": 0.2, "sided_with": "both", "reason": "", "why_not_others": "",
-                            "expected_move_pct": 0.5, "horizon_days": 5, "expected_path": ""}]}
+def test_call_stop_multiple_is_range_checked():
     with pytest.raises(fc.CouncilError, match="stop_atr_multiple"):
-        fc.parse_decision_reply(json.dumps(reply), ["EUR_USD"])
+        fc.parse_council_reply(json.dumps({"calls": [_call("EUR_USD", stop=0.2)]}), ["EUR_USD"])
 
 
 def test_real_transport_refuses_hosts_off_the_allowlist():
@@ -228,7 +264,7 @@ def test_malformed_reply_gets_one_repair_attempt_and_prose_is_tolerated(keys):
         if "generativelanguage" in url:
             attempts["gemini"] += 1
             if attempts["gemini"] == 1:
-                return {"candidates": [{"content": {"parts": [{"text": '{"decisions": [ {"pair"'}]}}]}
+                return {"candidates": [{"content": {"parts": [{"text": '{"calls": [ {"pair"'}]}}]}
             good = base(url, headers, body)
             text = good["candidates"][0]["content"]["parts"][0]["text"]
             good["candidates"][0]["content"]["parts"][0]["text"] = "Here you go:\n" + text + "\nDone."
@@ -238,7 +274,7 @@ def test_malformed_reply_gets_one_repair_attempt_and_prose_is_tolerated(keys):
     record = fc.run_council(_sheet(), today="2026-11-09", transport=transport)
     assert record["status"] == "shadow" and attempts["gemini"] == 2
     assert any("retrying once" in e for e in record["errors"])
-    assert [c["attempt"] for c in record["calls"] if c["role"] == "decision_maker"] == [1, 2]
+    assert [c["attempt"] for c in record["calls"] if c["role"] == "member_3"] == [1, 2]
 
 
 def test_transport_failure_records_only_the_exception_class(monkeypatch):

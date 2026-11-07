@@ -9,7 +9,8 @@ import { Shell, Status } from "@/components/Shell";
 // Read-only; every value comes from the append-only decision ledger.
 
 type Call = { pair: string; direction: string; strategy?: string | null; conviction?: number | null;
-  reason?: string | null; why_not_others?: string | null };
+  reason?: string | null; why_not_others?: string | null;
+  expected_move_pct?: number | null; horizon_days?: number | null; expected_path?: string | null };
 type Decision = Call & { stop_atr_multiple?: number; sided_with?: string; baseline?: string };
 type DaySummary = { trading_day: string; status: string; low_confidence: boolean; news_count: number;
   errors: number; trades: Call[]; executed: boolean };
@@ -21,8 +22,10 @@ type DayDetail = DaySummary & {
   decisions: Decision[]; errors_list: string[]; execution: Record<string, unknown> | null;
 };
 type Cell = { calls: number; hit_rate_pct: number | null; avg_return_pct: number | null };
+type PredCell = { predictions: number; direction_right_pct: number | null; avg_predicted_pct: number | null;
+  avg_actual_pct: number | null; avg_miss_pct: number | null };
 type Scorecard = { days: Record<string, number>; sources: Record<string, Record<string, Cell>>;
-  strategies?: Record<string, Record<string, Cell>>; note: string; computed_at?: string };
+  strategies?: Record<string, Record<string, Cell>>; predictions?: Record<string, PredCell>; note: string; computed_at?: string };
 
 const PAGE = 10;
 const SOURCE_NAME: Record<string, string> = {
@@ -36,6 +39,12 @@ const SIDED: Record<string, string> = { member_1: "Member 1", member_2: "Member 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : "Request failed");
 const callText = (c?: Call) =>
   !c ? "—" : c.direction === "flat" ? "Stay out" : `${c.direction === "long" ? "Buy" : "Sell"} · ${STRATEGY_NAME[c.strategy ?? ""] ?? "—"}${c.conviction ? ` · ${c.conviction}/5` : ""}`;
+const signed = (v: number) => `${v > 0 ? "+" : ""}${v.toFixed(2)}%`;
+// "Expects +0.80% in 5 days: drifts lower…" — the AI's own prediction of how the trade plays out.
+const predictionText = (c?: Call) =>
+  c?.expected_move_pct === undefined || c?.expected_move_pct === null || !c.horizon_days ? null
+    : `Expects ${signed(c.expected_move_pct)} in ${c.horizon_days} day${c.horizon_days > 1 ? "s" : ""}${c.expected_path ? `: ${c.expected_path}` : ""}`;
+const Prediction = ({ c }: { c?: Call }) => { const t = predictionText(c); return t ? <div className="note">{t}</div> : null; };
 const pctText = (v: number | null | undefined, places = 1) => (v === null || v === undefined ? "—" : `${v.toFixed(places)}%`);
 
 function ScoreTable({ title, rows, names }: { title: string; rows: Record<string, Record<string, Cell>>; names: Record<string, string> }) {
@@ -79,6 +88,27 @@ function ScorecardPanel() {
           </p>
           <ScoreTable title="AI" rows={card.data.sources} names={SOURCE_NAME} />
           {card.data.strategies && <ScoreTable title="Strategy (final calls)" rows={card.data.strategies} names={STRATEGY_NAME} />}
+          {card.data.predictions && (
+            <div className="table-scroll">
+              <table className="ng">
+                <thead><tr><th>Predictions</th><th className="money">Checked</th><th className="money">Direction right</th>
+                  <th className="money">Avg predicted</th><th className="money">Avg actual</th><th className="money">Avg miss</th></tr></thead>
+                <tbody>
+                  {Object.entries(card.data.predictions).map(([key, p]) => (
+                    <tr key={key}>
+                      <td>{SOURCE_NAME[key] ?? key}</td>
+                      <td className="money">{p.predictions || "—"}</td>
+                      <td className="money">{pctText(p.direction_right_pct)}</td>
+                      <td className="money">{p.avg_predicted_pct === null ? "—" : signed(p.avg_predicted_pct)}</td>
+                      <td className="money">{p.avg_actual_pct === null ? "—" : signed(p.avg_actual_pct)}</td>
+                      <td className="money">{pctText(p.avg_miss_pct, 2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="note">Each prediction is checked once its own horizon has passed. Predictions start 8 Nov 2026.</div>
+            </div>
+          )}
         </>
       )}
     </section>
@@ -114,12 +144,12 @@ function DayDetailPanel({ day }: { day: string }) {
               {d.decisions.map((x) => (
                 <tr key={x.pair}>
                   <td>{x.pair.replace("_", "/")}</td>
-                  <td style={{ whiteSpace: "nowrap" }}>{callText(x)}{x.stop_atr_multiple ? <div className="note">stop {x.stop_atr_multiple}× daily range</div> : null}</td>
+                  <td>{callText(x)}{x.stop_atr_multiple ? <div className="note">stop {x.stop_atr_multiple}× daily range</div> : null}<Prediction c={x} /></td>
                   <td className="small">{x.reason || "—"}</td>
                   <td className="small">{x.why_not_others || (d.pack_version < 2 ? "Not recorded before 7 Nov" : "—")}</td>
                   <td>{SIDED[x.sided_with ?? ""] ?? "—"}</td>
-                  <td className="small">{callText(c1[x.pair])}<div className="note">{c1[x.pair]?.reason ?? ""}</div>{c1[x.pair]?.why_not_others ? <div className="note">Why: {c1[x.pair]?.why_not_others}</div> : null}</td>
-                  <td className="small">{callText(c2[x.pair])}<div className="note">{c2[x.pair]?.reason ?? ""}</div>{c2[x.pair]?.why_not_others ? <div className="note">Why: {c2[x.pair]?.why_not_others}</div> : null}</td>
+                  <td className="small">{callText(c1[x.pair])}<div className="note">{c1[x.pair]?.reason ?? ""}</div>{c1[x.pair]?.why_not_others ? <div className="note">Why: {c1[x.pair]?.why_not_others}</div> : null}<Prediction c={c1[x.pair]} /></td>
+                  <td className="small">{callText(c2[x.pair])}<div className="note">{c2[x.pair]?.reason ?? ""}</div>{c2[x.pair]?.why_not_others ? <div className="note">Why: {c2[x.pair]?.why_not_others}</div> : null}<Prediction c={c2[x.pair]} /></td>
                   <td>{x.baseline === "flat" ? "Stay out" : x.baseline === "long" ? "Buy" : x.baseline === "short" ? "Sell" : "—"}</td>
                 </tr>
               ))}
@@ -173,7 +203,7 @@ export default function ForexPage() {
         </div>
         <p className="small" style={{ margin: 0, maxWidth: 820 }}>
           Every New York trading day, two AIs each read the prices and the day's central-bank and world news, pick a
-          strategy for every currency pair and explain why it beat the others. A third AI makes the final call. Rules then
+          strategy for every currency pair, explain why it beat the others and predict how the trade will play out. A third AI makes the final call. Rules then
           size every trade and attach a stop. Paper money on the OANDA practice account.
         </p>
 

@@ -42,7 +42,7 @@ CENTRAL_BANK_FEEDS: tuple[tuple[str, str, str], ...] = (
     ("Bank of Japan", "JPY", "https://www.boj.or.jp/en/rss/whatsnew.xml"),
     ("Reserve Bank of Australia", "AUD", "https://www.rba.gov.au/rss/rss-cb-media-releases.xml"),
     ("Bank of Canada", "CAD", "https://www.bankofcanada.ca/content_type/press-releases/feed/"),
-    ("Swiss National Bank", "CHF", "https://www.snb.ch/public/en/rss/pressrel"),
+    ("Swiss National Bank", "CHF", "https://www.snb.ch/public/rss/en/news"),
     ("Reserve Bank of New Zealand", "NZD", "https://www.rbnz.govt.nz/feeds/news"),
 )
 GDELT_QUERY = (
@@ -86,6 +86,7 @@ _LINKS = re.compile(r"(https?://\S+|www\.\S+)", re.IGNORECASE)
 _LONG = re.compile(r"[A-Za-z0-9+/=_\-]{40,}")
 _EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.]+")
 _SPACE = re.compile(r"\s+")
+_SPACE_BEFORE_PUNCT = re.compile(r"\s+([,.:;!?%])")  # GDELT splits punctuation off words
 
 
 def clean_title(value: Any) -> str:
@@ -94,6 +95,7 @@ def clean_title(value: Any) -> str:
     for pattern in (_LINKS, _EMAIL, _LONG):
         text = pattern.sub("", text)
     text = _SPACE.sub(" ", text).replace("`", "").replace("{", "").replace("}", "").strip()
+    text = _SPACE_BEFORE_PUNCT.sub(r"\1", text)
     return text[:TITLE_MAX_CHARS]
 
 

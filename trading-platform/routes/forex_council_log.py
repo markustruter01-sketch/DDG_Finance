@@ -55,7 +55,9 @@ def member_views(record: dict[str, Any]) -> dict[str, dict[str, Any]]:
                 if pair:
                     rows.append({"pair": pair, "direction": c.get("direction"), "strategy": c.get("strategy"),
                                  "conviction": c.get("conviction"), "reason": c.get("reason"),
-                                 "why_not_others": c.get("why_not_others")})
+                                 "why_not_others": c.get("why_not_others"),
+                                 "expected_move_pct": c.get("expected_move_pct"),
+                                 "horizon_days": c.get("horizon_days"), "expected_path": c.get("expected_path")})
         except (CouncilError, AttributeError, TypeError):
             continue
         # The last readable attempt is the one the council used.

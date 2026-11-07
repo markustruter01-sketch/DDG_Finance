@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from contextlib import contextmanager
-from datetime import date, datetime, timezone
+from datetime import timedelta, date, datetime, timezone
 
 import forex_ai_strategy as fas
 import forex_scorecard as sc
@@ -97,3 +97,23 @@ def test_new_records_score_members_by_pair_and_decisions_by_strategy():
     assert card["strategies"]["trend"]["1d"]["hit_rate_pct"] == 100.0
     assert card["strategies"]["carry"]["1d"]["hit_rate_pct"] == 0.0
     assert card["strategies"]["event"]["1d"]["calls"] == 0
+
+
+def test_predictions_are_scored_against_the_actual_move_at_their_own_horizon():
+    days = [date(2026, 11, 9) + timedelta(days=i) for i in range(4)]
+    closes = {"EUR_USD": dict(zip(days, [1.00, 1.01, 1.02, 1.03]))}
+    member = json.dumps({"calls": [{"pair": "EUR_USD", "direction": "long", "strategy": "trend", "conviction": 3,
+                                    "reason": "", "why_not_others": "", "expected_move_pct": 1.0,
+                                    "horizon_days": 2, "expected_path": ""}]})
+    record = {
+        "status": "shadow", "label_map": {"EUR_USD": "EUR_USD"}, "baseline": {"EUR_USD": "flat"},
+        "decisions": [{"pair": "EUR_USD", "direction": "short", "strategy": "trend",
+                       "expected_move_pct": -0.5, "horizon_days": 20}],  # not matured: left out
+        "calls": [{"role": "member_1", "raw": member}],
+    }
+    old = {"status": "shadow", "decisions": [{"pair": "EUR_USD", "direction": "long", "strategy": "trend"}]}
+    card = sc.score([(days[0], record), (days[1], old)], closes)
+    p = card["predictions"]
+    assert p["member_1"] == {"predictions": 1, "direction_right_pct": 100.0, "avg_predicted_pct": 1.0,
+                             "avg_actual_pct": 2.0, "avg_miss_pct": 1.0}
+    assert p["decision_maker"]["predictions"] == 0 and p["member_2"]["avg_miss_pct"] is None

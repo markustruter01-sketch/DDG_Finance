@@ -12,7 +12,8 @@ _spec.loader.exec_module(log)
 
 def _v2_record():
     member = {"calls": [{"pair": "EUR_USD", "direction": "short", "strategy": "trend", "conviction": 3,
-                         "reason": "falling", "why_not_others": "carry small"}]}
+                         "reason": "falling", "why_not_others": "carry small",
+                         "expected_move_pct": -0.5, "horizon_days": 5, "expected_path": "slides lower"}]}
     return {
         "pack": {"version": 2, "date": "2026-11-09", "pairs": [{"pair": "EUR_USD"}],
                  "news": [{"source": "ECB", "about": "EUR", "title": "Rates held", "hours_ago": 2}]},
@@ -33,6 +34,8 @@ def test_day_detail_shows_news_members_decisions_and_trades():
     d = log.day_detail(date(2026, 11, 9), "shadow", _v2_record(), "abc", {"opens": 1})
     assert d["news"][0]["title"] == "Rates held" and d["news_count"] == 1
     assert d["members"]["member_1"]["calls"][0]["why_not_others"] == "carry small"
+    m1 = d["members"]["member_1"]["calls"][0]
+    assert (m1["expected_move_pct"], m1["horizon_days"], m1["expected_path"]) == (-0.5, 5, "slides lower")
     assert "member_2" not in d["members"]  # unreadable reply is left out, not guessed
     assert d["decisions"][0]["sided_with"] == "member_1"
     assert d["trades"] == [{"pair": "EUR_USD", "direction": "short", "strategy": "trend", "conviction": 3}]

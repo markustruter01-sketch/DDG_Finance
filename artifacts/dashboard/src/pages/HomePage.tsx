@@ -23,8 +23,10 @@ import { botColor } from "@/lib/bot-identity";
 import { useComparison, useFleetV1State, useMomoV2State, useVaultSummary } from "@/hooks/use-fleet-v1";
 import { ComparisonPanel, FleetAccountPanel, MomoPanel, VaultPanel } from "@/components/FleetV1";
 
-// The three accounts in the 2027 comparison. Forex (OANDA) is paused and off the page.
+// The three accounts in the 2027 comparison. Forex (OANDA, the AI council) gets
+// its own card but stays out of the comparison and the Alpaca-only panels.
 const ACCOUNTS = ["oracle", "spy_qqq_trend", "jerome_macro"] as const;
+const CARDS: readonly string[] = [...ACCOUNTS, "forex_ai"];
 
 // Chart colours = the brand four (same values as styles/night-glass/tokens.css).
 // Each account has its own colour (lib/bot-identity BOT_COLORS). Only losses get a
@@ -213,7 +215,7 @@ export default function HomePage() {
 
   const engines: Engine[] = useMemo(() => {
     const bots = (registry.data?.bots ?? [])
-      .filter((b) => b.status !== "retired" && (ACCOUNTS as readonly string[]).includes(b.id))
+      .filter((b) => b.status !== "retired" && CARDS.includes(b.id))
       .sort((a, b) => a.display_order - b.display_order);
     return bots.map((b) => ({
       id: b.id,
@@ -227,6 +229,7 @@ export default function HomePage() {
     }));
   }, [registry.data, fleet, botHistory.data, positionsByBot]);
 
+  const raceEngines = engines.filter((e) => (ACCOUNTS as readonly string[]).includes(e.id));
   const names = Object.fromEntries(ACCOUNTS.map((id) => [id, engines.find((e) => e.id === id)?.name ?? id]));
   const race = comparison.data?.rows ?? [];
 
@@ -306,7 +309,7 @@ export default function HomePage() {
           {race.length > 1 ? (
             <Panel title={`Since ${shortDate(String(race[0].date))} · return by account`} className="fleet-panel" aside={
               <span className="key">
-                {engines.map((e) => <span key={e.id}><i style={{ background: e.shade }} />{e.name}</span>)}
+                {raceEngines.map((e) => <span key={e.id}><i style={{ background: e.shade }} />{e.name}</span>)}
                 <span><i style={{ background: FLEET }} />S&amp;P 500</span>
               </span>
             }>
@@ -320,7 +323,7 @@ export default function HomePage() {
                     <ReferenceLine y={0} stroke={HAIRLINE} />
                     <Tooltip cursor={{ stroke: HAIRLINE }} content={<Tip title={shortDate}
                       fmt={(v, row) => `${row.name === "spy" ? "S&P 500" : names[String(row.name)] ?? row.name}: ${signedPct(v * 100, 1)}`} />} />
-                    {engines.map((e) => (
+                    {raceEngines.map((e) => (
                       <Line key={e.id} dataKey={e.id} name={e.id} stroke={e.shade} strokeWidth={1.5} dot={false} isAnimationActive={false} />
                     ))}
                     <Line dataKey="spy" name="spy" stroke={FLEET} strokeWidth={1.5} dot={false} isAnimationActive={false} />

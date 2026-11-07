@@ -253,6 +253,14 @@ class OandaClient:
             value = quote_data.get(closeout_field)
         return cls._decimal(value, side[:-1] if side.endswith("s") else side)
 
+    def trade(self, trade_id: str) -> dict[str, Any]:
+        """One trade, open or closed (state, closeTime, realizedPL, averageClosePrice)."""
+        payload = self._get(self._account_path(f"trades/{quote(str(trade_id), safe='')}"))
+        trade = payload.get("trade")
+        if not isinstance(trade, dict):
+            raise OandaClientError("OANDA response is missing trade")
+        return trade
+
     def open_trades(self) -> list[dict[str, Any]]:
         return self._list_resource("openTrades", "trades")
 

@@ -96,6 +96,35 @@ class PgForexStore:
                    trade["stop_order_id"], now))
 
 
+def _oanda_time(value: Any) -> datetime | None:
+    """OANDA RFC3339 with nanoseconds ("2026-11-06T13:30:11.345570370Z") -> aware datetime."""
+    if not isinstance(value, str) or not value.endswith("Z"):
+        return None
+    main, _, frac = value[:-1].partition(".")
+    try:
+        return datetime.fromisoformat(f"{main}.{(frac + '000000')[:6]}+00:00")
+    except ValueError:
+        return None
+
+
+def sync_closed_trades(reader, store, now: datetime) -> list[dict[str, Any]]:
+    """Mark ledger trades closed that OANDA has closed (a stop hit, say).
+    Runs every cycle, paused or not, so the records never drift from the
+    broker. Only a trade OANDA itself reports CLOSED is marked; anything else
+    is left for reconciliation to flag. Uses OANDA's close time."""
+    open_at_oanda = {str(t.get("id")) for t in reader.open_trades()}
+    closed = []
+    for trade_id in sorted(store.open_trade_ids() - open_at_oanda):
+        trade = reader.trade(trade_id)
+        if str(trade.get("state", "")).upper() != "CLOSED":
+            continue
+        when = _oanda_time(trade.get("closeTime")) or now
+        store.mark_closed([trade_id], when)
+        closed.append({"trade_id": trade_id, "closed_at": when.isoformat(),
+                       "realized_pl": trade.get("realizedPL"), "close_price": trade.get("averageClosePrice")})
+    return closed
+
+
 def run_forex_execution(
     *,
     reader,                                   # core.oanda_client.OandaClient (read-only)

@@ -32,6 +32,7 @@ def fake_fetch(responses):
 
 def test_titles_are_plain_text_only():
     assert fn.clean_title("<b>Hi</b> see https://x.y/z and me@a.io " + "A" * 50) == "Hi see and"
+    assert fn.clean_title("Hiring jumps : 165 , 000 jobs !") == "Hiring jumps: 165, 000 jobs!"
 
 
 def test_rss_and_atom_parse_with_dates():

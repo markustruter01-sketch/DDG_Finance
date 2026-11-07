@@ -232,6 +232,8 @@ def test_forex_cycle_only_reads_account_and_open_positions_and_writes_usd_state(
     sheet = result.pop("signal_sheet")
     assert result.pop("council") == "disabled"
     assert result.pop("execution") == "trading off"
+    # This fake has no open_trades(): the ledger sync is skipped, never fatal.
+    assert result.pop("ledger_sync") == "failed: AttributeError"
     assert result == {
         "bot_id": "forex_ai",
         "currency": "USD",

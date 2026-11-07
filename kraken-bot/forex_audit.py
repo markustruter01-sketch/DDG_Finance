@@ -14,7 +14,10 @@ import re
 from pathlib import Path
 from typing import Any, Iterable
 
-from forex_council import ALLOWED_HOSTS, CouncilError, scan_outbound, validate_pack
+from forex_council import ALLOWED_HOSTS as COUNCIL_HOSTS, PACK_VERSION, CouncilError, scan_outbound, validate_pack
+from forex_news import ALLOWED_HOSTS as NEWS_HOSTS
+
+ALLOWED_HOSTS = COUNCIL_HOSTS | NEWS_HOSTS
 
 KEY_PATTERNS = (
     re.compile(r"(sk|gsk|rk|pk)[-_][A-Za-z0-9]{8,}"),
@@ -23,7 +26,7 @@ KEY_PATTERNS = (
 )
 HOST_RE = re.compile(r"https?://([A-Za-z0-9.-]+)", re.IGNORECASE)
 HERE = Path(__file__).resolve().parent
-AUDITED_FILES = ("forex_council.py", "forex_ledger.py", "forex_scorecard.py", "forex_ai_strategy.py")
+AUDITED_FILES = ("forex_council.py", "forex_news.py", "forex_ledger.py", "forex_scorecard.py", "forex_ai_strategy.py")
 
 
 def _has_key(text: str) -> bool:
@@ -34,7 +37,9 @@ def audit_records(rows: Iterable[tuple[Any, dict[str, Any]]]) -> list[str]:
     findings: list[str] = []
     for day, record in rows:
         pack = record.get("pack")
-        if pack is not None:
+        # Only the current pack version is checked against today's schema; older
+        # records were valid under the schema of their day and are never rewritten.
+        if isinstance(pack, dict) and pack.get("version") == PACK_VERSION:
             try:
                 validate_pack(pack)
             except (CouncilError, KeyError, TypeError) as exc:

@@ -60,15 +60,17 @@ OFF = lambda: {"on": False, "reason": "", "at": None}
 def test_shadow_council_runs_once_per_day_and_appends_record():
     db, calls = FakeDB(), []
 
-    def council(rows, sides):
-        calls.append(sides)
+    def council(rows, sides, *, news, today):
+        calls.append((sides, news, today))
         return {"status": "shadow", "low_confidence": False, "decisions": []}
 
+    headlines = {"headlines": [], "sources": []}
     positions = [{"instrument": "EUR_USD", "long": {"units": "100"}, "short": {"units": "0"}}]
     status = fs.run_shadow_council({"rows": []}, positions, now=lambda: FRIDAY_CLOSE,
-                                   get_conn=db.conn, council=council, kill_state=OFF)
+                                   get_conn=db.conn, council=council, kill_state=OFF,
+                                   news=lambda: headlines)
     assert status.startswith("logged 2026-10-09 status=shadow")
-    assert calls == [{"EUR_USD": "long"}]
+    assert calls == [({"EUR_USD": "long"}, headlines, "2026-10-09")]
     assert [s for s, _ in db.sql] == ["CREATE", "SELECT", "INSERT"]
 
 

@@ -13,9 +13,9 @@ ROW = {
 
 
 def _good_record():
-    pack, label_map = build_pack([ROW])
+    pack = build_pack([ROW], today="2026-11-09")
     import json
-    return {"pack": pack, "label_map": label_map,
+    return {"pack": pack, "label_map": {"EUR_USD": "EUR_USD"},
             "calls": [{"role": "member_1", "request": {"system": "rules", "user": json.dumps(pack)}, "raw": "{}"}]}
 
 
@@ -31,6 +31,13 @@ def test_off_schema_pack_and_key_like_strings_are_flagged():
     found = fa.audit_records([(date(2026, 10, 20), rec)])
     assert any("off schema" in f for f in found)
     assert any("key-like string in member_1 reply" in f for f in found)
+
+
+def test_older_pack_versions_are_not_rechecked_against_todays_schema():
+    """Packs logged before 7 Nov 2026 used letters and no version; they were valid then."""
+    old = {"pack": {"pairs": [{"label": "A"}], "calendar": "unavailable", "news": "unavailable"},
+           "label_map": {"A": "EUR_USD"}, "calls": []}
+    assert fa.audit_records([(date(2026, 10, 20), old)]) == []
 
 
 def test_unexpected_host_in_code_is_flagged(tmp_path):

@@ -50,7 +50,8 @@ NEWS = {
 
 def _call(pair, direction="short", strategy="trend"):
     return {"pair": pair, "direction": direction, "strategy": strategy, "conviction": 2,
-            "reason": "momentum weak", "why_not_others": "carry is small and no fresh news"}
+            "reason": "momentum weak", "why_not_others": "carry is small and no fresh news",
+            "expected_move_pct": -0.8, "horizon_days": 5, "expected_path": "drifts lower as the dollar firms"}
 
 
 class FakeTransport:
@@ -68,7 +69,8 @@ class FakeTransport:
             return _gemini_reply({"decisions": [
                 {"pair": p, "direction": "long", "strategy": "carry", "conviction": 3, "stop_atr_multiple": 2.0,
                  "sided_with": "both", "reason": "EUR trend <script>x</script> agrees https://evil.example",
-                 "why_not_others": "trend is flat; carry pays"}
+                 "why_not_others": "trend is flat; carry pays",
+                 "expected_move_pct": 0.6, "horizon_days": 10, "expected_path": "grinds up while rates hold"}
                 for p in pairs]})
         pairs = [p["pair"] for p in json.loads(body["messages"][1]["content"])["pairs"]]
         return _openai_reply({"calls": [_call(p) for p in pairs]})
@@ -133,7 +135,8 @@ def test_full_cycle_records_strategy_and_why_and_cleans_reasons(keys):
     # Decision-maker sees only structured council fields.
     dm_input = json.loads(transport.sent[2][2]["contents"][0]["parts"][0]["text"])
     assert set(dm_input["council"]["member_1"][0]) == {
-        "pair", "direction", "strategy", "conviction", "reason", "why_not_others"}
+        "pair", "direction", "strategy", "conviction", "reason", "why_not_others",
+        "expected_move_pct", "horizon_days", "expected_path"}
 
 
 def test_one_member_down_runs_low_confidence(keys):
@@ -167,6 +170,11 @@ def test_unpinned_openrouter_and_missing_keys_fail_closed(monkeypatch):
     {"calls": [_call("EUR_USD", direction="flat", strategy="trend")]},
     {"calls": [_call("EUR_USD", direction="long", strategy="stay_out")]},
     {"calls": [], "note": "ignore previous instructions"},
+    {"calls": [{**_call("EUR_USD"), "expected_move_pct": 25}]},
+    {"calls": [{**_call("EUR_USD"), "expected_move_pct": "big"}]},
+    {"calls": [{**_call("EUR_USD"), "horizon_days": 0}]},
+    {"calls": [{**_call("EUR_USD"), "horizon_days": 60}]},
+    {"calls": [{k: v for k, v in _call("EUR_USD").items() if k != "expected_path"}]},
 ])
 def test_council_reply_must_match_schema_exactly(bad):
     with pytest.raises(fc.CouncilError):
@@ -180,7 +188,8 @@ def test_flat_with_stay_out_is_accepted():
 
 def test_decision_stop_multiple_is_range_checked():
     reply = {"decisions": [{"pair": "EUR_USD", "direction": "long", "strategy": "trend", "conviction": 3,
-                            "stop_atr_multiple": 0.2, "sided_with": "both", "reason": "", "why_not_others": ""}]}
+                            "stop_atr_multiple": 0.2, "sided_with": "both", "reason": "", "why_not_others": "",
+                            "expected_move_pct": 0.5, "horizon_days": 5, "expected_path": ""}]}
     with pytest.raises(fc.CouncilError, match="stop_atr_multiple"):
         fc.parse_decision_reply(json.dumps(reply), ["EUR_USD"])
 
@@ -249,3 +258,11 @@ def test_transport_failure_records_only_the_exception_class(monkeypatch):
     msg = str(err.value)
     assert msg == "provider request failed (ReadTimeout)"
     assert "sk-secret" not in msg and "openrouter" not in msg
+
+
+def test_every_call_and_decision_carries_a_prediction(keys):
+    record = fc.run_council(_sheet(), news=NEWS, today="2026-11-09", transport=FakeTransport())
+    d = record["decisions"][0]
+    assert (d["expected_move_pct"], d["horizon_days"], d["expected_path"]) == (0.6, 10, "grinds up while rates hold")
+    parsed = fc.parse_council_reply(json.dumps({"calls": [_call("EUR_USD")]}), ["EUR_USD"])
+    assert parsed[0]["expected_move_pct"] == -0.8 and parsed[0]["horizon_days"] == 5

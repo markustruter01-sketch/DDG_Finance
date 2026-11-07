@@ -19,6 +19,7 @@ from .fleet_v1 import fleet_v1_router
 from .momo_v2 import momo_v2_router
 from .comparison import comparison_router
 from .forex_council_log import forex_council_log_router
+from .connections import connections_router
 
 ALL_ROUTERS = [
     system_router,
@@ -42,4 +43,5 @@ ALL_ROUTERS = [
     momo_v2_router,
     comparison_router,
     forex_council_log_router,
+    connections_router,
 ]

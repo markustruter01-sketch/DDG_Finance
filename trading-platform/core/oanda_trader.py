@@ -47,6 +47,19 @@ class OandaTrader:
         self.close()
 
     def _send(self, method: str, resource: str, body: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+        from core.link_health import record_link
+        try:
+            status, payload = self._send_unrecorded(method, resource, body)
+        except OandaClientError as exc:
+            record_link("OANDA practice", False, str(exc))
+            raise
+        if status in (401, 403):
+            record_link("OANDA practice", False, f"OANDA practice {method} returned HTTP {status}")
+        else:
+            record_link("OANDA practice", True)
+        return status, payload
+
+    def _send_unrecorded(self, method: str, resource: str, body: dict[str, Any]) -> tuple[int, dict[str, Any]]:
         url = f"{BASE_URL}/accounts/{quote(self._account_id, safe='')}/{resource}"
         try:
             response = self._http.request(method, url, json=body, headers={

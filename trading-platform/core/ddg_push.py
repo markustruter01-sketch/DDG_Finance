@@ -388,11 +388,18 @@ def build_detail() -> dict[str, Any]:
             *CASH_PARK_SYMBOLS,
         )
     }
+    from core.link_health import record_link
     for bot_id in _DETAIL_ALPACA_BOT_IDS:
-        client = _fresh_read_client(bot_id)
-        _set_alpaca_read_timeout(client)
-        broker_positions = _positions(client)
-        open_orders = _detail_orders_with_stop_price(client)
+        link = f"Alpaca · {BOT_REGISTRY[bot_id].display_name if bot_id in BOT_REGISTRY else bot_id}"
+        try:
+            client = _fresh_read_client(bot_id)
+            _set_alpaca_read_timeout(client)
+            broker_positions = _positions(client)
+            open_orders = _detail_orders_with_stop_price(client)
+        except Exception as exc:
+            record_link(link, False, f"account read failed ({type(exc).__name__})")
+            raise
+        record_link(link, True)
         for position in broker_positions:
             symbol = str(position["symbol"])
             symbol_key = canonical_symbol(symbol)
@@ -512,6 +519,11 @@ def _fit_detail_limits(detail: dict[str, Any]) -> dict[str, Any]:
     return fit_value(detail)
 
 
+def _record_push(ok: bool, error: str = "") -> None:
+    from core.link_health import record_link
+    record_link("DDG Control push", ok, error)
+
+
 def push_fleet_snapshot() -> None:
     """Send one snapshot when enabled; never let a push failure escape."""
     key = ""
@@ -562,6 +574,7 @@ def push_fleet_snapshot() -> None:
             status = response.status_code
             if 200 <= status < 300:
                 logger.info(f"ddg-push ok {status} (without detail)")
+                _record_push(True)
             else:
                 error_text = ""
                 try:
@@ -575,6 +588,7 @@ def push_fleet_snapshot() -> None:
                 error_text = error_text[:200]
                 reason = f" {error_text}" if error_text else ""
                 logger.error(f"ddg-push failed {status}{reason}")
+                _record_push(False, f"HTTP {status}")
             return
 
         if not 200 <= status < 300:
@@ -590,11 +604,14 @@ def push_fleet_snapshot() -> None:
             error_text = error_text[:200]
             reason = f" {error_text}" if error_text else ""
             logger.error(f"ddg-push failed {status}{reason}")
+            _record_push(False, f"HTTP {status}")
             return
 
         logger.info(f"ddg-push ok {status}")
+        _record_push(True)
     except _ModeUnavailable:
         logger.error("ddg-push failed _ModeUnavailable mode-unavailable")
+        _record_push(False, "trading mode unavailable")
     except Exception as exc:
         response = getattr(exc, "response", None)
         status = getattr(response, "status_code", None)
@@ -614,3 +631,4 @@ def push_fleet_snapshot() -> None:
         reason = f" {error_text}" if error_text else ""
         failure = status if status is not None else type(exc).__name__
         logger.error(f"ddg-push failed {failure}{reason}")
+        _record_push(False, f"push failed ({failure})")

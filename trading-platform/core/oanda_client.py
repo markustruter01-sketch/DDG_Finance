@@ -68,6 +68,21 @@ class OandaClient:
         *,
         params: dict[str, str | int] | None = None,
     ) -> dict[str, Any]:
+        from core.link_health import record_link
+        try:
+            payload = self._get_unrecorded(path, params=params)
+        except OandaClientError as exc:
+            record_link("OANDA practice", False, str(exc))
+            raise
+        record_link("OANDA practice", True)
+        return payload
+
+    def _get_unrecorded(
+        self,
+        path: str,
+        *,
+        params: dict[str, str | int] | None = None,
+    ) -> dict[str, Any]:
         try:
             response = self._http_client.get(
                 f"{BASE_URL}{path}",

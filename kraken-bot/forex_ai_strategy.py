@@ -41,6 +41,28 @@ def _position_sides(positions: list[dict[str, Any]]) -> dict[str, str]:
     return sides
 
 
+def _record_council_links(record: dict[str, Any]) -> None:
+    """Report each AI provider's and news source's result to link health. Never raises."""
+    try:
+        from core.link_health import record_link
+        from forex_council import PROVIDERS
+
+        errors = record.get("errors") or []
+        for role, cfg in PROVIDERS.items():
+            name = f"AI · {cfg['provider']} ({cfg['model']})"
+            final = [e for e in errors if e.startswith(f"{role}:") and "retrying once" not in e]
+            answered = any(c.get("role") == role for c in record.get("calls") or [])
+            if final:
+                record_link(name, False, final[-1][:200])
+            elif answered:
+                record_link(name, True)
+        for source in record.get("news_sources") or []:
+            status = str(source.get("status", ""))
+            record_link(f"News · {source.get('name')}", status.startswith("ok"), status)
+    except Exception:
+        pass
+
+
 def run_shadow_council(
     sheet: dict[str, Any],
     positions: list[dict[str, Any]],
@@ -74,6 +96,7 @@ def run_shadow_council(
         if news is None:
             from forex_news import gather_news as news
         record = council(sheet["rows"], _position_sides(positions), news=news(), today=trading_day.isoformat())
+        _record_council_links(record)
         with get_conn() as conn:
             digest = forex_ledger.append_cycle(conn, trading_day, record)
         return f"logged {trading_day} status={record['status']} sha256={digest[:12]}"

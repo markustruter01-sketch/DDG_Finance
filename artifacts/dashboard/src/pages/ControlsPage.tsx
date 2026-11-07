@@ -222,6 +222,41 @@ function DrawdownLimits() {
   );
 }
 
+type Link = { name: string; state: "working" | "failing" | "unknown"; last_ok: string | null; last_fail: string | null; last_error: string | null };
+
+/** Every outside link and when it last worked / failed. A link that worked after its last failure is working. */
+function Connections() {
+  const links = useQuery({
+    queryKey: ["connections"],
+    queryFn: async () => (await api.get("/connections")).data as { links: Link[] },
+    refetchInterval: 60_000,
+  });
+  const when = (iso: string | null) => (iso ? bneTime(iso) : "—");
+  return (
+    <section className="glass panel" aria-label="Connections">
+      <div className="panel-head"><h2>Connections</h2><span className="label">Last worked · last failed</span></div>
+      {links.isError && <Status tone="problem" word={`Connections unreadable: ${errorText(links.error)}`} />}
+      <div className="table-scroll">
+        <table className="ng">
+          <thead><tr><th>Link</th><th>State</th><th>Last worked</th><th>Last failed</th><th>Last error</th></tr></thead>
+          <tbody>
+            {(links.data?.links ?? []).map((l) => (
+              <tr key={l.name}>
+                <td>{l.name}</td>
+                <td><Status tone={l.state === "working" ? "ok" : l.state === "failing" ? "problem" : "none"} word={l.state === "working" ? "Working" : l.state === "failing" ? "Failing" : "No data yet"} /></td>
+                <td>{when(l.last_ok)}</td>
+                <td>{when(l.last_fail)}</td>
+                <td className="small">{l.state === "failing" ? l.last_error : l.last_error ? <span className="note">{l.last_error} (recovered)</span> : "—"}</td>
+              </tr>
+            ))}
+            {links.data && !links.data.links.length && <tr><td colSpan={5} className="note">No links reported yet. They appear after the next cycle.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 export default function ControlsPage() {
   const state = useQuery({
     queryKey: PAUSE_KEY,
@@ -252,6 +287,7 @@ export default function ControlsPage() {
               <div className="panel-head"><h2>Bots</h2><span className="label">{state.data.bots.length} bots</span></div>
               <ul className="list">{state.data.bots.map((row) => <BotRow key={row.bot_id} row={row} />)}</ul>
             </section>
+            <Connections />
             <DrawdownLimits />
             <EmergencyStop tripped={state.data.kill_switch_tripped} />
           </>

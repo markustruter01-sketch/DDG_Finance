@@ -131,20 +131,22 @@ BOT_PROFILES = {
     },
 
     "forex_ai": {
-        # 2 Nov 2026 (FLEET-V1-LIVE-SPEC.md section 5): the council and trading
-        # are OFF. The bot stays registered (paused) only as a read-only NAV
-        # monitor, because its OANDA NAV is part of fleet equity and the fleet
-        # high-water mark; removing it outright would read as a ~25% fleet
-        # drawdown to the kill switch. Full removal needs a high-water-mark rebase.
+        # 2 Nov 2026 (FLEET-V1-LIVE-SPEC.md section 5) the council and trading were
+        # switched off, the bot kept as a read-only NAV monitor (its OANDA NAV is part
+        # of fleet equity and the fleet high-water mark). 7 Nov 2026 (Markus): back on,
+        # council v2 (news + strategy reasons) on the PRACTICE account until its forward
+        # record starts 1 Jan 2027. Trading also needs forex_ai unpaused (Controls page).
         "display_name":      "Forex",
         "db_id":             None,
-        "strategy_type":     "read_only_oanda",
-        "strategy_label":    "Forex (retired; read-only NAV monitor)",
+        "strategy_type":     "forex_ai_council",
+        "strategy_label":    "Forex AI council (practice account)",
         "LOOP_SLEEP_SECONDS": 3600,
         "STARTING_CAPITAL":  100_000,
         "FOREX_MAX_GROSS":   FOREX_MAX_GROSS,
-        "FOREX_COUNCIL_ENABLED": False,
-        "FOREX_TRADING_ENABLED": False,
+        # On again 7 Nov 2026 (Markus): council v2 trades the PRACTICE account to pre-test
+        # before its forward record starts on 1 Jan 2027. Still needs forex_ai unpaused.
+        "FOREX_COUNCIL_ENABLED": True,
+        "FOREX_TRADING_ENABLED": True,
     },
 }
 

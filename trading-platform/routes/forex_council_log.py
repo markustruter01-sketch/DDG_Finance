@@ -27,7 +27,7 @@ if _KRAKEN_BOT not in sys.path:
 
 forex_council_log_router = APIRouter()
 
-ROLES = ("member_1", "member_2")
+ROLES = ("member_1", "member_2", "member_3")
 SCORECARD_TTL_SECONDS = 30 * 60
 _scorecard_cache: dict[str, Any] = {"at": 0.0, "card": None}
 
@@ -54,7 +54,8 @@ def member_views(record: dict[str, Any]) -> dict[str, dict[str, Any]]:
                 pair = label_map.get(c.get("pair") or c.get("label"))
                 if pair:
                     rows.append({"pair": pair, "direction": c.get("direction"), "strategy": c.get("strategy"),
-                                 "conviction": c.get("conviction"), "reason": c.get("reason"),
+                                 "conviction": c.get("conviction"), "stop_atr_multiple": c.get("stop_atr_multiple"),
+                                 "reason": c.get("reason"),
                                  "why_not_others": c.get("why_not_others"),
                                  "expected_move_pct": c.get("expected_move_pct"),
                                  "horizon_days": c.get("horizon_days"), "expected_path": c.get("expected_path")})
@@ -75,7 +76,7 @@ def day_summary(trading_day: date, status: str, record: dict[str, Any], report: 
         "news_count": len((record.get("pack") or {}).get("news") or []) if isinstance((record.get("pack") or {}).get("news"), list) else 0,
         "errors": len(record.get("errors") or []),
         "trades": [{"pair": d["pair"], "direction": d["direction"], "strategy": d.get("strategy"),
-                    "conviction": d.get("conviction")} for d in decisions if d.get("direction") in ("long", "short")],
+                    "conviction": d.get("conviction"), "outcome": d.get("outcome")} for d in decisions if d.get("direction") in ("long", "short")],
         "executed": bool(report),
     }
 
@@ -87,6 +88,7 @@ def day_detail(trading_day: date, status: str, record: dict[str, Any], sha: str,
         **day_summary(trading_day, status, record, report),
         "record_sha256": sha,
         "pack_version": pack.get("version", 1),
+        "council_version": record.get("council_version", 2),
         "news": pack.get("news") if isinstance(pack.get("news"), list) else [],
         "news_sources": record.get("news_sources") or [],
         "market": pack.get("pairs") or [],

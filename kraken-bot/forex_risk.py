@@ -135,7 +135,10 @@ def plan_forex_actions(
             skipped.append({"pair": pair, "reason": "no usable price, ATR or stop multiple"})
             continue
         distance = multiple * atr
-        units = math.floor(risk_usd / (distance * usd_per_unit_per_price(pair, price)))
+        # Council v3 marks each trade; older records use the day's low_confidence.
+        half = d["half_size"] if "half_size" in d else low_confidence
+        trade_risk = nav * RISK_PER_TRADE * (LOW_CONFIDENCE_FACTOR if half else 1.0)
+        units = math.floor(trade_risk / (distance * usd_per_unit_per_price(pair, price)))
         room = max_gross * nav - gross
         notional = usd_notional_per_unit(pair, price)
         if units * notional > room:

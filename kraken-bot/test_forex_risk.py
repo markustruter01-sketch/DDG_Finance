@@ -84,3 +84,10 @@ def test_blackout_and_missing_data_are_skipped_and_reported():
 def test_stop_levels_are_on_the_right_side_and_rounded():
     assert fr.stop_price("EUR_USD", "long", 1.081234, 0.012) == 1.06923
     assert fr.stop_price("USD_JPY", "short", 150.1234, 2.0) == 152.123
+
+
+def test_council_v3_half_size_is_per_trade_and_overrides_the_day_flag():
+    plan = _plan([{**_d("EUR_USD", "long"), "half_size": True}, {**_d("USD_JPY", "short"), "half_size": False}],
+                 low_confidence=True)
+    units = {o["pair"]: o["units"] for o in plan["opens"]}
+    assert units == {"EUR_USD": 20_833, "USD_JPY": -37_500}

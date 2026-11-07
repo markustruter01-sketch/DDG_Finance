@@ -6,6 +6,7 @@ import NotFound from "@/pages/not-found";
 import HomePage from "@/pages/HomePage";
 import BenchPage from "@/pages/BenchPage";
 import ControlsPage from "@/pages/ControlsPage";
+import ForexPage from "@/pages/ForexPage";
 import { RefreshCw } from "lucide-react";
 
 import { VisibilityContext, useVisibilityProvider, installVisibilityListener } from "@/hooks/use-visibility";
@@ -39,6 +40,7 @@ function Router() {
       <Route path="/home"><Redirect to="/" /></Route>
       <Route path="/bench" component={BenchPage} />
       <Route path="/controls" component={ControlsPage} />
+      <Route path="/forex" component={ForexPage} />
       <Route component={NotFound} />
     </Switch>
   );

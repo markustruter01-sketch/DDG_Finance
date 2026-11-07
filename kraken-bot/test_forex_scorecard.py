@@ -77,3 +77,23 @@ def test_weekly_job_runs_on_saturday_only_and_never_raises():
     def broken():
         raise RuntimeError("down")
     assert fas._maybe_log_weekly_scorecard(broken, now=sat, get_conn=get_conn).startswith("failed")
+
+
+def test_new_records_score_members_by_pair_and_decisions_by_strategy():
+    d0, d1 = date(2026, 11, 9), date(2026, 11, 10)
+    closes = {"EUR_USD": {d0: 1.00, d1: 1.02}, "USD_JPY": {d0: 150.0, d1: 151.5}}
+    member = json.dumps({"calls": [
+        {"pair": "EUR_USD", "direction": "long", "strategy": "trend", "conviction": 3, "reason": "", "why_not_others": ""},
+        {"pair": "USD_JPY", "direction": "short", "strategy": "carry", "conviction": 3, "reason": "", "why_not_others": ""}]})
+    record = {
+        "status": "shadow", "label_map": {"EUR_USD": "EUR_USD", "USD_JPY": "USD_JPY"},
+        "baseline": {"EUR_USD": "flat", "USD_JPY": "flat"},
+        "decisions": [{"pair": "EUR_USD", "direction": "long", "strategy": "trend"},
+                      {"pair": "USD_JPY", "direction": "short", "strategy": "carry"}],
+        "calls": [{"role": "member_1", "raw": member}],
+    }
+    card = sc.score([(d0, record)], closes)
+    assert card["sources"]["member_1"]["1d"] == {"calls": 2, "hit_rate_pct": 50.0, "avg_return_pct": 0.5}
+    assert card["strategies"]["trend"]["1d"]["hit_rate_pct"] == 100.0
+    assert card["strategies"]["carry"]["1d"]["hit_rate_pct"] == 0.0
+    assert card["strategies"]["event"]["1d"]["calls"] == 0

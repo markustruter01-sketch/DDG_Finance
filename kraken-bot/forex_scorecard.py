@@ -3,7 +3,8 @@
 For every logged shadow day, score each source's direction call per pair at
 1, 5 and 20 trading days: member 1, member 2, the decision-maker and the
 registered baseline. A long scores the pair's return, a short the negative,
-flat is not a call. Only horizons that have matured are counted.
+flat is not a call. Only horizons that have matured are counted. The final
+decisions are also scored by the strategy they named (pack version 2 on).
 
 Pure functions plus one read-only job; no orders, no DB writes.
 """
@@ -15,7 +16,7 @@ from datetime import date, datetime, timedelta
 from typing import Any, Iterable
 from zoneinfo import ZoneInfo
 
-from forex_council import CouncilError, parse_council_reply
+from forex_council import CouncilError, STRATEGIES, _json_object
 
 NEW_YORK = ZoneInfo("America/New_York")
 HORIZONS = (1, 5, 20)
@@ -36,9 +37,9 @@ def closes_by_day(candles: list[dict[str, Any]]) -> dict[date, float]:
 
 
 def source_calls(record: dict[str, Any]) -> dict[str, dict[str, str]]:
-    """Each source's direction per pair for one ledger record."""
+    """Each source's direction per pair for one ledger record. Works for every
+    pack version: old records used letters (label_map), new ones pair names."""
     label_map: dict[str, str] = record.get("label_map") or {}
-    labels = sorted(label_map)
     out: dict[str, dict[str, str]] = {
         "baseline": dict(record.get("baseline") or {}),
         "decision_maker": {d["pair"]: d["direction"] for d in record.get("decisions") or []},
@@ -48,16 +49,23 @@ def source_calls(record: dict[str, Any]) -> dict[str, dict[str, str]]:
             if call.get("role") != role:
                 continue
             try:
-                parsed = parse_council_reply(call.get("raw", ""), labels)
-            except CouncilError:
+                calls = _json_object(call.get("raw", "")).get("calls") or []
+                parsed = {label_map[c.get("pair") or c.get("label")]: c["direction"] for c in calls}
+            except (CouncilError, KeyError, TypeError, AttributeError):
                 continue
-            out[role] = {label_map[p["label"]]: p["direction"] for p in parsed}
+            out[role] = parsed
     return out
+
+
+def strategy_calls(record: dict[str, Any]) -> dict[str, tuple[str, str]]:
+    """The final decision per pair as (strategy, direction); empty for old records."""
+    return {d["pair"]: (d["strategy"], d["direction"]) for d in record.get("decisions") or [] if d.get("strategy")}
 
 
 def score(rows: Iterable[tuple[date, dict[str, Any]]], closes: dict[str, dict[date, float]]) -> dict[str, Any]:
     """Score every source at every horizon that has matured."""
     tally = {s: {h: {"calls": 0, "hits": 0, "sum_ret": 0.0} for h in HORIZONS} for s in SOURCES}
+    by_strategy = {s: {h: {"calls": 0, "hits": 0, "sum_ret": 0.0} for h in HORIZONS} for s in STRATEGIES if s != "stay_out"}
     days = {"logged": 0, "shadow": 0, "no_trade": 0, "low_confidence": 0}
     sorted_days = {pair: sorted(d) for pair, d in closes.items()}
     for trading_day, record in rows:
@@ -65,10 +73,12 @@ def score(rows: Iterable[tuple[date, dict[str, Any]]], closes: dict[str, dict[da
         status = record.get("status")
         days["shadow" if status == "shadow" else "no_trade"] += 1
         days["low_confidence"] += bool(record.get("low_confidence"))
-        for source, calls in source_calls(record).items():
-            if source not in tally:
+        sources = {s: {p: (None, d) for p, d in c.items()} for s, c in source_calls(record).items()}
+        sources["by_strategy"] = strategy_calls(record)
+        for source, calls in sources.items():
+            if source not in tally and source != "by_strategy":
                 continue
-            for pair, direction in calls.items():
+            for pair, (strategy, direction) in calls.items():
                 if direction not in ("long", "short") or pair not in closes:
                     continue
                 series, order = closes[pair], sorted_days[pair]
@@ -80,12 +90,12 @@ def score(rows: Iterable[tuple[date, dict[str, Any]]], closes: dict[str, dict[da
                         continue
                     ret = series[order[i + h]] / series[trading_day] - 1
                     signed = ret if direction == "long" else -ret
-                    t = tally[source][h]
+                    t = by_strategy[strategy][h] if source == "by_strategy" else tally[source][h]
                     t["calls"] += 1
                     t["hits"] += signed > 0
                     t["sum_ret"] += signed
-    table = {
-        s: {
+    def summary(by_h):
+        return {
             f"{h}d": {
                 "calls": t["calls"],
                 "hit_rate_pct": round(100 * t["hits"] / t["calls"], 1) if t["calls"] else None,
@@ -93,9 +103,9 @@ def score(rows: Iterable[tuple[date, dict[str, Any]]], closes: dict[str, dict[da
             }
             for h, t in by_h.items()
         }
-        for s, by_h in tally.items()
-    }
-    return {"days": days, "sources": table,
+
+    table = {s: summary(by_h) for s, by_h in tally.items()}
+    return {"days": days, "sources": table, "strategies": {s: summary(t) for s, t in by_strategy.items()},
             "note": "Shadow only. Holding no position scores 0. Returns are before spreads and financing."}
 
 

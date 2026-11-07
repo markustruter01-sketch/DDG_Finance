@@ -49,6 +49,7 @@ def run_shadow_council(
     get_conn: Callable[[], Any] | None = None,
     council: Callable[..., dict[str, Any]] | None = None,
     kill_state: Callable[[], dict[str, Any]] | None = None,
+    news: Callable[[], dict[str, Any]] | None = None,
 ) -> str:
     """Phase 4 shadow cycle: once per New York trading day, run the AI council
     and append the full record to the ledger. Never places orders. Returns a
@@ -70,7 +71,9 @@ def run_shadow_council(
             forex_ledger.ensure_ledger(conn)
             if forex_ledger.already_logged(conn, trading_day):
                 return f"already logged {trading_day}"
-        record = council(sheet["rows"], _position_sides(positions))
+        if news is None:
+            from forex_news import gather_news as news
+        record = council(sheet["rows"], _position_sides(positions), news=news(), today=trading_day.isoformat())
         with get_conn() as conn:
             digest = forex_ledger.append_cycle(conn, trading_day, record)
         return f"logged {trading_day} status={record['status']} sha256={digest[:12]}"

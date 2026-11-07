@@ -70,8 +70,9 @@ def test_atlas_ships_with_fleet_v1_live_and_g4_off():
     assert oracle["MAX_DEPLOYMENT"] == 1.0
 
 
-def test_jerome_is_paused_in_code_and_forex_has_no_ai_or_trading():
+def test_jerome_is_paused_in_code_and_forex_council_trades_practice():
     profiles = load_bot_profiles()
     assert profiles["jerome_macro"]["PAUSED_IN_CODE"] is True
-    assert profiles["forex_ai"]["FOREX_COUNCIL_ENABLED"] is False
-    assert profiles["forex_ai"]["FOREX_TRADING_ENABLED"] is False
+    # 7 Nov 2026 (Markus): the Forex council is back on, practice account only.
+    assert profiles["forex_ai"]["FOREX_COUNCIL_ENABLED"] is True
+    assert profiles["forex_ai"]["FOREX_TRADING_ENABLED"] is True

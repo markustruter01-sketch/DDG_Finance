@@ -716,6 +716,12 @@ def audit_atr_open_positions(audit_mode: str = "quick") -> int:
         entry_atr = float(row["entry_atr"]) if row.get("entry_atr") is not None else None
         current = (prices_by_bot.get(bot_id) or {}).get(symbol)
 
+        # Stop-free by design (core/stop_policy.py): the cross-asset sleeve's
+        # monthly trend call is its exit, so no stop is not a failure.
+        from core.stop_policy import stop_exempt
+        if stop is None and stop_exempt(bot_id, symbol):
+            continue
+
         if stop is None or not math.isfinite(stop) or stop <= 0:
             status = "FAIL"
             bot_output = 0.0

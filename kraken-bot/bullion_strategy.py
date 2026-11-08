@@ -38,6 +38,6 @@ def run_bullion_cycle(profile: dict[str, Any] | None = None, db_id: int | None =
     )
     live = engine.get_positions()
     engine.reconcile_protective_stops(BOT_ID, engine.get_db_positions(BOT_ID))
-    result = run_fleet_account(engine, bot_id=BOT_ID, variant=C1, label="Bullion", live_positions=live)
-    logger.info(f"Bullion | FLEET-V1-C1 live cycle | {result['status']}")
+    result = run_fleet_account(engine, bot_id=BOT_ID, variant=C1, label="Atlas V2", live_positions=live)
+    logger.info(f"Atlas V2 | FLEET-V1-C1 live cycle | {result['status']}")
     return result

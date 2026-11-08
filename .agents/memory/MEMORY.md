@@ -72,3 +72,4 @@
 - [Fleet chat prompt interpolation](fleet-chat-prompt-interpolation.md) — preserve literal prompt braces; use a sentinel replacement for registry labels instead of converting the full prompt to an f-string.
 - [Private deployment API audits](private-deployment-api-audit.md) — direct requests to the private published app redirect to ReplShield; don't bypass the gateway or claim live API data is verified.
 - [Mockup patch persistence](mockup-patch-persistence.md) — after an interrupted patch, verify each preview component file and its generated registry entry before trusting the iframe.
+- [Workflow database binding](workflow-database-binding.md) — verify the local API workflow's DB target before restart; its startup schema routine can mutate the connected database.

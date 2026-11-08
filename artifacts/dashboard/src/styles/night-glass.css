@@ -308,6 +308,11 @@ table.ng .money, table.ng th.money { font-family: var(--ng-mono); text-align: ri
 .control-row .grow { display: flex; flex-direction: column; gap: 2px; }
 .control-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .control-actions .input { width: 220px; }
+/* Forex: full width. Scorecard in three columns; days list beside the picked day's decisions. */
+.controls.forex { max-width: none; }
+.forex-score { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: stretch; }
+.forex-days { display: grid; grid-template-columns: minmax(340px, 1fr) minmax(0, 3fr); gap: 12px; align-items: start; }
+@media (max-width: 1280px) { .forex-score, .forex-days { grid-template-columns: minmax(0, 1fr); } }
 .stop-panel { border-color: color-mix(in srgb, var(--ng-problem) 35%, transparent); }
 
 /* ── Bench ─────────────────────────────────────────────────────────────── */

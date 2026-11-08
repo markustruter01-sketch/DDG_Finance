@@ -26,7 +26,7 @@ type Cell = { calls: number; hit_rate_pct: number | null; avg_return_pct: number
 type PredCell = { predictions: number; direction_right_pct: number | null; avg_predicted_pct: number | null;
   avg_actual_pct: number | null; avg_miss_pct: number | null };
 type Scorecard = { days: Record<string, number>; sources: Record<string, Record<string, Cell>>;
-  strategies?: Record<string, Record<string, Cell>>; predictions?: Record<string, PredCell>; note: string; computed_at?: string };
+  strategies?: Record<string, Record<string, Cell>>; convictions?: Record<string, Record<string, Cell>>; predictions?: Record<string, PredCell>; note: string; computed_at?: string };
 
 const PAGE = 10;
 const SOURCE_NAME: Record<string, string> = {
@@ -35,6 +35,7 @@ const SOURCE_NAME: Record<string, string> = {
 const STRATEGY_NAME: Record<string, string> = {
   trend: "Trend", carry: "Carry", mean_reversion: "Mean reversion", event: "News / event", stay_out: "Stay out",
 };
+const CONVICTION_NAME: Record<string, string> = { "1": "1 · unsure", "2": "2", "3": "3", "4": "4", "5": "5 · very sure" };
 const SIDED: Record<string, string> = { member_1: "Member 1", member_2: "Member 2", both: "Both", neither: "Neither" };
 // Council v3 vote ("3-0" full size, "2-1" half size, "split" stay out); older days show who the decider sided with.
 const voteText = (x: Decision) =>
@@ -57,14 +58,14 @@ function ScoreTable({ title, rows, names }: { title: string; rows: Record<string
   return (
     <div className="table-scroll">
       <table className="ng">
-        <thead><tr><th>{title}</th>{["1d", "5d", "20d"].map((h) => <th key={h} className="money">Right after {h.replace("d", " day")}{h === "1d" ? "" : "s"}</th>)}</tr></thead>
+        <thead><tr><th>{title}</th>{["1d", "5d", "20d"].map((h) => <th key={h} className="money">After {h.replace("d", " day")}{h === "1d" ? "" : "s"}</th>)}</tr></thead>
         <tbody>
           {Object.entries(rows).map(([key, byH]) => (
             <tr key={key}>
               <td>{names[key] ?? key}</td>
               {["1d", "5d", "20d"].map((h) => (
                 <td key={h} className="money">
-                  {byH[h]?.calls ? `${pctText(byH[h].hit_rate_pct)} of ${byH[h].calls} · avg ${pctText(byH[h].avg_return_pct, 2)}` : "—"}
+                  {byH[h]?.calls ? <>{pctText(byH[h].hit_rate_pct)} of {byH[h].calls}<div className="note">avg {pctText(byH[h].avg_return_pct, 2)}</div></> : "—"}
                 </td>
               ))}
             </tr>
@@ -75,57 +76,86 @@ function ScoreTable({ title, rows, names }: { title: string; rows: Record<string
   );
 }
 
-function ScorecardPanel() {
+// Three panels side by side: AI record, strategy record, predictions. A dash = not enough days yet.
+function ScorecardPanels() {
   const card = useQuery({
     queryKey: ["forex-council", "scorecard"],
     queryFn: async () => (await api.get("/forex-council/scorecard")).data as Scorecard,
     staleTime: 10 * 60_000,
   });
+  if (card.isLoading) return <section className="glass panel"><div className="note">Scoring…</div></section>;
+  if (card.isError || !card.data) return <section className="glass panel"><Status tone="problem" word={`Scorecard unavailable: ${errorText(card.error)}`} /></section>;
+  const c = card.data;
   return (
-    <section className="glass panel" aria-label="Scorecard">
-      <div className="panel-head"><h2>Scorecard</h2><span className="label">Who is right · by AI and by strategy</span></div>
-      {card.isLoading && <div className="note">Scoring…</div>}
-      {card.isError && <Status tone="problem" word={`Scorecard unavailable: ${errorText(card.error)}`} />}
-      {card.data && (
-        <>
-          <p className="small" style={{ margin: 0 }}>
-            How often each call moved the right way, and the average move, 1, 5 and 20 trading days later.
-            {" "}{card.data.days.logged ?? 0} days logged. {card.data.note}
-          </p>
-          <ScoreTable title="AI" rows={card.data.sources} names={SOURCE_NAME} />
-          {card.data.strategies && <ScoreTable title="Strategy (final calls)" rows={card.data.strategies} names={STRATEGY_NAME} />}
-          {card.data.predictions && (
-            <div className="table-scroll">
-              <table className="ng">
-                <thead><tr><th>Predictions</th><th className="money">Checked</th><th className="money">Direction right</th>
-                  <th className="money">Avg predicted</th><th className="money">Avg actual</th><th className="money">Avg miss</th></tr></thead>
-                <tbody>
-                  {Object.entries(card.data.predictions).map(([key, p]) => (
-                    <tr key={key}>
-                      <td>{SOURCE_NAME[key] ?? key}</td>
-                      <td className="money">{p.predictions || "—"}</td>
-                      <td className="money">{pctText(p.direction_right_pct)}</td>
-                      <td className="money">{p.avg_predicted_pct === null ? "—" : signed(p.avg_predicted_pct)}</td>
-                      <td className="money">{p.avg_actual_pct === null ? "—" : signed(p.avg_actual_pct)}</td>
-                      <td className="money">{pctText(p.avg_miss_pct, 2)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div className="note">Each prediction is checked once its own horizon has passed. Predictions start 8 Nov 2026.</div>
-            </div>
-          )}
-        </>
+    <div className="forex-score">
+      <section className="glass panel" aria-label="Scorecard by AI">
+        <div className="panel-head"><h2>Scorecard · by AI</h2><span className="label">{c.days.logged ?? 0} days logged</span></div>
+        <ScoreTable title="AI" rows={c.sources} names={SOURCE_NAME} />
+        <div className="note">How often each call moved the right way, and the average move. {c.note} A dash means not enough days have passed yet.</div>
+      </section>
+      {c.strategies && (
+        <section className="glass panel" aria-label="Scorecard by strategy">
+          <div className="panel-head"><h2>By strategy and how sure</h2><span className="label">Final calls</span></div>
+          <ScoreTable title="Strategy" rows={c.strategies} names={STRATEGY_NAME} />
+          {c.convictions && <ScoreTable title="How sure (1-5)" rows={c.convictions} names={CONVICTION_NAME} />}
+          <div className="note">Strategies are recorded from 6 Nov 2026. If surer calls win more often, bigger sizing on them can be tested later.</div>
+        </section>
       )}
+      {c.predictions && (
+        <section className="glass panel" aria-label="Predictions">
+          <div className="panel-head"><h2>Predictions</h2><span className="label">Predicted vs actual move</span></div>
+          <div className="table-scroll">
+            <table className="ng">
+              <thead><tr><th>AI</th><th className="money">Checked</th><th className="money">Way right</th>
+                <th className="money">Predicted</th><th className="money">Actual</th><th className="money">Miss</th></tr></thead>
+              <tbody>
+                {Object.entries(c.predictions).map(([key, p]) => (
+                  <tr key={key}>
+                    <td>{SOURCE_NAME[key] ?? key}</td>
+                    <td className="money">{p.predictions || "—"}</td>
+                    <td className="money">{pctText(p.direction_right_pct)}</td>
+                    <td className="money">{p.avg_predicted_pct === null ? "—" : signed(p.avg_predicted_pct)}</td>
+                    <td className="money">{p.avg_actual_pct === null ? "—" : signed(p.avg_actual_pct)}</td>
+                    <td className="money">{pctText(p.avg_miss_pct, 2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="note">Each prediction is checked once its own horizon has passed. Predictions start 6 Nov 2026.</div>
+        </section>
+      )}
+    </div>
+  );
+}
+
+const useDay = (day: string) => useQuery({
+  queryKey: ["forex-council", "day", day],
+  queryFn: async () => (await api.get(`/forex-council/day/${day}`)).data as DayDetail,
+});
+
+function NewsPanel({ day }: { day: string }) {
+  const d = useDay(day).data;
+  if (!d) return null;
+  return (
+    <section className="glass panel" aria-label={`News on ${day}`}>
+      <div className="panel-head"><h2>What the AIs read · {day}</h2><span className="label">{d.news.length} headlines</span></div>
+      {d.pack_version < 2 && <div className="note">Before 6 Nov the council saw prices only, no news.</div>}
+      {d.news.length > 0 && (
+        <ul className="list">
+          {d.news.map((n, i) => (
+            <li key={i}><span className="label" style={{ minWidth: 48 }}>{n.about}</span><span className="grow small">{n.title}</span>
+              <span className="note" style={{ whiteSpace: "nowrap" }}>{n.source} · {n.hours_ago} h ago</span></li>
+          ))}
+        </ul>
+      )}
+      {d.news_sources.length > 0 && <div className="note">Sources: {d.news_sources.map((s) => `${s.name} ${s.status}`).join(" · ")}</div>}
     </section>
   );
 }
 
 function DayDetailPanel({ day }: { day: string }) {
-  const detail = useQuery({
-    queryKey: ["forex-council", "day", day],
-    queryFn: async () => (await api.get(`/forex-council/day/${day}`)).data as DayDetail,
-  });
+  const detail = useDay(day);
   if (detail.isLoading) return <div className="note">Reading {day}…</div>;
   if (detail.isError || !detail.data) return <Status tone="problem" word={`Could not read ${day}: ${errorText(detail.error)}`} />;
   const d = detail.data;
@@ -144,7 +174,7 @@ function DayDetailPanel({ day }: { day: string }) {
         </div>
         <div className="table-scroll">
           <table className="ng">
-            <thead><tr><th>Pair</th><th>Final call</th><th>Vote</th><th>Why</th><th>Why this strategy</th>
+            <thead><tr><th>Pair</th><th>Final call</th><th>Why</th><th>Why this strategy</th><th>Vote</th>
               {roles.map((r) => <th key={r}>{SOURCE_NAME[r]}{d.members[r]?.model ? ` · ${d.members[r]?.model}` : ""}</th>)}<th>Baseline</th></tr></thead>
             <tbody>
               {d.decisions.map((x) => (
@@ -152,7 +182,7 @@ function DayDetailPanel({ day }: { day: string }) {
                   <td>{x.pair.replace("_", "/")}</td>
                   <td>{callText(x)}{x.stop_atr_multiple ? <div className="note">stop {x.stop_atr_multiple}× daily range</div> : null}<Prediction c={x} /></td>
                   <td className="small">{x.reason || "—"}</td>
-                  <td className="small">{x.why_not_others || (d.pack_version < 2 ? "Not recorded before 7 Nov" : "—")}</td>
+                  <td className="small">{x.why_not_others || (d.pack_version < 2 ? "Not recorded before 6 Nov" : "—")}</td>
                   <td style={{ whiteSpace: "nowrap" }}>{voteText(x)}</td>
                   {roles.map((r) => {
                     const c = memberCalls[r][x.pair];
@@ -169,19 +199,6 @@ function DayDetailPanel({ day }: { day: string }) {
         <div className="note">Record fingerprint {d.record_sha256.slice(0, 16)}… (the ledger can't be edited)</div>
       </section>
 
-      <section className="glass panel" aria-label={`News on ${day}`}>
-        <div className="panel-head"><h2>What the AIs read</h2><span className="label">{d.news.length} headlines</span></div>
-        {d.pack_version < 2 && <div className="note">Before 7 Nov the council saw prices only, no news.</div>}
-        {d.news.length > 0 && (
-          <ul className="list">
-            {d.news.map((n, i) => (
-              <li key={i}><span className="label" style={{ minWidth: 48 }}>{n.about}</span><span className="grow small">{n.title}</span>
-                <span className="note" style={{ whiteSpace: "nowrap" }}>{n.source} · {n.hours_ago} h ago</span></li>
-            ))}
-          </ul>
-        )}
-        {d.news_sources.length > 0 && <div className="note">Sources: {d.news_sources.map((s) => `${s.name} ${s.status}`).join(" · ")}</div>}
-      </section>
     </>
   );
 }
@@ -202,22 +219,23 @@ export default function ForexPage() {
 
   return (
     <Shell>
-      <main className="controls">
+      <main className="controls forex">
         <div className="page-head">
           <h1 className="page-title">Forex · AI council</h1>
           <button className="btn" onClick={() => days.refetch()}>
             <RefreshCw size={15} aria-hidden="true" /> {days.isFetching ? "Refreshing" : "Refresh"}
           </button>
         </div>
-        <p className="small" style={{ margin: 0, maxWidth: 820 }}>
+        <p className="small" style={{ margin: 0 }}>
           Every New York trading day, three AIs each read the prices and the day's central-bank and world news, and on
           their own pick a direction and strategy for every currency pair, say why it beat the others and predict how
           the trade will play out. Then they vote: 3-0 trades full size, 2-1 half size, a three-way split stays out.
           Rules then size every trade and attach a stop. Paper money on the OANDA practice account.
         </p>
 
-        <ScorecardPanel />
+        <ScorecardPanels />
 
+        <div className="forex-days">
         <section className="glass panel" aria-label="Days">
           <div className="panel-head"><h2>Days</h2><span className="label">Newest first · pick a day</span></div>
           {days.isLoading && <div className="note">Reading the ledger…</div>}
@@ -248,6 +266,8 @@ export default function ForexPage() {
         </section>
 
         {selected && <DayDetailPanel day={selected} />}
+        </div>
+        {selected && <NewsPanel day={selected} />}
       </main>
     </Shell>
   );

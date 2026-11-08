@@ -73,7 +73,7 @@ BOT_PROFILES = {
         # FLEET-V1-C1 owns this account since 3 Nov 2026 (kraken-bot/bullion_strategy.py):
         # F1's equity core without the cross-asset sleeve. The EM settings below
         # are history; the runner no longer calls bot3_hard_assets_strategy.
-        "display_name":      "Bullion",
+        "display_name":      "Atlas V2",
         "db_id":             2,
         "strategy_type":     "fleet_v1_c1",
         "strategy_label":    "FLEET-V1-C1: geared S&P/Nasdaq trend core (F1 without the cross-asset sleeve)",

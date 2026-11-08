@@ -7,7 +7,7 @@
  * All money and return figures are server values (Rule 27); the client only
  * formats them, sums market values for the holdings mix and divides equity by
  * fleet equity for allocation shares. Three paper accounts are compared to
- * the end of 2027 (Atlas: FLEET-V1-F1, Momentum: MOMO-V2, Bullion); the race
+ * the end of 2027 (Atlas: FLEET-V1-F1, Atlas V2: FLEET-V1-C1, Momentum: MOMO-V2); the race
  * chart and the comparison table come from /fleet/comparison, the vault card
  * from /vault/per-bot/summary.
  */

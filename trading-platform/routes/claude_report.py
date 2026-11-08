@@ -157,6 +157,11 @@ async def _build_live_pos_cache() -> dict[str, list[dict]]:
             logger.debug(f"claude_report | Alpaca {bot_id}: {len(result)} live positions")
     return cache
 
+def _with_start(rows: list) -> list:
+    """Active accounts only, with their run start from core.fleet_capital (not the DB column)."""
+    from core.fleet_capital import START_EQUITY
+    return [dict(r, starting_usd=START_EQUITY[r["bot_id"]]) for r in rows if r["bot_id"] in START_EQUITY]
+
 # ── Section: fleet ─────────────────────────────────────────────────────────────
 
 def _build_fleet(open_positions: list, errors: list) -> dict:
@@ -164,6 +169,7 @@ def _build_fleet(open_positions: list, errors: list) -> dict:
         rows = _pg_rows(
             "SELECT bot_id, equity_usd, starting_usd, cash_usd FROM bot_portfolio ORDER BY bot_id"
         )
+        rows = _with_start(rows)
         if not rows:
             return {}
         equity_total   = sum(r["equity_usd"]  or 0 for r in rows)
@@ -231,6 +237,7 @@ def _build_bots(log_events: list, open_positions: list, errors: list) -> list[di
                       last_updated, data_source, is_live_broker
                FROM bot_portfolio ORDER BY bot_id"""
         )
+        rows = _with_start(rows)
         now  = _now()
         bots = []
         for r in rows:

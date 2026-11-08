@@ -231,8 +231,9 @@ def display_label(any_id: str) -> str:
 
 
 def fleet_starting_capital() -> float:
-    """Sum of starting_capital for all non-retired bots."""
-    return float(sum(b.starting_capital for b in all_bots()))
+    """Fleet starting equity; the one source is core.fleet_capital."""
+    from core.fleet_capital import fleet_starting_capital as _fsc
+    return _fsc()
 
 def fleet_bot_count() -> int:
     """Count of all non-retired bots."""

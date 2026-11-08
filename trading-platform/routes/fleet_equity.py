@@ -8,6 +8,7 @@ from fastapi import APIRouter
 from loguru import logger
 
 from core.bot_registry import active_bot_ids
+from core.fleet_capital import bot_starting_capital
 
 fleet_equity_router = APIRouter()
 
@@ -202,7 +203,7 @@ def _fetch_fleet_equity() -> dict:
                     )
             else:
                 eq = float(p["equity_usd"] or _STARTING)
-            start   = float(p["starting_usd"] or _STARTING)
+            start   = bot_starting_capital(bot_id)
             cash    = float(p["cash_usd"] or 0.0)
             pos_raw = p.get("positions") or []
             pos_count = len(pos_raw) if isinstance(pos_raw, list) else 0

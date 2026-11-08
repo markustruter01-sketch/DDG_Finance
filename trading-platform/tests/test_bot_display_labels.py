@@ -10,10 +10,10 @@ EXPECTED_LABELS = {
         "Momentum · Stock momentum (experiment)",
     ),
     "jerome_macro": (
-        "Bullion",
-        "Bullion",
+        "Atlas V2",
+        "Atlas V2",
         "Equity trend core",
-        "Bullion · Equity trend core",
+        "Atlas V2 · Equity trend core",
     ),
 }
 

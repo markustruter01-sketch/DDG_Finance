@@ -1,5 +1,9 @@
 /**
- * DDG Finance home (Night Glass v5): one screen on desktop, stacked on phones.
+ * DDG Finance home (Night Glass v5): two screens on one sheet. Overview (the
+ * fleet at a glance: summary, the 2027 race, vault, holdings, the four
+ * accounts) and Detail (daily returns, fleet equity, the FLEET-V1 and MOMO-V2
+ * state). Scrolling past Overview flips the sheet over (components/FlipPages);
+ * on phones the two simply stack.
  * All money and return figures are server values (Rule 27); the client only
  * formats them, sums market values for the holdings mix and divides equity by
  * fleet equity for allocation shares. Three paper accounts are compared to
@@ -7,13 +11,16 @@
  * chart and the comparison table come from /fleet/comparison, the vault card
  * from /vault/per-bot/summary.
  */
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Download } from "lucide-react";
 import {
   Area, AreaChart, Bar, BarChart, Cell, Line, LineChart, Pie, PieChart, ReferenceLine,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { Shell, Status } from "@/components/Shell";
+import { FlipButtons, FlipPages } from "@/components/FlipPages";
+import { api } from "@/hooks/use-trading-client";
 import { useFleetData, fmtEq, getBotStatus, type BotSlice, type LivePos } from "@/hooks/useFleetData";
 import { useBotRegistry, useFleetHistory } from "@/hooks/use-portfolio";
 import { useRiskMetrics } from "@/hooks/use-performance";
@@ -175,18 +182,14 @@ function EngineCard({ e, mktOpen }: { e: Engine; mktOpen: boolean }) {
           </ResponsiveContainer>
         ) : <Empty>Daily history starts after the first daily close.</Empty>}
       </div>
-      <div className="engine-invested">
-        <span className="label">Invested</span>
-        <span className="small tab">{deployed == null ? "—" : `${(deployed * 100).toFixed(0)}%`}</span>
-      </div>
       <div className="meter" role="meter" aria-label="Share invested" aria-valuemin={0} aria-valuemax={100}
         aria-valuenow={deployed == null ? undefined : Math.round(deployed * 100)}>
         <i style={{ width: `${Math.max(0, Math.min(1, deployed ?? 0)) * 100}%`, background: e.shade }} />
       </div>
       <div className="engine-stats">
+        <Stat label="Invested" value={deployed == null ? null : `${(deployed * 100).toFixed(0)}%`} />
         <Stat label="Positions" value={String(e.strategyCount ?? e.slice?.positions ?? latest?.positions ?? "—")} />
         <Stat label="Last day" value={signedPct(dayRet)} />
-        <Stat label="Win rate" value={e.slice?.win_rate == null ? null : `${(e.slice.win_rate * 100).toFixed(0)}%`} />
       </div>
     </article>
   );
@@ -212,6 +215,13 @@ export default function HomePage() {
   const comparison = useComparison();
   const vault = useVaultSummary();
   const report = useExportReport();
+  const [side, setSide] = useState<0 | 1>(0);
+  // Running/paused comes from bots_state (same read as Controls), not the static registry.
+  const pause = useQuery({
+    queryKey: ["/bots/pause-state"],
+    queryFn: async () => (await api.get("/bots/pause-state")).data as { bots: { bot_id: string; paused: boolean | null }[] },
+    refetchInterval: 60_000,
+  });
 
   const engines: Engine[] = useMemo(() => {
     const bots = (registry.data?.bots ?? [])
@@ -222,12 +232,12 @@ export default function HomePage() {
       name: b.display_name,
       subtitle: b.subtitle || b.strategy_label,
       shade: botColor(b.id),
-      paused: b.status === "paused",
+      paused: pause.data ? pause.data.bots.find((r) => r.bot_id === b.id)?.paused !== false : b.status === "paused",
       slice: (fleet as Record<string, BotSlice | undefined> | undefined)?.[b.id],
       history: botHistory.data?.bots?.[b.id] ?? [],
       strategyCount: (positionsByBot as Record<string, { strategy_count: number }> | undefined)?.[b.id]?.strategy_count,
     }));
-  }, [registry.data, fleet, botHistory.data, positionsByBot]);
+  }, [registry.data, fleet, botHistory.data, positionsByBot, pause.data]);
 
   const raceEngines = engines.filter((e) => (ACCOUNTS as readonly string[]).includes(e.id));
   const names = Object.fromEntries(ACCOUNTS.map((id) => [id, engines.find((e) => e.id === id)?.name ?? id]));
@@ -274,13 +284,41 @@ export default function HomePage() {
   };
 
   const reportButton = (
-    <button className="btn glass" onClick={downloadReport} disabled={report.isPending} title="Download the full text report">
-      <Download size={15} aria-hidden="true" /> {report.isPending ? "Preparing" : "Report"}
-    </button>
+    <>
+      <FlipButtons side={side} onSide={setSide} labels={["Overview", "Detail"]} />
+      <button className="btn glass" onClick={downloadReport} disabled={report.isPending} title="Download the full text report">
+        <Download size={15} aria-hidden="true" /> {report.isPending ? "Preparing" : "Report"}
+      </button>
+    </>
   );
 
-  return (
-    <Shell home fit actions={reportButton}>
+  const fleetPanel = (
+          <Panel title="Fleet equity · daily close" className="fleet-panel" aside={
+            <span className="label">{fleetCurve.length ? `${shortDate(fleetCurve[0].date)} – ${shortDate(fleetCurve.at(-1)!.date)}` : ""}</span>
+          }>
+            <div className="chart">
+              {fleetCurve.length > 1 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={fleetCurve} margin={{ top: 10, right: 6, bottom: 0, left: 6 }}>
+                    <XAxis dataKey="date" tickFormatter={shortDate} minTickGap={48} tick={{ fill: AXIS, fontSize: 11 }}
+                      axisLine={{ stroke: HAIRLINE }} tickLine={false} />
+                    <YAxis domain={["dataMin", "dataMax"]} width={64} tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`}
+                      tick={{ fill: AXIS, fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <Tooltip content={<Tip title={shortDate} fmt={(v) => `Fleet equity ${fmtEq(v)}`} />} cursor={{ stroke: HAIRLINE }} />
+                    {joins.map((j) => (
+                      <ReferenceLine key={j.name} x={fleetCurve.find((p) => p.date >= j.date)?.date} stroke={AXIS}
+                        strokeDasharray="3 4" label={{ value: `${j.name} account added`, position: "insideTopRight", fill: AXIS, fontSize: 11 }} />
+                    ))}
+                    <Area type="monotone" dataKey="equity" stroke={FLEET} strokeWidth={1.5} fill="none" isAnimationActive={false} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : <Empty>No fleet history yet. The first point is saved at tonight's close.</Empty>}
+            </div>
+          </Panel>
+  );
+
+  const overview = (
+    <>
       <section className="glass panel home-summary" aria-label="Fleet summary">
         <div className="stat home-hero">
           <span className="label">Fleet equity · paper</span>
@@ -331,36 +369,8 @@ export default function HomePage() {
                 </ResponsiveContainer>
               </div>
             </Panel>
-          ) : (
-          <Panel title="Fleet equity · daily close" className="fleet-panel" aside={
-            <span className="label">{fleetCurve.length ? `${shortDate(fleetCurve[0].date)} – ${shortDate(fleetCurve.at(-1)!.date)}` : ""}</span>
-          }>
-            <div className="chart">
-              {fleetCurve.length > 1 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={fleetCurve} margin={{ top: 10, right: 6, bottom: 0, left: 6 }}>
-                    <XAxis dataKey="date" tickFormatter={shortDate} minTickGap={48} tick={{ fill: AXIS, fontSize: 11 }}
-                      axisLine={{ stroke: HAIRLINE }} tickLine={false} />
-                    <YAxis domain={["dataMin", "dataMax"]} width={64} tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`}
-                      tick={{ fill: AXIS, fontSize: 11 }} axisLine={false} tickLine={false} />
-                    <Tooltip content={<Tip title={shortDate} fmt={(v) => `Fleet equity ${fmtEq(v)}`} />} cursor={{ stroke: HAIRLINE }} />
-                    {joins.map((j) => (
-                      <ReferenceLine key={j.name} x={fleetCurve.find((p) => p.date >= j.date)?.date} stroke={AXIS}
-                        strokeDasharray="3 4" label={{ value: `${j.name} account added`, position: "insideTopRight", fill: AXIS, fontSize: 11 }} />
-                    ))}
-                    <Area type="monotone" dataKey="equity" stroke={FLEET} strokeWidth={1.5} fill="none" isAnimationActive={false} />
-                  </AreaChart>
-                </ResponsiveContainer>
-              ) : <Empty>No fleet history yet. The first point is saved at tonight's close.</Empty>}
-            </div>
-          </Panel>
-          )}
+          ) : fleetPanel}
           <ComparisonPanel data={comparison.data} names={names} />
-          <div className="engines">
-            {engines.length
-              ? engines.map((e) => <EngineCard key={e.id} e={e} mktOpen={mktOpen} />)
-              : <Empty>{registry.isError ? "Engine list unavailable. Check the trading API." : "Loading engines…"}</Empty>}
-          </div>
         </div>
 
         <div className="home-right">
@@ -373,46 +383,67 @@ export default function HomePage() {
               ) : <Empty>No open holdings.</Empty>}
             </Panel>
           </div>
-
-          <Panel title="Daily return by account" aside={returnEngines.length ? (
-            <span className="key">{returnEngines.map((e) => <span key={e.id}><i style={{ background: e.shade }} />{e.name}</span>)}</span>
-          ) : undefined}>
-            <div className="chart">
-              {dailyReturns.length ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={dailyReturns} margin={{ top: 4, right: 4, bottom: 0, left: 0 }} barGap={1} barCategoryGap="22%">
-                    <XAxis dataKey="date" tickFormatter={shortDate} minTickGap={28} tick={{ fill: AXIS, fontSize: 10 }}
-                      axisLine={{ stroke: HAIRLINE }} tickLine={false} />
-                    <YAxis width={44} tickFormatter={(v: number) => `${v.toFixed(1)}%`} tick={{ fill: AXIS, fontSize: 10 }}
-                      axisLine={false} tickLine={false} />
-                    <ReferenceLine y={0} stroke={HAIRLINE} />
-                    <Tooltip cursor={{ fill: "rgba(255,255,255,0.04)" }} content={<Tip title={shortDate}
-                      fmt={(v, row) => `${engines.find((e) => e.id === row.name)?.name ?? row.name}: ${signedPct(v)}`} />} />
-                    {returnEngines.map((e) => (
-                      <Bar key={e.id} dataKey={e.id} name={e.id} fill={e.shade} isAnimationActive={false} />
-                    ))}
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : <Empty>Daily returns appear after two daily closes.</Empty>}
-            </div>
-          </Panel>
-
-          <div className="pair accounts">
-            {fleetV1.data ? fleetV1.data.accounts.map((a) => (
-              <FleetAccountPanel key={a.bot_id} account={a} state={fleetV1.data!} />
-            )) : (
-              <Panel title="FLEET-V1">
-                <Empty>{fleetV1.isError ? "FLEET-V1 state unavailable. Check the trading API." : "Reading FLEET-V1 state…"}</Empty>
-              </Panel>
-            )}
-            {momo.data ? <MomoPanel momo={momo.data} limits={fleetV1.data?.limits ?? null} /> : (
-              <Panel title="MOMO-V2">
-                <Empty>{momo.isError ? "MOMO-V2 state unavailable. Check the trading API." : "Reading MOMO-V2 state…"}</Empty>
-              </Panel>
-            )}
+          <div className="engines">
+            {engines.length
+              ? engines.map((e) => <EngineCard key={e.id} e={e} mktOpen={mktOpen} />)
+              : <Empty>{registry.isError ? "Engine list unavailable. Check the trading API." : "Loading engines…"}</Empty>}
           </div>
         </div>
       </div>
+      <button className="flip-hint" onClick={() => setSide(1)}>Scroll for detail ↓</button>
+    </>
+  );
+
+  const detail = (
+    <>
+      <div className="home-detail-head">
+        <button className="flip-hint" onClick={() => setSide(0)}>↑ Back to overview</button>
+      </div>
+      <div className="home-detail">
+        <Panel title="Daily return by account" aside={returnEngines.length ? (
+          <span className="key">{returnEngines.map((e) => <span key={e.id}><i style={{ background: e.shade }} />{e.name}</span>)}</span>
+        ) : undefined}>
+          <div className="chart">
+            {dailyReturns.length ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={dailyReturns} margin={{ top: 4, right: 4, bottom: 0, left: 0 }} barGap={1} barCategoryGap="22%">
+                  <XAxis dataKey="date" tickFormatter={shortDate} minTickGap={28} tick={{ fill: AXIS, fontSize: 11 }}
+                    axisLine={{ stroke: HAIRLINE }} tickLine={false} />
+                  <YAxis width={44} tickFormatter={(v: number) => `${v.toFixed(1)}%`} tick={{ fill: AXIS, fontSize: 11 }}
+                    axisLine={false} tickLine={false} />
+                  <ReferenceLine y={0} stroke={HAIRLINE} />
+                  <Tooltip cursor={{ fill: "rgba(255,255,255,0.04)" }} content={<Tip title={shortDate}
+                    fmt={(v, row) => `${engines.find((e) => e.id === row.name)?.name ?? row.name}: ${signedPct(v)}`} />} />
+                  {returnEngines.map((e) => (
+                    <Bar key={e.id} dataKey={e.id} name={e.id} fill={e.shade} isAnimationActive={false} />
+                  ))}
+                </BarChart>
+              </ResponsiveContainer>
+            ) : <Empty>Daily returns appear after two daily closes.</Empty>}
+          </div>
+        </Panel>
+        {fleetPanel}
+      </div>
+      <div className="pair accounts">
+        {fleetV1.data ? fleetV1.data.accounts.map((a) => (
+          <FleetAccountPanel key={a.bot_id} account={a} state={fleetV1.data!} />
+        )) : (
+          <Panel title="FLEET-V1">
+            <Empty>{fleetV1.isError ? "FLEET-V1 state unavailable. Check the trading API." : "Reading FLEET-V1 state…"}</Empty>
+          </Panel>
+        )}
+        {momo.data ? <MomoPanel momo={momo.data} limits={fleetV1.data?.limits ?? null} /> : (
+          <Panel title="MOMO-V2">
+            <Empty>{momo.isError ? "MOMO-V2 state unavailable. Check the trading API." : "Reading MOMO-V2 state…"}</Empty>
+          </Panel>
+        )}
+      </div>
+    </>
+  );
+
+  return (
+    <Shell home fit actions={reportButton}>
+      <FlipPages pages={[overview, detail]} side={side} onSide={setSide} />
     </Shell>
   );
 }

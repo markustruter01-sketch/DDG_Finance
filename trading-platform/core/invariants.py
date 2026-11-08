@@ -1608,9 +1608,13 @@ def collect_inputs(now: datetime | None = None) -> InvariantInputs:
         # Loading the kill-switch module also loads the shared bot config,
         # whose legacy import-time banner must not pollute the CLI report.
         with contextlib.redirect_stdout(io.StringIO()):
-            from core.kill_switch import is_tripped
+            from config.settings import settings
 
-        inputs.kill_switch_runtime = bool(is_tripped())
+        # Armed as loaded by the running platform vs armed as configured. (This
+        # used to compare "tripped" with "armed", so it failed whenever the
+        # switch was armed and healthy.) Whether it has tripped is reported by
+        # the kill switch itself.
+        inputs.kill_switch_runtime = bool(settings.kill_switch_armed)
         raw_config = os.environ.get("KILL_SWITCH_ARMED", "true").strip().lower()
         inputs.kill_switch_config = raw_config in {"1", "true", "yes", "on"}
     except Exception as exc:

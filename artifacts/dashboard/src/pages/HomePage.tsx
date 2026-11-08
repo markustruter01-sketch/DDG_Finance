@@ -23,7 +23,6 @@ import { FlipButtons, FlipPages } from "@/components/FlipPages";
 import { api } from "@/hooks/use-trading-client";
 import { useFleetData, fmtEq, getBotStatus, type BotSlice, type LivePos } from "@/hooks/useFleetData";
 import { useBotRegistry, useFleetHistory } from "@/hooks/use-portfolio";
-import { useRiskMetrics } from "@/hooks/use-performance";
 import { useExportReport } from "@/hooks/use-report";
 import { useBotHistory, type BotDay } from "@/hooks/use-bot-history";
 import { botColor } from "@/lib/bot-identity";
@@ -209,7 +208,6 @@ export default function HomePage() {
   const registry = useBotRegistry();
   const fleetHistory = useFleetHistory();
   const botHistory = useBotHistory(90);
-  const risk = useRiskMetrics();
   const fleetV1 = useFleetV1State();
   const momo = useMomoV2State();
   const comparison = useComparison();
@@ -271,7 +269,8 @@ export default function HomePage() {
     return row;
   });
 
-  const r = risk.data;
+  // Headline risk stats: the whole fleet since the run start (server-computed, /fleet/comparison).
+  const f = comparison.data?.fleet ?? null;
   const downloadReport = async () => {
     try {
       const result = await report.mutateAsync();
@@ -330,11 +329,11 @@ export default function HomePage() {
         <div className="home-stats">
           <Stat label="Last 24 hours" value={signedMoney(total?.pnl_24h)} mark={line(total?.pnl_24h)}
             sub={total?.pnl_24h_pct == null ? "vs prior close" : `${signedPct(total.pnl_24h_pct)} vs prior close`} />
-          <Stat label="Annual return" value={signedPct(r?.annualised_return_pct, 1)}
-            sub={r?.insufficient_data ? "Short history" : "annualised"} />
-          <Stat label="Sharpe" value={r?.sharpe_ratio == null ? null : r.sharpe_ratio.toFixed(2)} sub="risk-adjusted" />
-          <Stat label="Worst fall" value={r?.max_drawdown_pct == null ? null : `−${Math.abs(r.max_drawdown_pct).toFixed(1)}%`} sub="peak to trough" />
-          <Stat label="Volatility" value={r?.volatility_annual_pct == null ? null : `${r.volatility_annual_pct.toFixed(1)}%`} sub="annualised" />
+          <Stat label="Annual return" value={signedPct(f?.annual == null ? null : f.annual * 100, 1)}
+            sub={f?.annual == null ? "from 20 days" : "annualised"} />
+          <Stat label="Sharpe" value={f?.sharpe == null ? null : f.sharpe.toFixed(2)} sub={f?.sharpe == null ? "from 20 days" : "risk-adjusted"} />
+          <Stat label="Worst fall" value={f ? `−${Math.abs(f.worst_fall * 100).toFixed(1)}%` : null} sub="peak to trough" />
+          <Stat label="Volatility" value={f?.volatility == null ? null : `${(f.volatility * 100).toFixed(1)}%`} sub={f?.volatility == null ? "from 20 days" : "annualised"} />
           <Stat label="Open positions" value={total?.positions == null ? null : String(total.positions)}
             sub={`${new Set(allPos.map((p) => p.symbol)).size} symbols`} />
           <Stat label="Market regime" value={regime ? regime.charAt(0) + regime.slice(1).toLowerCase() : null}

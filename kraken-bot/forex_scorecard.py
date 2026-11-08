@@ -6,7 +6,9 @@ registered baseline. A long scores the pair's return, a short the negative,
 flat is not a call. Only horizons that have matured are counted. The final
 decisions are also scored by the strategy they named (pack version 2 on), and
 each AI's prediction (expected % move over its own horizon, 8 Nov on) is
-compared with what the pair actually did over that horizon.
+compared with what the pair actually did over that horizon. Final calls are
+also scored by conviction (1-5): only if sure calls really win more often is
+bigger sizing on them worth testing.
 
 Pure functions plus one read-only job; no orders, no DB writes.
 """
@@ -65,6 +67,12 @@ def source_calls(record: dict[str, Any]) -> dict[str, dict[str, str]]:
 def strategy_calls(record: dict[str, Any]) -> dict[str, tuple[str, str]]:
     """The final decision per pair as (strategy, direction); empty for old records."""
     return {d["pair"]: (d["strategy"], d["direction"]) for d in record.get("decisions") or [] if d.get("strategy")}
+
+
+def conviction_calls(record: dict[str, Any]) -> dict[str, tuple[str, str]]:
+    """The final decision per pair as (conviction 1-5, direction): does a surer call win more often?"""
+    return {d["pair"]: (str(d["conviction"]), d["direction"]) for d in record.get("decisions") or []
+            if d.get("conviction") in (1, 2, 3, 4, 5)}
 
 
 def prediction_calls(record: dict[str, Any]) -> dict[str, dict[str, tuple[float, int]]]:
@@ -130,6 +138,8 @@ def score(rows: Iterable[tuple[date, dict[str, Any]]], closes: dict[str, dict[da
     rows = list(rows)
     tally = {s: {h: {"calls": 0, "hits": 0, "sum_ret": 0.0} for h in HORIZONS} for s in SOURCES}
     by_strategy = {s: {h: {"calls": 0, "hits": 0, "sum_ret": 0.0} for h in HORIZONS} for s in STRATEGIES if s != "stay_out"}
+    by_conviction = {str(c): {h: {"calls": 0, "hits": 0, "sum_ret": 0.0} for h in HORIZONS} for c in range(1, 6)}
+    grouped = {"by_strategy": by_strategy, "by_conviction": by_conviction}
     days = {"logged": 0, "shadow": 0, "no_trade": 0, "low_confidence": 0}
     sorted_days = {pair: sorted(d) for pair, d in closes.items()}
     for trading_day, record in rows:
@@ -139,10 +149,11 @@ def score(rows: Iterable[tuple[date, dict[str, Any]]], closes: dict[str, dict[da
         days["low_confidence"] += bool(record.get("low_confidence"))
         sources = {s: {p: (None, d) for p, d in c.items()} for s, c in source_calls(record).items()}
         sources["by_strategy"] = strategy_calls(record)
+        sources["by_conviction"] = conviction_calls(record)
         for source, calls in sources.items():
-            if source not in tally and source != "by_strategy":
+            if source not in tally and source not in grouped:
                 continue
-            for pair, (strategy, direction) in calls.items():
+            for pair, (group, direction) in calls.items():
                 if direction not in ("long", "short") or pair not in closes:
                     continue
                 series, order = closes[pair], sorted_days[pair]
@@ -154,7 +165,7 @@ def score(rows: Iterable[tuple[date, dict[str, Any]]], closes: dict[str, dict[da
                         continue
                     ret = series[order[i + h]] / series[trading_day] - 1
                     signed = ret if direction == "long" else -ret
-                    t = by_strategy[strategy][h] if source == "by_strategy" else tally[source][h]
+                    t = grouped[source][group][h] if source in grouped else tally[source][h]
                     t["calls"] += 1
                     t["hits"] += signed > 0
                     t["sum_ret"] += signed
@@ -170,6 +181,7 @@ def score(rows: Iterable[tuple[date, dict[str, Any]]], closes: dict[str, dict[da
 
     table = {s: summary(by_h) for s, by_h in tally.items()}
     return {"days": days, "sources": table, "strategies": {s: summary(t) for s, t in by_strategy.items()},
+            "convictions": {c: summary(t) for c, t in by_conviction.items()},
             "predictions": score_predictions(rows, closes),
             "note": "Shadow only. Holding no position scores 0. Returns are before spreads and financing."}
 

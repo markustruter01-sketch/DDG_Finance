@@ -148,12 +148,15 @@ export function useMomoV2State() {
 }
 
 // ── The 2027 comparison (routes/comparison.py) ──────────────────────────────
-export interface RaceStats { return: number; worst_fall: number; sharpe: number | null }
+export interface RaceStats { return: number; worst_fall: number; sharpe: number | null;
+  volatility?: number | null; annual?: number | null }
 export interface Comparison {
   since: string;
   days: number;
   rows: Array<Record<string, number | string>>;
   spy: RaceStats | null;
+  // All four accounts together (incl. Forex) since the run start; annual and volatility from 20 days.
+  fleet: (RaceStats & { days: number }) | null;
   accounts: Record<string, (RaceStats & { spy_same_days: number; equity: number }) | null>;
   note: string;
 }

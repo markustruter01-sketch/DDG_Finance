@@ -88,11 +88,14 @@ def test_new_records_score_members_by_pair_and_decisions_by_strategy():
     record = {
         "status": "shadow", "label_map": {"EUR_USD": "EUR_USD", "USD_JPY": "USD_JPY"},
         "baseline": {"EUR_USD": "flat", "USD_JPY": "flat"},
-        "decisions": [{"pair": "EUR_USD", "direction": "long", "strategy": "trend"},
-                      {"pair": "USD_JPY", "direction": "short", "strategy": "carry"}],
+        "decisions": [{"pair": "EUR_USD", "direction": "long", "strategy": "trend", "conviction": 5},
+                      {"pair": "USD_JPY", "direction": "short", "strategy": "carry", "conviction": 2}],
         "calls": [{"role": "member_1", "raw": member}],
     }
     card = sc.score([(d0, record)], closes)
+    assert card["convictions"]["5"]["1d"]["hit_rate_pct"] == 100.0
+    assert card["convictions"]["2"]["1d"]["hit_rate_pct"] == 0.0
+    assert card["convictions"]["3"]["1d"]["calls"] == 0
     assert card["sources"]["member_1"]["1d"] == {"calls": 2, "hit_rate_pct": 50.0, "avg_return_pct": 0.5}
     assert card["strategies"]["trend"]["1d"]["hit_rate_pct"] == 100.0
     assert card["strategies"]["carry"]["1d"]["hit_rate_pct"] == 0.0

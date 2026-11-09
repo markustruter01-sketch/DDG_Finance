@@ -674,6 +674,36 @@ def _refresh_paused_portfolio(bot_id: str, profile: dict) -> None:
         )
 
 
+def _maintain_stops_while_paused(bot_id: str, profile: dict) -> None:
+    """A paused bot still keeps every holding under its protective stop.
+
+    Pausing (by the owner or the kill switch) stops entries and exits, not
+    protection. On 9 Nov 2026 Atlas lost its SPY/QQQ stops mid-rebalance, the
+    kill switch paused every bot, and because a paused bot never ran its
+    cycle nothing put the stops back for 6+ hours. This places or repairs
+    protective stops only (engine.reconcile_protective_stops); it never buys,
+    sells or cancels anything else. Failures are logged and alerted by the
+    engine and never break the paused loop."""
+    try:
+        from alpaca_etf_engine import AlpacaEtfEngine
+
+        api_key = profile.get("ALPACA_API_KEY", "")
+        secret_key = profile.get("ALPACA_SECRET_KEY", "")
+        if not api_key or not secret_key:
+            logger.warning(f"[{bot_id}] paused stop check skipped — no Alpaca credentials in profile")
+            return
+        engine = AlpacaEtfEngine(
+            api_key=api_key,
+            secret_key=secret_key,
+            base_url=profile.get("ALPACA_BASE_URL", "https://paper-api.alpaca.markets"),
+        )
+        # Same id the bot's own cycle uses for its ledger rows (oracle, jerome_macro, spy_qqq_trend).
+        engine.reconcile_protective_stops(bot_id, engine.get_db_positions(bot_id))
+        logger.info(f"[{bot_id}] paused — protective stops checked")
+    except Exception as exc:
+        logger.error(f"[{bot_id}] paused stop check failed: {exc!r}")
+
+
 def _record_cycle_liveness(
     bot_id: str,
     cycle_started_at: datetime,
@@ -926,6 +956,7 @@ def _run_bot_loop(bot_id: str, module_name: str, fn_name: str):
                         logger.debug(f"[{bot_id}] paused heartbeat write failed (non-fatal): {_hb_e}")
                 if bot_id != "forex_ai":
                     _refresh_paused_portfolio(bot_id, profile)
+                    _maintain_stops_while_paused(bot_id, profile)
             else:
                 if bot_id == "forex_ai":
                     # Unpaused on the published runner: the only path where

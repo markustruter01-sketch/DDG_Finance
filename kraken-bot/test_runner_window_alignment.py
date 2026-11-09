@@ -378,3 +378,46 @@ class RunnerPortfolioCycleTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class PausedStopMaintenanceTests(unittest.TestCase):
+    """9 Nov 2026: a paused bot must still keep its holdings under protective stops."""
+
+    def test_paused_bot_checks_its_stops_every_cycle(self):
+        calls = []
+        with patch.object(runner, "_maintain_stops_while_paused", side_effect=lambda b, p: calls.append(b)):
+            RunnerPortfolioCycleTests._run_cycles(
+                RunnerPortfolioCycleTests(), {"_db_paused": True}, MagicMock(return_value=True), cycle_limit=2
+            )
+        self.assertEqual(len(calls), 2)
+
+    def test_unpaused_bot_does_not_use_the_paused_path(self):
+        calls = []
+        with patch.object(runner, "_maintain_stops_while_paused", side_effect=lambda b, p: calls.append(b)):
+            RunnerPortfolioCycleTests._run_cycles(
+                RunnerPortfolioCycleTests(), {"_db_paused": False}, MagicMock(return_value=True), cycle_limit=1
+            )
+        self.assertEqual(calls, [])
+
+    def test_stop_check_only_reconciles_stops_with_the_bots_own_ledger(self):
+        engine = MagicMock()
+        engine.get_db_positions.return_value = [{"symbol": "SPY"}]
+        fake_module = SimpleNamespace(AlpacaEtfEngine=MagicMock(return_value=engine))
+        with patch.dict("sys.modules", {"alpaca_etf_engine": fake_module}):
+            runner._maintain_stops_while_paused("oracle", {"ALPACA_API_KEY": "k", "ALPACA_SECRET_KEY": "s"})
+        engine.get_db_positions.assert_called_once_with("oracle")
+        engine.reconcile_protective_stops.assert_called_once_with("oracle", [{"symbol": "SPY"}])
+        # protective stops only: no entries, exits or cancels
+        for name in ("submit_order", "close_position", "close_partial", "cancel_order"):
+            getattr(engine, name).assert_not_called()
+
+    def test_stop_check_failure_never_breaks_the_paused_loop(self):
+        fake_module = SimpleNamespace(AlpacaEtfEngine=MagicMock(side_effect=RuntimeError("alpaca down")))
+        with patch.dict("sys.modules", {"alpaca_etf_engine": fake_module}), patch.object(runner, "logger") as log:
+            runner._maintain_stops_while_paused("oracle", {"ALPACA_API_KEY": "k", "ALPACA_SECRET_KEY": "s"})
+        log.error.assert_called_once()
+
+    def test_stop_check_skipped_without_credentials(self):
+        fake_module = SimpleNamespace(AlpacaEtfEngine=MagicMock())
+        with patch.dict("sys.modules", {"alpaca_etf_engine": fake_module}), patch.object(runner, "logger"):
+            runner._maintain_stops_while_paused("oracle", {})
+        fake_module.AlpacaEtfEngine.assert_not_called()

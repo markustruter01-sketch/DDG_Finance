@@ -927,3 +927,68 @@ def test_replace_failure_when_stop_reread_fails_and_shares_stay_reserved(
         "protective_stop_failed",
     )
     assert len(alerts) == 1
+
+
+# ── 9 Nov 2026 incident: a just-cancelled stop still in Alpaca's open-orders list ──
+
+class _StaleListApi:
+    """Open-orders list still shows a stop that get_order says is cancelled."""
+
+    def __init__(self, listed, statuses, qty_available="32"):
+        self.listed = listed
+        self.statuses = statuses
+        self.qty_available = qty_available
+
+    def list_orders(self, **_kwargs):
+        return self.listed
+
+    def get_order(self, order_id):
+        return SimpleNamespace(id=order_id, status=self.statuses[order_id])
+
+    def get_position(self, _symbol):
+        return SimpleNamespace(qty_available=self.qty_available)
+
+
+def _stop(order_id, symbol="SPY", client="pub-etf-stop-oracle-spy-0123456789abcdef"):
+    return SimpleNamespace(id=order_id, symbol=symbol, side="sell", type="stop",
+                           client_order_id=client, qty="32", stop_price="604.58")
+
+
+def test_find_owned_stop_ignores_listed_stop_that_is_already_cancelled(monkeypatch):
+    monkeypatch.setenv("RUNNER_ENVIRONMENT", "published")
+    engine = object.__new__(AlpacaEtfEngine)
+    engine.api = _StaleListApi([_stop("old")], {"old": "canceled"})
+    assert engine._find_owned_stop("oracle", "SPY", None) is None
+
+
+def test_find_owned_stop_keeps_a_confirmed_open_stop(monkeypatch):
+    monkeypatch.setenv("RUNNER_ENVIRONMENT", "published")
+    engine = object.__new__(AlpacaEtfEngine)
+    engine.api = _StaleListApi([_stop("live")], {"live": "new"})
+    assert engine._find_owned_stop("oracle", "SPY", None).id == "live"
+
+
+def test_shares_free_ignores_cancelled_sell_still_listed(monkeypatch):
+    monkeypatch.setattr(etf_engine_module.time, "sleep", lambda *_: None)
+    engine = object.__new__(AlpacaEtfEngine)
+    engine.api = _StaleListApi([_stop("old")], {"old": "canceled"})
+    assert engine._wait_for_shares_free("SPY", 32) is True
+
+
+def test_shares_free_still_waits_for_a_working_sell(monkeypatch):
+    monkeypatch.setattr(etf_engine_module.time, "sleep", lambda *_: None)
+    engine = object.__new__(AlpacaEtfEngine)
+    engine.api = _StaleListApi([_stop("live")], {"live": "new"})
+    assert engine._wait_for_shares_free("SPY", 32, attempts=3) is False
+
+
+def test_full_close_sells_the_exact_broker_quantity():
+    from alpaca_etf_engine import _full_close_qty
+    # 9 Nov 2026: round(118.374190978, 8) asked for more than was held.
+    assert _full_close_qty({"qty": 118.374190978, "qty_str": "118.374190978"}) == "118.374190978"
+    assert _full_close_qty({"qty": 32.0, "qty_str": "32"}) == "32"
+    assert _full_close_qty({"qty": 1.0000000019}) == "1.000000001"   # never rounds up
+    # whole-share round numbers stay plain digits (never "4E+2")
+    assert _full_close_qty({"qty": 400.0, "qty_str": "400"}) == "400"
+    assert _full_close_qty({"qty": 30.0}) == "30"
+    assert _full_close_qty({"qty": 0.000001, "qty_str": "0.000001"}) == "0.000001"

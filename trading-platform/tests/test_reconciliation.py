@@ -351,18 +351,17 @@ def test_authoritative_bot3_ledger_read_stays_on_qty(monkeypatch):
 
     rows = reconciliation._authoritative_ledger_positions("jerome_macro")
 
-    assert rows == [
-        {
-            "table": "bot3_positions",
-            "bot_id": "jerome_macro",
-            "symbol": "BTC/USD",
-            "qty": 0.25,
-        }
-    ]
-    query, params = connection.cursor_instance.calls[0]
-    assert "qty::double precision AS qty" in query
-    assert "current_qty" not in query
-    assert params == ("jerome_macro",)
+    # bot3_positions (legacy rows) is read on qty; Atlas V2's alpaca_etf_positions on current_qty.
+    assert rows[0] == {
+        "table": "bot3_positions",
+        "bot_id": "jerome_macro",
+        "symbol": "BTC/USD",
+        "qty": 0.25,
+    }
+    (q1, p1), (q2, p2) = connection.cursor_instance.calls[:2]
+    assert "FROM bot3_positions" in q1 and "qty::double precision AS qty" in q1 and "current_qty" not in q1
+    assert "FROM alpaca_etf_positions" in q2 and "current_qty::double precision AS qty" in q2
+    assert p1 == p2 == ("jerome_macro",)
 
 
 def test_active_ledger_read_uses_etf_current_qty_and_keeps_bot3_qty(
@@ -513,7 +512,7 @@ def test_authoritative_momentum_ledger_reads_bot2_qty_and_its_g4_dbmf_rows(monke
         ),
         (
             "jerome_macro",
-            ("bot3_positions",),
+            ("bot3_positions", "alpaca_etf_positions"),
             [
                 {
                     "bot_id": "jerome_macro",
@@ -521,7 +520,14 @@ def test_authoritative_momentum_ledger_reads_bot2_qty_and_its_g4_dbmf_rows(monke
                     "stop_order_id": "bullion-stop",
                     "table": "bot3_positions",
                     "reverse_check": True,
-                }
+                },
+                {
+                    "bot_id": "jerome_macro",
+                    "symbol": "SPY",
+                    "stop_order_id": "atlas-v2-stop",
+                    "table": "alpaca_etf_positions",
+                    "reverse_check": True,
+                },
             ],
         ),
         (
@@ -567,11 +573,10 @@ def test_stop_ledger_rows_use_authoritative_table_and_preserve_oracle_legacy(
             if "FROM ratchet_stops" in query:
                 self.rows = [("SPY", "legacy-oracle-stop")]
             elif "FROM alpaca_etf_positions" in query:
-                self.rows = (
-                    [("spy_qqq_trend", "DBMF", "g4-dbmf-stop")]
-                    if params == ("spy_qqq_trend",)
-                    else [("oracle", "SPY", "oracle-stop")]
-                )
+                self.rows = {
+                    ("spy_qqq_trend",): [("spy_qqq_trend", "DBMF", "g4-dbmf-stop")],
+                    ("jerome_macro",): [("jerome_macro", "SPY", "atlas-v2-stop")],
+                }.get(params, [("oracle", "SPY", "oracle-stop")])
             elif "FROM bot3_positions" in query:
                 self.rows = [("jerome_macro", "SLV", "bullion-stop")]
             elif "FROM bot2_momentum_positions" in query:

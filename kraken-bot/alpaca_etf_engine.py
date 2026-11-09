@@ -192,6 +192,30 @@ def check_trend_direction(
 
 # ── Alpaca wrapper ────────────────────────────────────────────────────────────
 
+def _full_close_qty(live: dict) -> str:
+    """The whole position, exactly as the broker reports it.
+
+    Rounding a float to 8 places can ask for more than is held (9 Nov 2026:
+    SGOV requested 118.37419098, available 118.374190978, close failed).
+    """
+    from decimal import Decimal, ROUND_DOWN
+
+    raw = live.get("qty_str")
+    qty = abs(Decimal(raw)) if raw else abs(Decimal(repr(float(live["qty"]))))
+    # Plain digits always: str() of a normalised Decimal turns 400 into "4E+2".
+    return format(qty.quantize(Decimal("0.000000001"), rounding=ROUND_DOWN).normalize(), "f")
+
+
+_OPEN_ORDER_STATUSES = {
+    "new", "accepted", "pending_new", "partially_filled",
+    "accepted_for_bidding", "pending_replace", "held",
+}
+
+
+def _status(order) -> str:
+    return str(getattr(order, "status", "")).lower().rsplit(".", 1)[-1]
+
+
 class AlpacaEtfEngine:
     """
     Handles all Alpaca interactions for ETF momentum bots.
@@ -583,6 +607,7 @@ class AlpacaEtfEngine:
                 "symbol":             p.symbol,
                 "direction":          side,
                 "qty":                float(p.qty),
+                "qty_str":            str(p.qty),   # exact broker quantity, for full closes
                 "entry_price":        entry,
                 "current_price":      current,
                 "unrealised_pnl_usd": float(p.unrealized_pl),
@@ -829,7 +854,7 @@ class AlpacaEtfEngine:
             order, _ = submit_with_unique_client_order_id(
                 lambda client_order_id: self.api.submit_order(
                     symbol=symbol,
-                    qty=round(abs(float(live["qty"])), 8),
+                    qty=_full_close_qty(live),
                     side="sell",
                     type="market",
                     time_in_force="day",
@@ -1053,9 +1078,23 @@ class AlpacaEtfEngine:
                 logger.warning(f"EtfEngine | Cannot read recorded stop {stop_order_id}: {exc}")
 
         for order in self.api.list_orders(status="open", limit=100, nested=True):
-            if _is_stop(order) and _has_owner_prefix(order):
+            if _is_stop(order) and _has_owner_prefix(order) and self._still_open(order):
                 return order
         return None
+
+    def _still_open(self, order) -> bool:
+        """Re-read an order from the open-orders list by id before trusting it.
+
+        Alpaca's open-orders list can still show an order for a few seconds
+        after it was cancelled. On 9 Nov 2026 that made Atlas try to replace
+        (and wait on) its own just-cancelled SPY/QQQ stops, so no new stop was
+        placed. An order we cannot re-read counts as open (fail safe: no
+        second, overlapping stop)."""
+        try:
+            return _status(self.api.get_order(order.id)) in _OPEN_ORDER_STATUSES
+        except Exception as exc:
+            logger.warning(f"EtfEngine | could not re-read order {getattr(order, 'id', '?')}: {exc}")
+            return True
 
     def _cancel_owned_stop(
         self,
@@ -1093,20 +1132,24 @@ class AlpacaEtfEngine:
         symbol: str,
         qty: int,
         *,
-        attempts: int = 5,
+        attempts: int = 15,
         interval_seconds: float = 2.0,
     ) -> bool:
         """Wait for broker-held shares to be released before a replacement submit."""
+        qty_available = None
+        blocking: list[str] = []
         for attempt in range(attempts):
             try:
                 position = self.api.get_position(symbol)
                 qty_available = getattr(position, "qty_available", None)
-                active_sell = any(
-                    same_symbol(order.symbol, symbol)
-                    and str(order.side).lower() == "sell"
+                blocking = [
+                    str(order.id)
                     for order in self.api.list_orders(status="open", limit=100, nested=True)
-                )
-                if not active_sell and (
+                    if same_symbol(order.symbol, symbol)
+                    and str(order.side).lower().rsplit(".", 1)[-1] == "sell"
+                    and self._still_open(order)
+                ]
+                if not blocking and (
                     qty_available is None or float(qty_available) >= float(qty)
                 ):
                     return True
@@ -1117,6 +1160,10 @@ class AlpacaEtfEngine:
                 )
             if attempt < attempts - 1:
                 time.sleep(interval_seconds)
+        logger.error(
+            f"EtfEngine | {symbol}: shares not released for a new stop: need={qty} "
+            f"qty_available={qty_available} blocking_sell_orders={blocking}"
+        )
         return False
 
     def ensure_protective_stop(

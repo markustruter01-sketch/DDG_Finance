@@ -988,3 +988,7 @@ def test_full_close_sells_the_exact_broker_quantity():
     assert _full_close_qty({"qty": 118.374190978, "qty_str": "118.374190978"}) == "118.374190978"
     assert _full_close_qty({"qty": 32.0, "qty_str": "32"}) == "32"
     assert _full_close_qty({"qty": 1.0000000019}) == "1.000000001"   # never rounds up
+    # whole-share round numbers stay plain digits (never "4E+2")
+    assert _full_close_qty({"qty": 400.0, "qty_str": "400"}) == "400"
+    assert _full_close_qty({"qty": 30.0}) == "30"
+    assert _full_close_qty({"qty": 0.000001, "qty_str": "0.000001"}) == "0.000001"

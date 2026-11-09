@@ -202,7 +202,8 @@ def _full_close_qty(live: dict) -> str:
 
     raw = live.get("qty_str")
     qty = abs(Decimal(raw)) if raw else abs(Decimal(repr(float(live["qty"]))))
-    return str(qty.quantize(Decimal("0.000000001"), rounding=ROUND_DOWN).normalize())
+    # Plain digits always: str() of a normalised Decimal turns 400 into "4E+2".
+    return format(qty.quantize(Decimal("0.000000001"), rounding=ROUND_DOWN).normalize(), "f")
 
 
 _OPEN_ORDER_STATUSES = {

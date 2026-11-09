@@ -38,8 +38,8 @@ def test_fleet_sums_all_four_accounts_and_waits_for_forex():
     days = ["2026-11-06", "2026-11-09", "2026-11-10"]
     equity = {b: dict(zip(days, [100.0, 110.0, 99.0])) for b in ("oracle", "spy_qqq_trend", "jerome_macro")}
     spy = {d: 500.0 for d in days}
-    assert race_view(equity, spy)["fleet"] is None                      # no Forex rows: no fleet figure
+    assert race_view(equity, spy, "2026-11-06")["fleet"] is None                      # no Forex rows: no fleet figure
     equity["forex_ai"] = dict(zip(days, [100.0, 110.0, 99.0]))
-    fleet = race_view(equity, spy)["fleet"]
+    fleet = race_view(equity, spy, "2026-11-06")["fleet"]
     assert fleet["return"] == pytest.approx(-0.01) and fleet["worst_fall"] == pytest.approx(99 / 110 - 1)
     assert fleet["annual"] is None and fleet["volatility"] is None    # only from 20 days

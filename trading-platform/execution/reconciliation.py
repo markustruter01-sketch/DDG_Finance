@@ -33,7 +33,8 @@ _MATERIAL_NOTIONAL = 0.01
 _AUTHORITATIVE_POSITION_TABLES: dict[str, tuple[str, ...]] = {
     "oracle": ("alpaca_etf_positions",),
     "spy_qqq_trend": ("bot2_momentum_positions", "alpaca_etf_positions"),
-    "jerome_macro": ("bot3_positions",),
+    # Atlas V2 (FLEET-V1-C1, 3 Nov 2026) books in alpaca_etf_positions; legacy rows stay in bot3_positions.
+    "jerome_macro": ("bot3_positions", "alpaca_etf_positions"),
 }
 _TERMINAL_ORDER_STATUSES = {"canceled", "filled", "expired", "rejected"}
 

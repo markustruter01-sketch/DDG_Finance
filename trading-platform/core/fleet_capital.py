@@ -1,20 +1,21 @@
 """
 Single source of truth for where each account's run starts.
 
-Markus, 9 Nov 2026: restart the whole fleet now instead of on 1 Jan 2027, in
-software (no broker resets). Every "since start" figure, the 2027 comparison
-and the fleet risk stats are measured from RUN_START, the 6 Nov 2026 US close
-(the last close before the restart), using each account's equity at that close
-(bot_daily_returns.equity_close for 2026-11-06, read from production 9 Nov).
+Markus, 10 Nov 2026: the track record starts after the 9-10 Nov stop-safety
+fixes (PR #89). Every "since start" figure, the comparison and the fleet risk
+stats are measured from RUN_START = the 9 Nov 2026 US session, using each
+account's equity in bot_daily_returns for that date (snapshot 20:15 UTC,
+read from production 10 Nov). No broker reset. It restarts once more at the
+strategy lock (claude/finance-2027-plan.md, Step 3).
 """
 
-RUN_START = "2026-11-06"
+RUN_START = "2026-11-09"
 
 START_EQUITY = {
-    "oracle":        85_748.98,   # Atlas
-    "jerome_macro":  79_986.99,   # Atlas V2
-    "spy_qqq_trend": 99_178.03,   # Momentum
-    "forex_ai":      99_586.58,   # Forex
+    "oracle":        86_919.04,   # Atlas
+    "jerome_macro":  80_155.66,   # Atlas V2
+    "spy_qqq_trend": 99_178.36,   # Momentum
+    "forex_ai":      99_469.35,   # Forex
 }
 
 

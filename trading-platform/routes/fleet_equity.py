@@ -342,19 +342,6 @@ async def fleet_equity():
     return data
 
 
-@fleet_equity_router.get("/fleet/live-check")
-async def fleet_live_check(month: str | None = None):
-    """Live versus research for a month (plan item 12): stored daily rows, summarised."""
-    import asyncio
-    import re
-    from fastapi import HTTPException
-    from core.live_check_job import month_summary
-    month = month or datetime.now(timezone.utc).strftime("%Y-%m")
-    if not re.fullmatch(r"\d{4}-\d{2}", month):
-        raise HTTPException(status_code=400, detail="month must be YYYY-MM")
-    return await asyncio.to_thread(month_summary, month)
-
-
 @fleet_equity_router.get("/fleet/equity-history")
 async def fleet_equity_history():
     """
@@ -437,3 +424,16 @@ async def fleet_gear_shadow():
     from core.gear_shadow_job import SLEEVE_ID, history
     rows = history()
     return {"sleeve": SLEEVE_ID, "latest": rows[-1] if rows else None, "history": rows}
+
+
+@fleet_equity_router.get("/fleet/live-check")
+async def fleet_live_check(month: str | None = None):
+    """Live versus research for a month (plan item 12): stored daily rows, summarised."""
+    import asyncio
+    import re
+    from fastapi import HTTPException
+    from core.live_check_job import month_summary
+    month = month or datetime.now(timezone.utc).strftime("%Y-%m")
+    if not re.fullmatch(r"\d{4}-\d{2}", month):
+        raise HTTPException(status_code=400, detail="month must be YYYY-MM")
+    return await asyncio.to_thread(month_summary, month)

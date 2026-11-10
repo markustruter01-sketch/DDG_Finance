@@ -337,7 +337,7 @@ def test_authoritative_ledger_reads_etf_current_qty_and_preserves_null(
     ]
     query, params = connection.cursor_instance.calls[0]
     assert "current_qty::double precision AS qty" in query
-    assert params == ("oracle",)
+    assert params == (("oracle",),)
 
 
 def test_authoritative_bot3_ledger_read_stays_on_qty(monkeypatch):
@@ -361,7 +361,7 @@ def test_authoritative_bot3_ledger_read_stays_on_qty(monkeypatch):
     (q1, p1), (q2, p2) = connection.cursor_instance.calls[:2]
     assert "FROM bot3_positions" in q1 and "qty::double precision AS qty" in q1 and "current_qty" not in q1
     assert "FROM alpaca_etf_positions" in q2 and "current_qty::double precision AS qty" in q2
-    assert p1 == p2 == ("jerome_macro",)
+    assert p1 == p2 == (("jerome_macro",),)
 
 
 def test_active_ledger_read_uses_etf_current_qty_and_keeps_bot3_qty(
@@ -484,7 +484,8 @@ def test_authoritative_momentum_ledger_reads_bot2_qty_and_its_g4_dbmf_rows(monke
     assert "qty::double precision AS qty" in bot2_query
     assert "FROM alpaca_etf_positions" in etf_query
     assert "current_qty::double precision AS qty" in etf_query
-    assert bot2_params == etf_params == ("spy_qqq_trend",)
+    # Bot 3's account also owns the rehearsal script's rows (kraken-bot/rehearsal.py).
+    assert bot2_params == etf_params == (("spy_qqq_trend", "rehearsal"),)
 
 
 @pytest.mark.parametrize(
@@ -574,8 +575,8 @@ def test_stop_ledger_rows_use_authoritative_table_and_preserve_oracle_legacy(
                 self.rows = [("SPY", "legacy-oracle-stop")]
             elif "FROM alpaca_etf_positions" in query:
                 self.rows = {
-                    ("spy_qqq_trend",): [("spy_qqq_trend", "DBMF", "g4-dbmf-stop")],
-                    ("jerome_macro",): [("jerome_macro", "SPY", "atlas-v2-stop")],
+                    (("spy_qqq_trend", "rehearsal"),): [("spy_qqq_trend", "DBMF", "g4-dbmf-stop")],
+                    (("jerome_macro",),): [("jerome_macro", "SPY", "atlas-v2-stop")],
                 }.get(params, [("oracle", "SPY", "oracle-stop")])
             elif "FROM bot3_positions" in query:
                 self.rows = [("jerome_macro", "SLV", "bullion-stop")]
@@ -898,3 +899,26 @@ def test_stop_ledger_read_failure_is_reported_and_not_clean(monkeypatch):
 
     assert result["clean"] is False
     assert result["snapshot"]["mismatches"] == findings
+
+def test_rehearsal_rows_belong_to_bot_3s_account_and_match_its_live_stops(monkeypatch):
+    """kraken-bot/rehearsal.py books under bot_id 'rehearsal' in Bot 3's account:
+    its stops must reconcile as that account's, not show up as strangers."""
+    connection = _Connection(rows=[("rehearsal", "SPY", "rehearsal-stop")])
+
+    @contextmanager
+    def fake_get_conn():
+        yield connection
+
+    monkeypatch.setattr("db.postgres.get_conn", fake_get_conn)
+    rows = reconciliation._stop_ledger_rows("spy_qqq_trend")
+    assert {(r["bot_id"], r["stop_order_id"]) for r in rows} == {("spy_qqq_trend", "rehearsal-stop")}
+    monkeypatch.setattr(reconciliation, "_stop_ledger_rows", lambda bot_id: rows[:1])
+    live = [{"id": "rehearsal-stop", "symbol": "SPY", "side": "sell", "type": "stop", "status": "new"}]
+    monkeypatch.setattr(reconciliation, "_is_live_protective_order", lambda order: True)
+    assert reconciliation._order_mismatches("spy_qqq_trend", live) == []
+
+
+def test_other_accounts_never_read_rehearsal_rows():
+    assert reconciliation._ledger_bot_ids("oracle") == ("oracle",)
+    assert reconciliation._ledger_bot_ids("jerome_macro") == ("jerome_macro",)
+    assert reconciliation._ledger_bot_ids("spy_qqq_trend") == ("spy_qqq_trend", "rehearsal")

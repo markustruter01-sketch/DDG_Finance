@@ -188,6 +188,15 @@ def flags(row: dict[str, Any]) -> list[str]:
     feed = [s for s, g in (row.get("feed") or {}).items() if (g.get("max_gap") or 0) > FEED_GAP_FLAG]
     if feed:
         f.append("close gap > 0.5%: " + ", ".join(sorted(feed)[:8]))
+    # Missing data is never read as agreement.
+    kind = str(row.get("kind") or "")
+    if kind.startswith("FLEET") and not row.get("error"):
+        f += [f"no signal from the {side} feed" for side in ("live", "research") if row.get(side) is None]
+    if kind == "MOMO-V2" and not row.get("error") and not row.get("note"):
+        f += [f"no book index from the {side} feed" for side in ("live", "research")
+              if not (row.get(side) or {}).get("index")]
+        if row.get("names_missing"):
+            f.append(f"{row['names_missing']} names without prices on both feeds")
     if row.get("error"):
         f.append(row["error"])
     return f

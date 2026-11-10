@@ -76,3 +76,18 @@ def test_errors_become_the_row_and_the_month_counts_them():
 
 def test_variant_map_matches_the_live_wiring():
     assert lc.SLEEVES["oracle"] is fl.F1 and lc.SLEEVES["jerome_macro"] is fl.C1
+
+
+def test_missing_research_data_is_flagged_never_read_as_agreement():
+    bars = _bars(end=DAY)
+    row = lc.check_account("oracle", live_fetch=_fetcher(bars), research_fetch=_fetcher({}),
+                           state={}, equity=1000, positions=[], now=AFTER_CLOSE,
+                           vault={"BIL", "VOO"}, cash_park={"SGOV"})
+    assert "no signal from the research feed" in row["flags"]
+    live = {"SPY": _series(DAY, 400, 0.001, 0.002), "AAA": _series(DAY, 50, 0.001, 0.003)}
+    state = {"names": ["AAA"], "selection_day": live["SPY"][-40]["day"].isoformat()}
+    row = lc.check_account("spy_qqq_trend", live_fetch=_fetcher(live), research_fetch=_fetcher({}),
+                           state=state, equity=1000, positions=[], now=AFTER_CLOSE,
+                           vault={"BIL", "VOO"}, cash_park={"SGOV"})
+    assert "no book index from the research feed" in row["flags"]
+    assert "1 names without prices on both feeds" in row["flags"]

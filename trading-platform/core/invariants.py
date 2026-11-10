@@ -1289,7 +1289,13 @@ def read_database_inputs(now: datetime | None = None) -> dict[str, Any]:
                 WHERE lower(status) = 'open'
                 """
             )
+            # Rows under another ledger tag that belong to an account (the
+            # rehearsal's rows on Bot 3's account) count as that account's,
+            # exactly as reconciliation counts them.
+            from execution.reconciliation import _ACCOUNT_LEDGER_BOT_IDS
+            owner = {tag: account for account, tags in _ACCOUNT_LEDGER_BOT_IDS.items() for tag in tags}
             for bot_id, symbol, qty in cur.fetchall():
+                bot_id = owner.get(bot_id, bot_id)
                 if bot_id in result["ledger_positions"]:
                     result["ledger_positions"][bot_id].append(
                         {

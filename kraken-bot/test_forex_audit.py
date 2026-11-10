@@ -62,3 +62,22 @@ def test_weekly_audit_runs_saturdays_only_and_records_findings(monkeypatch):
 def test_key_pattern_needs_a_token_start():
     assert fa._has_key('x = "sk-abcdef1234567890"') and fa._has_key("gsk_ABCDEFGH12345")
     assert not fa._has_key("from core.degradation_tracker import mark_resolved")
+
+
+def test_a_pack_read_back_from_jsonb_is_not_off_schema():
+    """JSONB returns keys sorted (by length, then name), not in the order sent.
+    7-8 Nov 2026: the weekly audit reported the 6 Nov pack off schema for this alone."""
+    import json
+    rec = _good_record()
+    rec["pack"]["news"] = [{"source": "s", "about": "EUR_USD", "title": "t", "hours_ago": 3}]
+
+    def jsonb(obj):          # what Postgres hands back
+        if isinstance(obj, dict):
+            return {k: jsonb(obj[k]) for k in sorted(obj, key=lambda k: (len(k), k))}
+        return [jsonb(x) for x in obj] if isinstance(obj, list) else obj
+
+    stored = json.loads(json.dumps(jsonb(rec)))
+    assert list(stored["pack"]) != list(rec["pack"])            # order really differs
+    assert fa.audit_records([(date(2026, 11, 6), stored)]) == []
+    stored["pack"]["pairs"][0]["extra"] = 1                      # a real extra field still fails
+    assert any("off schema" in f for f in fa.audit_records([(date(2026, 11, 6), stored)]))

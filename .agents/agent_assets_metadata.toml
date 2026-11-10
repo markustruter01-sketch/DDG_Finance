@@ -422,3 +422,17 @@ mtime_ms = 1794338666101
 storage_uri = "gcs://replit-rams-assets-worf/rams/assets/repl:479b9041-b193-4ed4-a556-02be48b883b3/4ec80300-158a-4649-a71e-28343f1aabfe/399faf18-7ab8-4500-a3ee-9bc39012dac5"
 storage_version_token = "1794338673335485"
 content_type = "text/csv"
+
+[[outputs]]
+id = "4uxn7tanO4LaNk8TEdZAx"
+uri = "file://.local/claude_reports/postcheck_2026-11-11.txt"
+type = "text"
+title = "Post-publish read-only check"
+description = "Production SQL, Alpaca GET results, shell read-only status, and the forex audit output."
+logical_id = "89653aed-6ee7-4dc3-a55c-1344edea0750"
+content_hash = "sha256:9c21aa1a636769ee6f1c5e94cc70c8456b483d0176ef39378fbbb568c4421c23"
+size = 6646
+mtime_ms = 1794345271123
+storage_uri = "gcs://replit-rams-assets-worf/rams/assets/repl:479b9041-b193-4ed4-a556-02be48b883b3/89653aed-6ee7-4dc3-a55c-1344edea0750/177ea576-21fc-4523-b680-09a26f737e60"
+storage_version_token = "1794345292373650"
+content_type = "text/plain"

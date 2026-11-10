@@ -408,3 +408,17 @@ mtime_ms = 1793606015116
 storage_uri = "gcs://replit-rams-assets-worf/rams/assets/repl:479b9041-b193-4ed4-a556-02be48b883b3/5a5796da-1cfb-4581-9b7f-58854609ce27/8be9e488-3171-437c-a680-fa5e9c6184aa"
 storage_version_token = "1793606022487657"
 content_type = "text/plain"
+
+[[outputs]]
+id = "nuQVnczcB7SkqvGwHJS1w"
+uri = "file://.agents/outputs/system-degradations-unresolved-high.csv"
+type = "table"
+title = "Current unresolved high-severity degradations"
+description = "Read-only production SELECT export of all 275 unresolved critical/error rows, with messages truncated to 120 characters."
+logical_id = "4ec80300-158a-4649-a71e-28343f1aabfe"
+content_hash = "sha256:5d58d063a1825ab6350b84131f1393b8013d5ba1a183024292da119527b31ce0"
+size = 44640
+mtime_ms = 1794338666101
+storage_uri = "gcs://replit-rams-assets-worf/rams/assets/repl:479b9041-b193-4ed4-a556-02be48b883b3/4ec80300-158a-4649-a71e-28343f1aabfe/399faf18-7ab8-4500-a3ee-9bc39012dac5"
+storage_version_token = "1794338673335485"
+content_type = "text/csv"

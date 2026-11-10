@@ -26,7 +26,7 @@ import { useBotRegistry, useFleetHistory } from "@/hooks/use-portfolio";
 import { useExportReport } from "@/hooks/use-report";
 import { useBotHistory, type BotDay } from "@/hooks/use-bot-history";
 import { botColor } from "@/lib/bot-identity";
-import { useComparison, useFleetV1State, useMomoV2State, useVaultSummary } from "@/hooks/use-fleet-v1";
+import { useComparison, useFleetV1State, useHoldings, useMomoV2State, useVaultSummary, type Holdings } from "@/hooks/use-fleet-v1";
 import { ComparisonPanel, FleetAccountPanel, MomoPanel, VaultPanel } from "@/components/FleetV1";
 
 // The three accounts in the 2027 comparison. Forex (OANDA, the AI council) gets
@@ -138,7 +138,21 @@ function Donut({ data, center, total }: { data: { name: string; value: number; c
 // ── Engine card ──────────────────────────────────────────────────────────────
 interface Engine {
   id: string; name: string; subtitle: string; shade: string; paused: boolean;
-  slice?: BotSlice; history: BotDay[]; strategyCount?: number;
+  slice?: BotSlice; history: BotDay[]; strategyCount?: number; holdings?: Holdings | null;
+}
+
+/** "S&P 500 2x 40% · Nasdaq 19% · Cash 36%": the server's groups, largest first. */
+function HoldsLine({ h }: { h?: Holdings | null }) {
+  if (h === undefined) return null;
+  const items = (h?.items ?? []).filter((i) => Math.abs(i.pct) >= 0.5);
+  const text = items.map((i) => `${i.label} ${i.pct.toFixed(0)}%`).join(" · ");
+  const gross = h?.gross_pct == null ? "" : `${text ? " · " : ""}gross ${h.gross_pct.toFixed(0)}%`;
+  return (
+    <div className="engine-holds small" title={h ? `${text}${gross}` : undefined}>
+      <span className="label">Holds</span>{" "}
+      {h == null ? "—" : text || gross ? `${text}${gross}` : "Nothing open"}
+    </div>
+  );
 }
 
 function EngineCard({ e, mktOpen }: { e: Engine; mktOpen: boolean }) {
@@ -185,6 +199,7 @@ function EngineCard({ e, mktOpen }: { e: Engine; mktOpen: boolean }) {
         aria-valuenow={deployed == null ? undefined : Math.round(deployed * 100)}>
         <i style={{ width: `${Math.max(0, Math.min(1, deployed ?? 0)) * 100}%`, background: e.shade }} />
       </div>
+      <HoldsLine h={e.holdings} />
       <div className="engine-stats">
         <Stat label="Invested" value={deployed == null ? null : `${(deployed * 100).toFixed(0)}%`} />
         <Stat label="Positions" value={String(e.strategyCount ?? e.slice?.positions ?? latest?.positions ?? "—")} />
@@ -212,6 +227,7 @@ export default function HomePage() {
   const momo = useMomoV2State();
   const comparison = useComparison();
   const vault = useVaultSummary();
+  const holdingsByBot = useHoldings();
   const report = useExportReport();
   const [side, setSide] = useState<0 | 1>(0);
   // Running/paused comes from bots_state (same read as Controls), not the static registry.
@@ -228,14 +244,15 @@ export default function HomePage() {
     return bots.map((b) => ({
       id: b.id,
       name: b.display_name,
-      subtitle: b.subtitle || b.strategy_label,
+      subtitle: b.rule || b.subtitle || b.strategy_label,
       shade: botColor(b.id),
       paused: pause.data ? pause.data.bots.find((r) => r.bot_id === b.id)?.paused !== false : b.status === "paused",
       slice: (fleet as Record<string, BotSlice | undefined> | undefined)?.[b.id],
       history: botHistory.data?.bots?.[b.id] ?? [],
       strategyCount: (positionsByBot as Record<string, { strategy_count: number }> | undefined)?.[b.id]?.strategy_count,
+      holdings: holdingsByBot.data ? holdingsByBot.data.bots[b.id] ?? null : undefined,
     }));
-  }, [registry.data, fleet, botHistory.data, positionsByBot, pause.data]);
+  }, [registry.data, fleet, botHistory.data, positionsByBot, pause.data, holdingsByBot.data]);
 
   const raceEngines = engines.filter((e) => (ACCOUNTS as readonly string[]).includes(e.id));
   const names = Object.fromEntries(ACCOUNTS.map((id) => [id, engines.find((e) => e.id === id)?.name ?? id]));

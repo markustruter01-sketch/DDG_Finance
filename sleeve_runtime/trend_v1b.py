@@ -193,6 +193,7 @@ def alpaca_bar_fetcher(api) -> BarFetcher:
                     out[b["S"]].append({"day": date.fromisoformat(b["t"][:10]), "close": float(b["c"])})
                 for s in out:
                     out[s].sort(key=lambda r: r["day"])
+                fetch.last_feed = feed     # which feed answered (live_check reports it)
                 return out
             except Exception as exc:   # try the next feed; reported if both fail
                 last_err = exc

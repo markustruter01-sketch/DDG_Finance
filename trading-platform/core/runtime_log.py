@@ -58,7 +58,7 @@ class _Buffer:
     def sink(self, message) -> None:
         r = message.record
         row = (r["time"].astimezone(timezone.utc), self.process, r["level"].name,
-               f"{r['name']}:{r['function']}:{r['line']}", r["message"][:4000])
+               f"{r['name']}:{r['function']}:{r['line']}", r["message"][:4000].replace("\x00", ""))
         with self.lock:
             if len(self.rows) < MAX_BUFFER:
                 self.rows.append(row)
@@ -68,18 +68,22 @@ class _Buffer:
             rows, self.rows = self.rows, []
         if not rows and time.time() - self.last_prune < 86400:
             return
+        conn = None
         try:
             import psycopg2
             from psycopg2.extras import execute_values
-            with psycopg2.connect(self.dsn, connect_timeout=10) as conn, conn.cursor() as cur:
+            conn = psycopg2.connect(self.dsn, connect_timeout=10)
+            with conn, conn.cursor() as cur:
                 if rows:
                     execute_values(cur, "INSERT INTO runtime_log (ts, process, level, source, message) VALUES %s", rows)
                 if time.time() - self.last_prune >= 86400:
                     cur.execute("DELETE FROM runtime_log WHERE ts < now() - make_interval(days => %s)", (RETENTION_DAYS,))
                     self.last_prune = time.time()
-            conn.close()
         except Exception as exc:  # never raise into logging
             print(f"runtime_log | dropped {len(rows)} lines: {exc}", file=sys.stderr)
+        finally:
+            if conn is not None:
+                conn.close()
 
     def loop(self) -> None:
         while True:

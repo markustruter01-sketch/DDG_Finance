@@ -66,7 +66,8 @@ def _run(eng, bars, state=None, now=FRI_OPEN, **kw):
         park=lambda e, live, cash: events.append(("park", round(cash, 2))),
         alert=lambda sev, msg: events.append((sev, msg)),
         risk_check=kw.get("risk", lambda: {"allowed": True, "reasons": []}),
-        soft=SOFT, hard=HARD, now=now, variant=kw.get("variant", fl.F1))
+        soft=SOFT, hard=HARD, now=now, variant=kw.get("variant", fl.F1),
+        **({"owner_kept": kw["owner_kept"]} if "owner_kept" in kw else {}))
     return out, saved["state"], events
 
 
@@ -307,3 +308,20 @@ def test_cycle_writes_the_daily_mark():
     assert state["cutover"]["equity"] == pytest.approx(100_000.0, rel=1e-6)
     last_completed = [b for b in bars["SPY"] if b["day"] <= LAST][-1]     # today's bar is still forming
     assert state["mark"] == {**state["mark"], "day": LAST.isoformat(), "spy": last_completed["close"]}
+
+
+def test_owner_kept_holding_is_left_alone_without_an_alarm_but_any_other_still_alarms():
+    """Atlas V2's leftover ETH has no fleet ledger row (Markus 10 Nov 2026: it stays).
+    9 Nov: it raised an error at every rebalance. A different unexplained holding must still alarm."""
+    bars = _bars(extra=("ETHUSD", "XYZ"))
+
+    def run(owner_kept):
+        eng = _engine(bars, {"ETHUSD": 2, "XYZ": 3}, 100_000.0, [])
+        _, _, events = _run(eng, bars, variant=fl.C1, owner_kept=owner_kept)
+        return eng, [m for sev, m in (e for e in events if isinstance(e, tuple) and e[0] == "error")]
+
+    eng, errors = run(lambda s: s == "ETHUSD")
+    assert eng.pos["ETHUSD"] == 2 and eng.pos["XYZ"] == 3            # neither is traded
+    assert len(errors) == 1 and "XYZ" in errors[0] and "ETHUSD" not in errors[0]
+    _, errors = run(lambda s: s in {"ETHUSD", "XYZ"})
+    assert errors == []

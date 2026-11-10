@@ -13,6 +13,12 @@ from typing import Any
 
 from gear_account import sleeve_exclusions
 
+# Holdings the owner has decided stay as they are (Markus, 10 Nov 2026: the
+# leftover BTC/ETH on Atlas V2's account stays, with its stops). The fleet
+# executor never trades them; that is expected, not an alarm. Anything else
+# left untouched still alarms.
+OWNER_KEPT = {"jerome_macro": frozenset({"BTCUSD", "ETHUSD"})}
+
 
 def run_fleet_account(engine, *, bot_id: str, variant, label: str,
                       live_positions: list[dict]) -> dict[str, Any]:
@@ -22,6 +28,7 @@ def run_fleet_account(engine, *, bot_id: str, variant, label: str,
     from core.kill_switch import latch_tripped
     from core.risk_governor import new_risk_check
     from core.risk_limits import HARD_DRAWDOWN, SOFT_DRAWDOWN
+    from core.symbols import canonical_symbol
     from sgov_parking import park_idle_cash, unpark_for_entry
     from sleeve_runtime.fleet_live import run_fleet_cycle
     from sleeve_runtime.trend_v1b import alpaca_bar_fetcher
@@ -45,4 +52,5 @@ def run_fleet_account(engine, *, bot_id: str, variant, label: str,
         soft=SOFT_DRAWDOWN,
         hard=HARD_DRAWDOWN,
         variant=variant,
+        owner_kept=lambda symbol: canonical_symbol(symbol) in OWNER_KEPT.get(bot_id, frozenset()),
     )

@@ -25,7 +25,7 @@ def _state(*, paused=False, recon_clean=True, cycle_status="success", stale=Fals
                 "last_updated": NOW - timedelta(
                     seconds=PORTFOLIO_STALE_THRESHOLDS["oracle"] + 1
                     if stale
-                    else PORTFOLIO_STALE_THRESHOLDS["oracle"] - 1
+                    else 60   # fresh for every rule (the daily-return rule allows 2 h)
                 ),
             },
         },
@@ -109,3 +109,13 @@ def test_failed_cash_park_close_with_no_bot_clears_on_a_clean_reconciliation():
     event = {"id": 7, "component": "unknown", "error_type": "close_failed", "bot_id": None}
     assert resolution_for_event(event, _state()) == "broker and ledger agree after the failed close"
     assert resolution_for_event(event, _state(recon_clean=False)) is None
+
+
+def test_daily_return_stale_clears_once_the_portfolio_is_written_again():
+    event = {"id": 8, "component": "data_pipeline", "error_type": "daily_return_portfolio_stale", "bot_id": "forex_ai"}
+    state = _state()
+    assert resolution_for_event(event, state) is None                      # no evidence for this bot
+    state["portfolios"]["forex_ai"] = {"last_updated": NOW - timedelta(hours=3)}
+    assert resolution_for_event(event, state) is None                      # still stale
+    state["portfolios"]["forex_ai"] = {"last_updated": NOW - timedelta(minutes=30)}
+    assert resolution_for_event(event, state) == "portfolio is being written again"

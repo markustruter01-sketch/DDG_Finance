@@ -49,8 +49,8 @@ def test_registry_returns_four_nonretired_bots_and_keeps_gump_retired():
     assert bot_registry.BOT_REGISTRY["forex_gump"].status == "retired"
     assert bot_registry.active_bot_ids() == [
         "oracle",
+        "jerome_macro",   # Atlas V2 shows second since 8 Nov (PR #86)
         "spy_qqq_trend",
-        "jerome_macro",
         "forex_ai",
     ]
 

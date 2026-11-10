@@ -14,13 +14,17 @@ import re
 from pathlib import Path
 from typing import Any, Iterable
 
-from forex_council import ALLOWED_HOSTS as COUNCIL_HOSTS, PACK_VERSION, CouncilError, scan_outbound, validate_pack
+from forex_council import (
+    ALLOWED_HOSTS as COUNCIL_HOSTS, NEWS_FIELDS, PACK_PAIR_FIELDS, PACK_TOP_FIELDS, PACK_VERSION,
+    CouncilError, scan_outbound, validate_pack,
+)
 from forex_news import ALLOWED_HOSTS as NEWS_HOSTS
 
 ALLOWED_HOSTS = COUNCIL_HOSTS | NEWS_HOSTS
 
 KEY_PATTERNS = (
-    re.compile(r"(sk|gsk|rk|pk)[-_][A-Za-z0-9]{8,}"),
+    # \b: a key starts a token ("mark_resolved" is not an "rk_" key).
+    re.compile(r"\b(sk|gsk|rk|pk)[-_][A-Za-z0-9]{8,}"),
     re.compile(r"AIza[0-9A-Za-z_\-]{10,}"),
     re.compile(r"(ghp|gho|github_pat)_[A-Za-z0-9_]{10,}"),
 )
@@ -33,6 +37,25 @@ def _has_key(text: str) -> bool:
     return any(p.search(text) for p in KEY_PATTERNS)
 
 
+def _registered_order(obj: Any, fields: tuple[str, ...]) -> Any:
+    """The ledger column is JSONB, which does not keep key order, and the
+    schema check compares keys in order. Put a stored object's keys back in
+    the registered order when it has exactly the registered keys; anything
+    else is returned untouched and still fails the check.
+    (11 Nov 2026: every stored pack was reported "off schema" for this reason.)"""
+    if isinstance(obj, dict) and set(obj) == set(fields):
+        return {k: obj[k] for k in fields}
+    return obj
+
+
+def _as_sent(pack: dict[str, Any]) -> dict[str, Any]:
+    pack = _registered_order(pack, PACK_TOP_FIELDS)
+    for key, fields in (("pairs", PACK_PAIR_FIELDS), ("news", NEWS_FIELDS)):
+        if isinstance(pack.get(key), list):
+            pack = {**pack, key: [_registered_order(item, fields) for item in pack[key]]}
+    return pack
+
+
 def audit_records(rows: Iterable[tuple[Any, dict[str, Any]]]) -> list[str]:
     findings: list[str] = []
     for day, record in rows:
@@ -41,7 +64,7 @@ def audit_records(rows: Iterable[tuple[Any, dict[str, Any]]]) -> list[str]:
         # records were valid under the schema of their day and are never rewritten.
         if isinstance(pack, dict) and pack.get("version") == PACK_VERSION:
             try:
-                validate_pack(pack)
+                validate_pack(_as_sent(pack))
             except (CouncilError, KeyError, TypeError) as exc:
                 findings.append(f"{day}: logged pack off schema ({exc})")
         for call in record.get("calls") or []:

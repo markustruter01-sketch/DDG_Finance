@@ -338,6 +338,26 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
     # ── END one-time cleanup ──────────────────────────────────────────────────
 
     scheduler.add_job(
+        func=_live_vs_research_daily,
+        trigger=CronTrigger(day_of_week="mon-fri", hour=17, minute=40, timezone="America/New_York"),
+        id="live_vs_research_daily",
+        name="Live vs research check (daily, read-only)",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=3600,
+    )
+    scheduler.add_job(
+        func=_live_vs_research_monthly,
+        trigger=CronTrigger(day=1, hour=9, minute=10, timezone="Australia/Brisbane"),
+        id="live_vs_research_monthly",
+        name="Live vs research monthly report (Discord)",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=6 * 3600,
+    )
+    logger.info("Scheduler | Registered: live_vs_research daily (Mon–Fri 17:40 ET) and monthly (1st, 09:10 Brisbane)")
+
+    scheduler.add_job(
         func=_evening_postmortem,
         trigger=CronTrigger(
             day_of_week="mon-fri",
@@ -1041,6 +1061,8 @@ def is_auto_trading_enabled() -> bool:
 # monitoring matters most while trading is paused.
 _ALWAYS_ACTIVE_JOBS = {
     "daily_discord_pnl_report",
+    "live_vs_research_daily",
+    "live_vs_research_monthly",
     "nightly_walk_forward",
     "standing_invariants",
     "degradation_resolver",
@@ -1073,6 +1095,29 @@ def set_auto_trading(enabled: bool) -> dict:
         "auto_trading_enabled": _auto_trading_enabled,
         "jobs": get_job_status(),
     }
+
+
+async def _live_vs_research_daily() -> None:
+    """Plan item 12: the same rules on the live feed and on research data (core/live_check_job.py)."""
+    if not _is_published_deployment():
+        return
+    try:
+        import asyncio
+        from core.live_check_job import run_daily
+        await asyncio.to_thread(run_daily)
+    except Exception as exc:
+        logger.error(f"Scheduler | live_vs_research_daily FAILED: {exc}")
+
+
+async def _live_vs_research_monthly() -> None:
+    if not _is_published_deployment():
+        return
+    try:
+        import asyncio
+        from core.live_check_job import send_monthly
+        await asyncio.to_thread(send_monthly)
+    except Exception as exc:
+        logger.error(f"Scheduler | live_vs_research_monthly FAILED: {exc}")
 
 
 async def _daily_discord_pnl_report() -> None:

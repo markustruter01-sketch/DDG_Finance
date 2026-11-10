@@ -1773,7 +1773,8 @@ class AlpacaEtfEngine:
                 conviction_score=0.0,
                 original_thesis=(
                     f"ETF Trend Long {bot_id}: entry={entry_price:.2f} "
-                    f"stop={stop_price:.2f} notional=${notional_usd:,.0f}"
+                    f"stop={'none (stop-free line)' if stop_price is None else f'{stop_price:.2f}'} "
+                    f"notional=${notional_usd:,.0f}"
                 ),
                 intended_price=entry_price,
             )

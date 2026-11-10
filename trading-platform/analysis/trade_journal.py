@@ -14,6 +14,11 @@ from loguru import logger
 
 
 def init_db() -> None:
+    from db.postgres import session_read_only
+    if session_read_only():
+        # Replit workspace guard (.replit [userenv.development] PGOPTIONS): no startup DDL on live data.
+        logger.warning("Trade journal | read-only session: schema and vault setup skipped")
+        return
     try:
         from db.postgres import ensure_schema
         ensure_schema()

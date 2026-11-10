@@ -1171,10 +1171,40 @@ def _send_lease_refusal_alert(
         )
 
 
+def _database_read_only() -> bool:
+    """True when this process's database sessions are read-only.
+
+    The Replit workspace sets PGOPTIONS="-c default_transaction_read_only=on"
+    (.replit [userenv.development]) because its DATABASE_URL is the live
+    database. Published deployments never set it."""
+    dsn = os.environ.get("DATABASE_URL")
+    if not dsn:
+        return False
+    try:
+        import psycopg2
+        conn = psycopg2.connect(dsn, connect_timeout=10)
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SHOW transaction_read_only")
+                return str(cur.fetchone()[0]).lower() == "on"
+        finally:
+            conn.close()
+    except Exception as exc:
+        logger.warning(f"Runner | could not read transaction_read_only: {exc}")
+        return False
+
+
 def main() -> int:
     global _pause_state_ok
     signal.signal(signal.SIGTERM, _shutdown_handler)
     signal.signal(signal.SIGINT, _shutdown_handler)
+
+    if _database_read_only():
+        logger.warning(
+            "Runner | read-only database session (Replit workspace guard): not started. "
+            "Only the published deployment runs the bots."
+        )
+        return EXIT_SUCCESS
 
     threads = []
     exit_code = EXIT_SUCCESS
@@ -1186,6 +1216,9 @@ def main() -> int:
         if not health_server_started:
             _start_health_server()
             health_server_started = True
+
+    from core.runtime_log import install as keep_logs  # 30-day log copy (published only)
+    keep_logs("runner")
 
     try:
         if not _record_runner_heartbeat(runner_loop_count, "starting"):
@@ -1352,6 +1385,12 @@ def main() -> int:
                 logger.critical(
                     f"Runner heartbeat | loop write failed at loop_count={runner_loop_count}"
                 )
+            else:
+                try:  # outside monitor (core/outside_heartbeat.py): never blocks, never raises
+                    from core.outside_heartbeat import ping as _outside_ping
+                    _outside_ping("RUNNER")
+                except Exception:
+                    pass
             _shutdown_event.wait(_RUNNER_LOOP_INTERVAL_SECONDS)
     except KeyboardInterrupt:
         _shutdown_event.set()

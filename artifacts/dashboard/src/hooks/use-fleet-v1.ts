@@ -206,3 +206,20 @@ export function useVaultSummary() {
     refetchInterval: interval,
   });
 }
+
+/** What each bot holds, as % of its own equity (server: core/holdings.py,
+ *  read from bot_portfolio; the client only formats). */
+export interface Holdings {
+  items: { label: string; pct: number }[];
+  gross_pct: number | null;   // Forex only: total size of open pairs
+  as_of: string | null;
+}
+
+export function useHoldings() {
+  const interval = useVisibleInterval(60_000);
+  return useQuery({
+    queryKey: ["/fleet/holdings"],
+    queryFn: async () => (await api.get("/fleet/holdings")).data as { bots: Record<string, Holdings | null> },
+    refetchInterval: interval,
+  });
+}

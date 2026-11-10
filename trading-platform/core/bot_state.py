@@ -164,10 +164,16 @@ def set_paused(bot_id: str, paused: bool, reason: str = "") -> None:
                    SET paused       = %s,
                        pause_reason = %s,
                        paused_at    = CASE WHEN %s THEN NOW() ELSE paused_at END,
-                       resumed_at   = CASE WHEN %s THEN resumed_at ELSE NOW() END
+                       resumed_at   = CASE WHEN %s THEN resumed_at ELSE NOW() END,
+                       -- A resume shows 'resuming' until the runner's next cycle
+                       -- writes 'running' (10 Nov 2026: status said 'paused' for
+                       -- 40 min after paused=false).
+                       status       = CASE WHEN %s THEN 'paused'
+                                           WHEN status = 'paused' THEN 'resuming'
+                                           ELSE status END
                  WHERE bot_id = %s
                 """,
-                (paused, reason, paused, paused, bot_id),
+                (paused, reason, paused, paused, paused, bot_id),
             )
             if cur.rowcount != 1:
                 raise RuntimeError(f"set_paused({bot_id}): no bots_state row updated")

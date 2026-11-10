@@ -254,6 +254,26 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
         "degradation_resolver (15 min)"
     )
 
+    scheduler.add_job(
+        func=_live_vs_research_daily,
+        trigger=CronTrigger(day_of_week="mon-fri", hour=17, minute=40, timezone="America/New_York"),
+        id="live_vs_research_daily",
+        name="Live vs research check (daily, read-only)",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=3600,
+    )
+    scheduler.add_job(
+        func=_live_vs_research_monthly,
+        trigger=CronTrigger(day=1, hour=9, minute=10, timezone="Australia/Brisbane"),
+        id="live_vs_research_monthly",
+        name="Live vs research monthly report (Discord)",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=6 * 3600,
+    )
+    logger.info("Scheduler | Registered: live_vs_research daily (Mon–Fri 17:40 ET) and monthly (1st, 09:10 Brisbane)")
+
     if _runner_liveness_enabled():
         scheduler.add_job(
             func=_probe_runner_liveness,
@@ -336,6 +356,17 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
         )
         logger.info("Scheduler | Registered ONE-TIME: oracle_residual_cleanup at 2026-08-17 09:31 ET")
     # ── END one-time cleanup ──────────────────────────────────────────────────
+
+    scheduler.add_job(
+        func=_daily_health_check,
+        trigger=CronTrigger(hour=8, minute=40, timezone="Australia/Brisbane"),
+        id="daily_health_check",
+        name="Daily health check (Discord)",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=1800,
+    )
+    logger.info("Scheduler | Registered: daily_health_check (08:40 Brisbane, every day)")
 
     scheduler.add_job(
         func=_evening_postmortem,
@@ -580,6 +611,8 @@ async def _standing_invariants_job() -> None:
         from core.invariants import format_report, run_all_invariants
 
         report = await asyncio.to_thread(run_all_invariants)
+        from core.outside_heartbeat import ping as outside_ping
+        outside_ping("API")   # the API and its scheduler are alive (monitor outside Replit)
         log_method = logger.info if report["overall"] == "PASS" else logger.warning
         for line in format_report(report).splitlines():
             log_method(f"Scheduler | standing_invariants | {line}")
@@ -1041,6 +1074,7 @@ def is_auto_trading_enabled() -> bool:
 # monitoring matters most while trading is paused.
 _ALWAYS_ACTIVE_JOBS = {
     "daily_discord_pnl_report",
+    "daily_health_check",
     "nightly_walk_forward",
     "standing_invariants",
     "degradation_resolver",
@@ -1049,6 +1083,8 @@ _ALWAYS_ACTIVE_JOBS = {
     "daily_benchmark_snapshot",
     "nightly_fleet_equity_snapshot",
     "daily_bot_returns_snapshot",
+    "live_vs_research_daily",
+    "live_vs_research_monthly",
 }
 
 
@@ -1073,6 +1109,19 @@ def set_auto_trading(enabled: bool) -> dict:
         "auto_trading_enabled": _auto_trading_enabled,
         "jobs": get_job_status(),
     }
+
+
+async def _daily_health_check() -> None:
+    """Every day 08:40 Brisbane: one Discord line per safety check (core/daily_health.py)."""
+    if not _is_published_deployment():
+        logger.debug("Scheduler | daily_health_check skipped outside published deployment")
+        return
+    try:
+        import asyncio
+        from core.daily_health import run_and_send
+        await asyncio.to_thread(run_and_send)
+    except Exception as exc:
+        logger.error(f"Scheduler | daily_health_check FAILED: {exc}")
 
 
 async def _daily_discord_pnl_report() -> None:
@@ -1373,3 +1422,26 @@ def _fetch_fleet_equity_total() -> float:
 
 # Make _json importable inside the module-level function
 import json as _json
+
+
+async def _live_vs_research_daily() -> None:
+    """Plan item 12: the same rules on the live feed and on research data (core/live_check_job.py)."""
+    if not _is_published_deployment():
+        return
+    try:
+        import asyncio
+        from core.live_check_job import run_daily
+        await asyncio.to_thread(run_daily)
+    except Exception as exc:
+        logger.error(f"Scheduler | live_vs_research_daily FAILED: {exc}")
+
+
+async def _live_vs_research_monthly() -> None:
+    if not _is_published_deployment():
+        return
+    try:
+        import asyncio
+        from core.live_check_job import send_monthly
+        await asyncio.to_thread(send_monthly)
+    except Exception as exc:
+        logger.error(f"Scheduler | live_vs_research_monthly FAILED: {exc}")

@@ -273,8 +273,11 @@ def run_fleet_cycle(
     hard: float,
     now: datetime | None = None,
     variant: FleetVariant = F1,
+    owner_kept: Callable[[str], bool] = lambda symbol: False,
 ) -> dict[str, Any]:
-    """The account's whole hourly cycle while a FLEET-V1 variant owns it."""
+    """The account's whole hourly cycle while a FLEET-V1 variant owns it.
+    ``owner_kept``: holdings the owner has decided stay untouched (never traded
+    either way); leaving those alone is expected and raises no alarm."""
     now = now or datetime.now(timezone.utc)
     live = engine.get_positions()
     rows = engine.get_db_positions(bot_id)
@@ -337,8 +340,10 @@ def run_fleet_cycle(
             alert("critical", f"{variant.registration}: positions without a protective stop: {report['unprotected']}")
         elif report["errors"]:
             alert("error", f"{variant.registration} rebalance attempt {attempts} had errors: {report['errors'][:5]}")
-        if report["plan"].get("skipped"):
-            alert("error", f"{variant.registration}: symbols left untouched: {report['plan']['skipped']}")
+        untouched = {sym: why for sym, why in (report["plan"].get("skipped") or {}).items()
+                     if not owner_kept(sym)}
+        if untouched:
+            alert("error", f"{variant.registration}: symbols left untouched: {untouched}")
         status = f"rebalanced ({key})" if report["done"] else f"rebalance attempt {attempts} incomplete"
 
     acct = engine.get_account()

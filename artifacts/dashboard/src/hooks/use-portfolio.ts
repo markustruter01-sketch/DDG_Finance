@@ -138,6 +138,7 @@ export interface BotRegistryEntry {
   code?: string;              // "Bot 1" … the account's standing code; ids never change
   display_name: string;
   subtitle: string;
+  rule?: string;              // one plain line under the name on the Home card
   short_name: string;
   icon: string;
   color: string;

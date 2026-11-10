@@ -864,6 +864,26 @@ WHERE exit_reason IS NULL
 """
 
 
+def session_read_only() -> bool:
+    """True when this process's database sessions are read-only.
+
+    The Replit workspace sets PGOPTIONS="-c default_transaction_read_only=on"
+    (.replit [userenv.development]) because its DATABASE_URL is the live
+    database: a workspace restart must never run startup SQL on live data
+    (10 Nov 2026). Published deployments never set it.
+    """
+    if not is_pg_available():
+        return False
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SHOW transaction_read_only")
+                return str(cur.fetchone()[0]).lower() == "on"
+    except Exception as exc:
+        logger.warning(f"DB | could not read transaction_read_only: {exc}")
+        return False
+
+
 def ensure_schema() -> None:
     """
     Create all tables if they don't already exist, then run safe column
@@ -871,6 +891,9 @@ def ensure_schema() -> None:
     """
     if not is_pg_available():
         logger.debug("DB | ensure_schema skipped (PostgreSQL unavailable)")
+        return
+    if session_read_only():
+        logger.warning("DB | read-only session (workspace guard): schema bootstrap and migrations skipped")
         return
     try:
         with get_conn() as conn:

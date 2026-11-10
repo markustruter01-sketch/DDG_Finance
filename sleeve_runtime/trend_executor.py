@@ -29,12 +29,14 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from typing import Any, Callable
 
+from sleeve_runtime.planner import Order, RebalancePlan, StopAction
 from sleeve_runtime.trend_v1b import (
     DUST_QTY,
     NEW_YORK,
     REGISTRATION,
     BarFetcher,
     SleeveCapital,
+    TrendPlan,
     compute_plan,
     fetch_completed,
     sleeve_capital,
@@ -322,3 +324,30 @@ def run_trend_cycle(
     acct = engine.get_account()
     park(engine, engine.get_positions(), acct["cash"])
     return {"status": status}
+
+
+def fixed_targets_plan(targets: dict[str, int], prices: dict[str, float], stops: dict[str, float],
+               day: date | None = None):
+    """plan_fn for execute_rebalance: move each symbol to a fixed share count.
+    Symbols without an entry in ``stops`` get no stop. Used by the rehearsal
+    script (kraken-bot/rehearsal.py) and the broker replay tests, so they run
+    the live order machinery with known targets instead of a strategy."""
+    def plan_fn(*, bars, positions, equity, cash, signal_day, frozen):
+        plan = RebalancePlan()
+        for sym in sorted(set(targets) | set(positions)):
+            cur, tgt = int(positions.get(sym, 0)), int(targets.get(sym, int(positions.get(sym, 0))))
+            if frozen and sym in frozen:
+                plan.skipped[sym] = "frozen"
+                tgt = cur
+            elif tgt < cur:
+                plan.cancel_stops.append(sym)
+                plan.sells.append(Order(sym, "sell", cur - tgt))
+            elif tgt > cur:
+                plan.buys.append(Order(sym, "buy", tgt - cur))
+            if tgt > 0:
+                plan.final_qty[sym] = tgt
+                if sym in stops and sym not in plan.skipped:
+                    plan.stops.append(StopAction(sym, "replace" if tgt == cur else "place", tgt, stops[sym]))
+        today = day or date.today()
+        return TrendPlan(plan=plan, weights={}, signal_day=today, price_day=today, prices=dict(prices))
+    return plan_fn

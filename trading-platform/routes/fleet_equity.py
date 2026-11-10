@@ -342,6 +342,23 @@ async def fleet_equity():
     return data
 
 
+_holdings_cache: dict = {"data": None, "ts": 0.0}
+
+
+@fleet_equity_router.get("/fleet/holdings")
+async def fleet_holdings():
+    """What each bot holds, as % of its own equity (Home cards; core/holdings.py).
+    Read from bot_portfolio only: no broker calls."""
+    now = time.time()
+    if _holdings_cache["data"] is not None and (now - _holdings_cache["ts"]) < _CACHE_TTL:
+        return _holdings_cache["data"]
+    from core.bot_state import get_all_portfolios
+    from core.holdings import holdings_by_bot
+    data = {"bots": holdings_by_bot(get_all_portfolios(), ACTIVE_BOT_IDS)}
+    _holdings_cache.update(data=data, ts=now)
+    return data
+
+
 @fleet_equity_router.get("/fleet/equity-history")
 async def fleet_equity_history():
     """
@@ -424,3 +441,16 @@ async def fleet_gear_shadow():
     from core.gear_shadow_job import SLEEVE_ID, history
     rows = history()
     return {"sleeve": SLEEVE_ID, "latest": rows[-1] if rows else None, "history": rows}
+
+
+@fleet_equity_router.get("/fleet/live-check")
+async def fleet_live_check(month: str | None = None):
+    """Live versus research for a month (plan item 12): stored daily rows, summarised."""
+    import asyncio
+    import re
+    from fastapi import HTTPException
+    from core.live_check_job import month_summary
+    month = month or datetime.now(timezone.utc).strftime("%Y-%m")
+    if not re.fullmatch(r"\d{4}-\d{2}", month):
+        raise HTTPException(status_code=400, detail="month must be YYYY-MM")
+    return await asyncio.to_thread(month_summary, month)

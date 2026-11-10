@@ -16,6 +16,26 @@ _ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_ROOT / "trading-platform"))
 sys.path.insert(1, str(_ROOT / "kraken-bot"))
 sys.path.insert(2, str(_ROOT))
+
+
+def _database_is_local() -> bool:
+    import ipaddress
+    import socket
+    from urllib.parse import urlparse
+    host = urlparse(os.environ.get("DATABASE_URL", "")).hostname
+    try:
+        return bool(host) and ipaddress.ip_address(socket.gethostbyname(host)).is_loopback
+    except (OSError, ValueError):
+        return False
+
+
+# 🔴 These tests DELETE ledger rows for the bots they simulate. They run only
+# against a database on this machine; anywhere else (in Replit, DATABASE_URL is
+# production) the whole module is skipped before any connection is opened.
+if not _database_is_local():
+    pytest.skip("broker tests need a local test database (DATABASE_URL is not on this machine)",
+                allow_module_level=True)
+
 # Bind "db" to the trading-platform package now, while the order above holds:
 # pytest may put kraken-bot first again when it imports the next test file.
 import db.postgres  # noqa: E402,F401

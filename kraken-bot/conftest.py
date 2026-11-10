@@ -37,18 +37,18 @@ def _is_local(dsn: str | None, kwargs: dict) -> bool:
         return False
 
 
-@pytest.fixture(scope="session", autouse=True)
-def _only_local_postgres():
-    real_connect = psycopg2.connect
+_real_connect = psycopg2.connect
 
-    def guarded(dsn=None, connection_factory=None, cursor_factory=None, **kwargs):
-        if not _is_local(dsn, kwargs):
-            raise RuntimeError("kraken-bot tests may not connect to a non-local database "
-                               "(in Replit that is production)")
-        return real_connect(dsn, connection_factory=connection_factory, cursor_factory=cursor_factory, **kwargs)
 
-    psycopg2.connect = guarded
-    try:
-        yield
-    finally:
-        psycopg2.connect = real_connect
+def _guarded_connect(dsn=None, connection_factory=None, cursor_factory=None, **kwargs):
+    if not _is_local(dsn, kwargs):
+        raise RuntimeError("kraken-bot tests may not connect to a non-local database "
+                           "(in Replit that is production)")
+    return _real_connect(dsn, connection_factory=connection_factory, cursor_factory=cursor_factory, **kwargs)
+
+
+# Installed when pytest loads this file, BEFORE any test module is imported:
+# a module that opens a connection pool at import time (db.postgres does) is
+# covered too. As a session fixture the guard started after collection, so
+# such a pool could already hold live connections (found in review, 11 Nov 2026).
+psycopg2.connect = _guarded_connect

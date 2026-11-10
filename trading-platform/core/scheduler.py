@@ -338,6 +338,17 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
     # ── END one-time cleanup ──────────────────────────────────────────────────
 
     scheduler.add_job(
+        func=_daily_health_check,
+        trigger=CronTrigger(hour=8, minute=40, timezone="Australia/Brisbane"),
+        id="daily_health_check",
+        name="Daily health check (Discord)",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=1800,
+    )
+    logger.info("Scheduler | Registered: daily_health_check (08:40 Brisbane, every day)")
+
+    scheduler.add_job(
         func=_evening_postmortem,
         trigger=CronTrigger(
             day_of_week="mon-fri",
@@ -1041,6 +1052,7 @@ def is_auto_trading_enabled() -> bool:
 # monitoring matters most while trading is paused.
 _ALWAYS_ACTIVE_JOBS = {
     "daily_discord_pnl_report",
+    "daily_health_check",
     "nightly_walk_forward",
     "standing_invariants",
     "degradation_resolver",
@@ -1073,6 +1085,19 @@ def set_auto_trading(enabled: bool) -> dict:
         "auto_trading_enabled": _auto_trading_enabled,
         "jobs": get_job_status(),
     }
+
+
+async def _daily_health_check() -> None:
+    """Every day 08:40 Brisbane: one Discord line per safety check (core/daily_health.py)."""
+    if not _is_published_deployment():
+        logger.debug("Scheduler | daily_health_check skipped outside published deployment")
+        return
+    try:
+        import asyncio
+        from core.daily_health import run_and_send
+        await asyncio.to_thread(run_and_send)
+    except Exception as exc:
+        logger.error(f"Scheduler | daily_health_check FAILED: {exc}")
 
 
 async def _daily_discord_pnl_report() -> None:

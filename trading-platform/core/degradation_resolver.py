@@ -20,8 +20,10 @@ from core.bot_liveness import PORTFOLIO_STALE_THRESHOLDS
 
 RESOLVABLE_ERROR_TYPES = (
     "audit_fail_atr_stop_check",
+    "bot_paused_ledger_mismatch",
     "bot_stale_workflow",
     "broker_stop_rejected",
+    "close_failed",
     "close_position_failed",
     "entry_empty_response_guard",
     "entry_order_failed",
@@ -249,9 +251,18 @@ def resolution_for_event(
             return "stop-coverage invariant PASS and latest reconciliation is clean"
         return None
 
-    if error_type == "reconciliation_mismatch":
+    # 10 Nov 2026: these never cleared, so the "no unresolved alarms" check
+    # stayed red for weeks and a new alarm meant nothing.
+    if error_type in {"reconciliation_mismatch", "bot_paused_ledger_mismatch"}:
         if _reconciliation_is_clean(state):
             return "later broker/ledger reconciliation completed cleanly"
+        return None
+
+    # The engine files a failed close as close_failed (component = bot, or
+    # 'unknown' for a cash-park close such as the 9 Nov SGOV unpark).
+    if error_type == "close_failed" and bot_id is None:
+        if _reconciliation_is_clean(state):
+            return "broker and ledger agree after the failed close"
         return None
 
     if error_type == "entry_empty_response_guard":
@@ -261,7 +272,7 @@ def resolution_for_event(
             return "bot cycle recovered and latest broker/ledger reconciliation is clean"
         return None
 
-    if error_type in {"entry_order_failed", "close_position_failed"}:
+    if error_type in {"entry_order_failed", "close_position_failed", "close_failed"}:
         if _bot_cycle_recovered(state, bot_id):
             return "bot is paused or has a successful current cycle after the failure"
         return None

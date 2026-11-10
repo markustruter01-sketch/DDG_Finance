@@ -20,7 +20,8 @@ from forex_news import ALLOWED_HOSTS as NEWS_HOSTS
 ALLOWED_HOSTS = COUNCIL_HOSTS | NEWS_HOSTS
 
 KEY_PATTERNS = (
-    re.compile(r"(sk|gsk|rk|pk)[-_][A-Za-z0-9]{8,}"),
+    # \b: a key starts a token ("mark_resolved" is not an "rk_" key).
+    re.compile(r"\b(sk|gsk|rk|pk)[-_][A-Za-z0-9]{8,}"),
     re.compile(r"AIza[0-9A-Za-z_\-]{10,}"),
     re.compile(r"(ghp|gho|github_pat)_[A-Za-z0-9_]{10,}"),
 )

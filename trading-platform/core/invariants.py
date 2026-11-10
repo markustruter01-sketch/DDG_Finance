@@ -98,6 +98,10 @@ class InvariantInputs:
     cycle_rows: dict[str, dict[str, Any]] | None = None
     cycle_intervals: dict[str, float] | None = None
     pause_states: dict[str, bool] | None = None
+    # bots_state.resumed_at: freshness counts from the later of the last success
+    # and the resume, as core/bot_liveness.py does (10 Nov 2026: a reset raised a
+    # false critical "stale" alarm for every bot until its first new cycle).
+    resumed_at: dict[str, Any] | None = None
     reconciliation_rows: list[dict[str, Any]] | None = None
     unresolved_degradations: list[dict[str, Any]] | None = None
     kill_switch_runtime: bool | None = None
@@ -596,7 +600,9 @@ def check_cycle_freshness(inputs: InvariantInputs) -> dict[str, Any]:
         if success_at is None:
             unreadable.append({"bot_id": bot_id, "last_success_at": None})
             continue
-        age = (inputs.now.astimezone(timezone.utc) - success_at).total_seconds()
+        resumed = _parse_datetime((inputs.resumed_at or {}).get(bot_id))
+        reference = max(success_at, resumed) if resumed else success_at
+        age = (inputs.now.astimezone(timezone.utc) - reference).total_seconds()
         item = {
             "bot_id": bot_id,
             "last_success_at": success_at.isoformat(),
@@ -1359,16 +1365,15 @@ def read_database_inputs(now: datetime | None = None) -> dict[str, Any]:
 
             cur.execute(
                 """
-                SELECT bot_id, paused
+                SELECT bot_id, paused, resumed_at
                 FROM bots_state
                 WHERE bot_id = ANY(%s)
                 """,
                 (list(ACTIVE_BOTS),),
             )
-            result["pause_states"] = {
-                bot_id: paused
-                for bot_id, paused in cur.fetchall()
-            }
+            state_rows = cur.fetchall()
+            result["pause_states"] = {bot_id: paused for bot_id, paused, _ in state_rows}
+            result["resumed_at"] = {bot_id: resumed for bot_id, _, resumed in state_rows if resumed}
 
             cur.execute(
                 """

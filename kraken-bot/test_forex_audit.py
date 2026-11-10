@@ -57,3 +57,8 @@ def test_weekly_audit_runs_saturdays_only_and_records_findings(monkeypatch):
     assert fs._maybe_run_weekly_audit(now=saturday, get_conn=object) == "findings=1"
     assert fs._maybe_run_weekly_audit(now=saturday, get_conn=object) == "not due"
     assert seen[0]["component"] == "forex_council" and seen[0]["bot_id"] == "forex_ai"
+
+
+def test_key_pattern_needs_a_token_start():
+    assert fa._has_key('x = "sk-abcdef1234567890"') and fa._has_key("gsk_ABCDEFGH12345")
+    assert not fa._has_key("from core.degradation_tracker import mark_resolved")

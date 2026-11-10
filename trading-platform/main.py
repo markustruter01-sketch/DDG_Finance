@@ -256,6 +256,8 @@ async def lifespan(app: FastAPI):
         compression="gz",
         enqueue=True,
     )
+    from core.runtime_log import install as keep_logs  # 30-day log copy (published only)
+    keep_logs("trading-api")
     _log_database_identity()
     logger.info("=" * 60)
     logger.info("TRADING PLATFORM STARTING")

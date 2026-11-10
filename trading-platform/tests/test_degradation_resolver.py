@@ -102,3 +102,10 @@ def test_atr_stop_audit_fail_needs_coverage_pass_and_fresh_clean_recon():
     uncovered = _state()
     uncovered["invariants"]["strategy_positions_have_covering_stops"] = "FAIL"
     assert resolution_for_event(event, uncovered) is None
+
+
+def test_failed_cash_park_close_with_no_bot_clears_on_a_clean_reconciliation():
+    """9 Nov 2026 SGOV unpark: component 'unknown', so no bot cycle to wait for."""
+    event = {"id": 7, "component": "unknown", "error_type": "close_failed", "bot_id": None}
+    assert resolution_for_event(event, _state()) == "broker and ledger agree after the failed close"
+    assert resolution_for_event(event, _state(recon_clean=False)) is None

@@ -752,8 +752,8 @@ def test_cycle_freshness_passes_when_all_active_bots_are_paused(base_inputs):
     assert result["status"] == "PASS"
     assert [row["bot_id"] for row in result["actual"]["paused"]] == [
         "oracle",
+        "jerome_macro",   # Atlas V2 shows second since 8 Nov (PR #86)
         "spy_qqq_trend",
-        "jerome_macro",
         "forex_ai",
     ]
     assert result["actual"]["missing_or_unreadable"] == []
@@ -1081,3 +1081,14 @@ def test_published_runner_liveness_unknown_when_durable_source_is_unreadable(
         replace(base_inputs, cycle_rows=None)
     )
     assert result["status"] == "UNKNOWN"
+
+def test_cycle_freshness_counts_from_the_resume_not_the_last_cycle_before_a_pause(base_inputs):
+    """10 Nov 2026: bots resumed at 07:23 UTC after a pause since 9 Nov 15:13 were
+    flagged critical-stale until their first new cycle. Count from the resume."""
+    inputs = replace(_copy(base_inputs), pause_states={"spy_qqq_trend": False})
+    inputs.cycle_rows["spy_qqq_trend"]["last_success_at"] = inputs.now - timedelta(hours=16)
+    inputs.resumed_at = {"spy_qqq_trend": inputs.now - timedelta(minutes=10)}
+    assert check_cycle_freshness(inputs)["status"] == "PASS"
+
+    inputs.resumed_at = {"spy_qqq_trend": inputs.now - timedelta(hours=15)}   # resumed long ago: really stale
+    assert check_cycle_freshness(inputs)["status"] == "FAIL"

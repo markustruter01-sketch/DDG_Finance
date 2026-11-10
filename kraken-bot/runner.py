@@ -1176,6 +1176,9 @@ def main() -> int:
     signal.signal(signal.SIGTERM, _shutdown_handler)
     signal.signal(signal.SIGINT, _shutdown_handler)
 
+    from core.runtime_log import install as keep_logs  # 30-day log copy (published only)
+    keep_logs("runner")
+
     threads = []
     exit_code = EXIT_SUCCESS
     health_server_started = False

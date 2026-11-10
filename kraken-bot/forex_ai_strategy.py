@@ -159,6 +159,10 @@ def _maybe_run_weekly_audit(*, now=None, get_conn=None) -> str:
         if get_conn is None:
             from db.postgres import get_conn as get_conn
         findings = run_weekly_audit(get_conn)
+        # Each week's audit replaces the last one's open finding (10 Nov 2026:
+        # six weekly rows had piled up, keeping the alarm check red).
+        from core.degradation_tracker import mark_resolved
+        mark_resolved("forex_council", "weekly_audit", reason="superseded by a later weekly audit")
         if findings:
             from core.degradation_tracker import record_degradation
             record_degradation(

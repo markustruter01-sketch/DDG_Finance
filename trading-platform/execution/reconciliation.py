@@ -36,6 +36,16 @@ _AUTHORITATIVE_POSITION_TABLES: dict[str, tuple[str, ...]] = {
     # Atlas V2 (FLEET-V1-C1, 3 Nov 2026) books in alpaca_etf_positions; legacy rows stay in bot3_positions.
     "jerome_macro": ("bot3_positions", "alpaca_etf_positions"),
 }
+# kraken-bot/rehearsal.py trades 1-share orders in Bot 3's account under its own
+# ledger tag (bot_id 'rehearsal') so its rows never mix with the strategy's.
+# They belong to that account: read them with it, or they look like strangers.
+_ACCOUNT_LEDGER_BOT_IDS: dict[str, tuple[str, ...]] = {
+    "spy_qqq_trend": ("spy_qqq_trend", "rehearsal"),
+}
+
+
+def _ledger_bot_ids(bot_id: str) -> tuple[str, ...]:
+    return _ACCOUNT_LEDGER_BOT_IDS.get(bot_id, (bot_id,))
 _TERMINAL_ORDER_STATUSES = {"canceled", "filled", "expired", "rejected"}
 
 
@@ -164,7 +174,7 @@ def _authoritative_ledger_positions(bot_id: str) -> list[dict[str, Any]]:
                             symbol,
                             {quantity_column}::double precision AS qty
                         FROM {table} AS position
-                        WHERE position.bot_id = %s
+                        WHERE position.bot_id IN %s
                           AND lower(position.status) = 'open'
                           AND NOT EXISTS (
                               SELECT 1
@@ -173,7 +183,7 @@ def _authoritative_ledger_positions(bot_id: str) -> list[dict[str, Any]]:
                                 AND vault.symbol = position.symbol
                           )
                         """,
-                        (bot_id,),
+                        (_ledger_bot_ids(bot_id),),
                     )
                     rows.extend(
                         {
@@ -631,13 +641,13 @@ def _stop_ledger_rows(bot_id: str) -> list[dict[str, Any]]:
                 for table in tables:
                     cur.execute(
                         f"SELECT bot_id, symbol, stop_order_id FROM {table} "
-                        "WHERE bot_id = %s AND status = 'open' "
+                        "WHERE bot_id IN %s AND status = 'open' "
                         "AND stop_order_id IS NOT NULL",
-                        (bot_id,),
+                        (_ledger_bot_ids(bot_id),),
                     )
                     rows.extend(
                         {
-                            "bot_id": row[0],
+                            "bot_id": bot_id,   # the account; rehearsal rows belong to it
                             "symbol": row[1],
                             "stop_order_id": str(row[2]),
                             "table": table,

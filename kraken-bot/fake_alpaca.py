@@ -265,6 +265,15 @@ class FakeAlpaca:
         self.orders[o.id] = o
         return o.view()
 
+    def get_latest_trade(self, symbol: str):
+        self._call("get_latest_trade", symbol)
+        return SimpleNamespace(price=self.prices[symbol])
+
+    def get_asset(self, symbol: str):
+        self._call("get_asset", symbol)
+        tradable = symbol in self.prices
+        return SimpleNamespace(symbol=symbol, tradable=tradable, status="active" if tradable else "inactive")
+
     # ── set-up helper ─────────────────────────────────────────────────────
     def seed_stop(self, symbol: str, qty: float, stop_price: float, client_order_id: str) -> str:
         o = _Order(id=f"ord-{next(self._ids)}", client_order_id=client_order_id, symbol=symbol,

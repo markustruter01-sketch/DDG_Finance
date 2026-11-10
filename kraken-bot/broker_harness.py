@@ -44,8 +44,7 @@ import alpaca_etf_engine as etf_engine_module  # noqa: E402
 from alpaca_etf_engine import AlpacaEtfEngine  # noqa: E402
 from core.cash_park import is_cash_park  # noqa: E402
 from core.stop_policy import stop_exempt  # noqa: E402
-from sleeve_runtime.planner import Order, RebalancePlan, StopAction  # noqa: E402
-from sleeve_runtime.trend_v1b import TrendPlan  # noqa: E402
+from sleeve_runtime.trend_executor import fixed_targets_plan as fixed_plan  # noqa: E402,F401
 
 from fake_alpaca import FakeAlpaca  # noqa: E402
 
@@ -106,30 +105,6 @@ def critical_alarms(bot_id: str) -> list[str]:
     rows = db_exec("""SELECT detail FROM system_degradations
                        WHERE component = %s AND severity = 'critical'""", (bot_id,))
     return [r[0] or "" for r in rows]
-
-
-def fixed_plan(targets: dict[str, int], prices: dict[str, float], stops: dict[str, float],
-               day: date = date(2026, 11, 9)):
-    """plan_fn for execute_rebalance: move each symbol to a fixed share count.
-    Symbols without an entry in ``stops`` are stop-free (FLEET-V1 sleeve 2)."""
-    def plan_fn(*, bars, positions, equity, cash, signal_day, frozen):
-        plan = RebalancePlan()
-        for sym in sorted(set(targets) | set(positions)):
-            cur, tgt = int(positions.get(sym, 0)), int(targets.get(sym, int(positions.get(sym, 0))))
-            if frozen and sym in frozen:
-                plan.skipped[sym] = "frozen"
-                tgt = cur
-            elif tgt < cur:
-                plan.cancel_stops.append(sym)
-                plan.sells.append(Order(sym, "sell", cur - tgt))
-            elif tgt > cur:
-                plan.buys.append(Order(sym, "buy", tgt - cur))
-            if tgt > 0:
-                plan.final_qty[sym] = tgt
-                if sym in stops and sym not in plan.skipped:
-                    plan.stops.append(StopAction(sym, "replace" if tgt == cur else "place", tgt, stops[sym]))
-        return TrendPlan(plan=plan, weights={}, signal_day=day, price_day=day, prices=dict(prices))
-    return plan_fn
 
 
 def protection_report(broker: FakeAlpaca, bot_id: str, report_unprotected=()) -> dict[str, str]:

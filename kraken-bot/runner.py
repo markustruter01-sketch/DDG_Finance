@@ -1187,6 +1187,9 @@ def main() -> int:
             _start_health_server()
             health_server_started = True
 
+    from core.runtime_log import install as keep_logs  # 30-day log copy (published only)
+    keep_logs("runner")
+
     try:
         if not _record_runner_heartbeat(runner_loop_count, "starting"):
             logger.critical(

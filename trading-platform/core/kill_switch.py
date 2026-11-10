@@ -939,6 +939,12 @@ def report(snapshot: dict[str, Any]) -> dict[str, Any]:
             )
         except Exception as exc:
             logger.error(f"Kill switch | would-trip record failed: {type(exc).__name__}")
+    else:
+        try:  # a clean evaluation closes earlier would-trip notes
+            from core.degradation_tracker import mark_resolved
+            mark_resolved("kill_switch", "would_trip", "later report-only evaluation found no trigger")
+        except Exception as exc:
+            logger.error(f"Kill switch | would-trip clear failed: {type(exc).__name__}")
     for trigger in triggers:
         logger.warning(
             "Kill switch report-only trigger | "

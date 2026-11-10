@@ -15,14 +15,19 @@ from typing import Any
 
 from loguru import logger
 
+from analysis.research_ledger import STALE_AFTER_SECONDS as DAILY_RETURN_STALE_SECONDS
 from core.bot_liveness import PORTFOLIO_STALE_THRESHOLDS
+from core.bot_registry import active_bot_ids
 
 
 RESOLVABLE_ERROR_TYPES = (
     "audit_fail_atr_stop_check",
+    "bot_paused_ledger_mismatch",
     "bot_stale_workflow",
     "broker_stop_rejected",
+    "close_failed",
     "close_position_failed",
+    "daily_return_portfolio_stale",
     "entry_empty_response_guard",
     "entry_order_failed",
     "protective_stop_failed",
@@ -42,6 +47,9 @@ STOP_ERROR_TYPES = {
     "stop_placement_failed",
     "stop_sweep_placement_failed",
 }
+
+# Every active bot (Forex included since 11 Nov 2026), from the registry.
+BOTS = list(active_bot_ids())
 
 BOT_ALIASES = {
     "bot2_spy_qqq": "spy_qqq_trend",
@@ -135,8 +143,9 @@ def _read_state() -> dict[str, Any]:
                 """
                 SELECT bot_id, paused, status
                 FROM bots_state
-                WHERE bot_id IN ('oracle', 'spy_qqq_trend', 'jerome_macro')
-                """
+                WHERE bot_id = ANY(%s)
+                """,
+                (BOTS,),
             )
             pauses = {
                 row[0]: {"paused": row[1], "status": row[2]}
@@ -147,8 +156,9 @@ def _read_state() -> dict[str, Any]:
                 """
                 SELECT bot_id, last_updated
                 FROM bot_portfolio
-                WHERE bot_id IN ('oracle', 'spy_qqq_trend', 'jerome_macro')
-                """
+                WHERE bot_id = ANY(%s)
+                """,
+                (BOTS,),
             )
             portfolios = {
                 row[0]: {"last_updated": row[1]}
@@ -159,8 +169,9 @@ def _read_state() -> dict[str, Any]:
                 """
                 SELECT bot_id, last_success_at, status, consecutive_failures
                 FROM bot_cycle_health
-                WHERE bot_id IN ('oracle', 'spy_qqq_trend', 'jerome_macro')
-                """
+                WHERE bot_id = ANY(%s)
+                """,
+                (BOTS,),
             )
             cycles = {
                 row[0]: {
@@ -249,9 +260,29 @@ def resolution_for_event(
             return "stop-coverage invariant PASS and latest reconciliation is clean"
         return None
 
-    if error_type == "reconciliation_mismatch":
+    # 10 Nov 2026: these never cleared, so the "no unresolved alarms" check
+    # stayed red for weeks and a new alarm meant nothing.
+    if error_type in {"reconciliation_mismatch", "bot_paused_ledger_mismatch"}:
         if _reconciliation_is_clean(state):
             return "later broker/ledger reconciliation completed cleanly"
+        return None
+
+    # The engine files a failed close as close_failed (component = bot, or
+    # 'unknown' for a cash-park close such as the 9 Nov SGOV unpark).
+    if error_type == "close_failed" and bot_id is None:
+        if _reconciliation_is_clean(state):
+            return "broker and ledger agree after the failed close"
+        return None
+
+    # Raised when a bot's portfolio row was old at the daily snapshot. It is
+    # over once that bot is writing its portfolio again.
+    if error_type == "daily_return_portfolio_stale":
+        portfolio = state["portfolios"].get(bot_id) if bot_id else None
+        updated = _parse_ts(portfolio.get("last_updated")) if portfolio else None
+        if updated is None:
+            return None
+        if 0 <= (state["checked_at"] - updated).total_seconds() <= DAILY_RETURN_STALE_SECONDS:
+            return "portfolio is being written again"
         return None
 
     if error_type == "entry_empty_response_guard":
@@ -261,7 +292,7 @@ def resolution_for_event(
             return "bot cycle recovered and latest broker/ledger reconciliation is clean"
         return None
 
-    if error_type in {"entry_order_failed", "close_position_failed"}:
+    if error_type in {"entry_order_failed", "close_position_failed", "close_failed"}:
         if _bot_cycle_recovered(state, bot_id):
             return "bot is paused or has a successful current cycle after the failure"
         return None

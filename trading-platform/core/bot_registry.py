@@ -53,6 +53,9 @@ class BotEntry:
     # UI color (Tailwind color name, e.g. "purple", "amber", "cyan")
     color: str = ""
     subtitle: str = ""
+    # One plain line under the name on the Home card: what the bot does and its
+    # limit (Markus 10 Nov 2026, plan item 13b). Update it with the strategy.
+    rule: str = ""
 
 
 # ───────────────────────────────────────────────────────────────────────
@@ -84,6 +87,7 @@ BOT_REGISTRY: dict[str, BotEntry] = {
         cycle_minutes=15,
         color="purple",
         subtitle="FLEET-V1 fleet (headline)",
+        rule="65% S&P + Nasdaq trend (up to 1.5x) · 35% bonds, gold, commodities, dollar trend",
     ),
     "spy_qqq_trend": BotEntry(
         id="spy_qqq_trend",
@@ -103,6 +107,7 @@ BOT_REGISTRY: dict[str, BotEntry] = {
         cycle_minutes=60,
         color="amber",
         subtitle="Stock momentum (experiment)",
+        rule="Top 50 S&P 500 stocks by momentum, monthly · cash when the book's trend is off",
     ),
     "jerome_macro": BotEntry(
         id="jerome_macro",
@@ -122,6 +127,7 @@ BOT_REGISTRY: dict[str, BotEntry] = {
         cycle_minutes=60,
         color="red",
         subtitle="Equity trend core",
+        rule="S&P + Nasdaq trend, up to 1.5x · cash when the trend is off · old BTC/ETH kept",
     ),
 
     "forex_gump": BotEntry(
@@ -159,6 +165,7 @@ BOT_REGISTRY: dict[str, BotEntry] = {
         cycle_minutes=60,
         color="blue",
         subtitle="AI Currency Trading (research)",
+        rule="3-AI vote on 7 US-dollar pairs · 0.5% risk per trade, at most 4 trades",
     ),
 }
 

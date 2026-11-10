@@ -342,6 +342,23 @@ async def fleet_equity():
     return data
 
 
+_holdings_cache: dict = {"data": None, "ts": 0.0}
+
+
+@fleet_equity_router.get("/fleet/holdings")
+async def fleet_holdings():
+    """What each bot holds, as % of its own equity (Home cards; core/holdings.py).
+    Read from bot_portfolio only: no broker calls."""
+    now = time.time()
+    if _holdings_cache["data"] is not None and (now - _holdings_cache["ts"]) < _CACHE_TTL:
+        return _holdings_cache["data"]
+    from core.bot_state import get_all_portfolios
+    from core.holdings import holdings_by_bot
+    data = {"bots": holdings_by_bot(get_all_portfolios(), ACTIVE_BOT_IDS)}
+    _holdings_cache.update(data=data, ts=now)
+    return data
+
+
 @fleet_equity_router.get("/fleet/equity-history")
 async def fleet_equity_history():
     """

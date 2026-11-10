@@ -153,6 +153,20 @@ table.ng .money, table.ng th.money { font-family: var(--ng-mono); text-align: ri
 .flip-stage.on .home-right .engines { min-height: 0; grid-auto-rows: minmax(0, 1fr); }
 .flip-stage.on .home-right .engine { min-height: 0; overflow: hidden; }
 .flip-stage.on .engine .chart.engine-chart { flex: 1 1 0; height: auto; min-height: 24px; }
+/* Short cards (1366x768, 1600x900; sizes are the card content box): what the bot is and what it holds come
+   first; the mini chart, meter and stats row step aside when there is no room
+   (they stay on taller screens, on phones and on Detail). */
+.flip-stage.on .home-right .engine { container-type: size; }
+@container (max-height: 250px) {
+  .home-right .engine .chart.engine-chart, .home-right .engine .meter, .home-right .engine .engine-stats { display: none; }
+}
+@container (max-height: 120px) {
+  .home-right .engine .engine-holds { -webkit-line-clamp: 1; }
+  .home-right .engine > .stat { flex-direction: row; align-items: baseline; gap: 8px; white-space: nowrap; overflow: hidden; }
+  .home-right .engine > .stat .num { font-size: 20px; }
+  .home-right .engine > .stat .small { overflow: hidden; text-overflow: ellipsis; }
+  .home-right .engine > .stat .gain, .home-right .engine > .stat .loss { padding-bottom: 1px; }
+}
 .flip-stage.on .flip-page > .pair.accounts { flex: 1 1 auto; min-height: 0; }
 .flip-stage.on .flip-page > .pair.accounts > .panel { height: auto; min-height: 0; }
 .flip-stage.on .is-away { visibility: hidden; pointer-events: none; }
@@ -261,6 +275,11 @@ table.ng .money, table.ng th.money { font-family: var(--ng-mono); text-align: ri
 .engine { padding: 12px 14px; gap: 6px; }
 .engine .stat .num { font-size: 26px; }
 .engine .engine-stats { padding-top: 6px; }
+/* Holds line (plan item 13b): at most two lines, full text on hover. */
+.engine-holds { line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+/* Stacked pages (phones, small windows): room to read the rule and holds in full. */
+.flip-stage:not(.on) .engine-holds { display: block; }
+.flip-stage:not(.on) .engine-name .clamp { white-space: normal; }
 .engine-invested { display: flex; justify-content: space-between; align-items: baseline; }
 .engine-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding-top: 8px; border-top: 1px solid var(--ng-hairline); }
 .fleet-account { min-height: 0; overflow: auto; gap: 8px; }

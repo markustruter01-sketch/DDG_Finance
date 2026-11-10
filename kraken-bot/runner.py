@@ -1385,6 +1385,12 @@ def main() -> int:
                 logger.critical(
                     f"Runner heartbeat | loop write failed at loop_count={runner_loop_count}"
                 )
+            else:
+                try:  # outside monitor (core/outside_heartbeat.py): never blocks, never raises
+                    from core.outside_heartbeat import ping as _outside_ping
+                    _outside_ping("RUNNER")
+                except Exception:
+                    pass
             _shutdown_event.wait(_RUNNER_LOOP_INTERVAL_SECONDS)
     except KeyboardInterrupt:
         _shutdown_event.set()

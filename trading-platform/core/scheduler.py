@@ -611,6 +611,8 @@ async def _standing_invariants_job() -> None:
         from core.invariants import format_report, run_all_invariants
 
         report = await asyncio.to_thread(run_all_invariants)
+        from core.outside_heartbeat import ping as outside_ping
+        outside_ping("API")   # the API and its scheduler are alive (monitor outside Replit)
         log_method = logger.info if report["overall"] == "PASS" else logger.warning
         for line in format_report(report).splitlines():
             log_method(f"Scheduler | standing_invariants | {line}")

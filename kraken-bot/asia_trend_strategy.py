@@ -511,6 +511,7 @@ def run_asia_cycle(profile: dict, db_id: int) -> None:
             secret_key = profile.get("ALPACA_SECRET_KEY", ""),
             base_url   = profile.get("ALPACA_BASE_URL",
                                      "https://paper-api.alpaca.markets"),
+            bot_ids    = (BOT_ID,),
         )
     except Exception as exc:
         logger.error(f"Asia | Alpaca connection failed: {exc}")

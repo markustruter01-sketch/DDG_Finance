@@ -77,12 +77,19 @@ class _FakeCursor:
                 f"for {parameter_count} parameters"
             )
         self.executed.append((normalized, params))
+        # The repairs are scoped to the engine's own account: bot_id = ANY(%s).
+        owned = set(params[-1]) if params and "bot_id = any(%s)" in normalized else None
+
+        def mine(row):
+            return owned is None or row["bot_id"] in owned
+
         if normalized.startswith("select id, bot_id, symbol, status"):
             self._result = [
                 (row["id"], row["bot_id"], row["symbol"], row["status"])
                 for row in self.rows
                 if row["current_qty"] is None
                 and row["status"] in {"open", "closed"}
+                and mine(row)
             ]
             self.rowcount = len(self._result)
             return
@@ -100,6 +107,7 @@ class _FakeCursor:
                 if row["status"] == "open"
                 and (row.get("scaled_out_tp1") or row.get("scaled_out_tp2"))
                 and row["current_qty"] == row.get("qty")
+                and mine(row)
             ]
             self.rowcount = len(self._result)
             return
@@ -117,7 +125,7 @@ class _FakeCursor:
         if "set current_qty = 0" in normalized:
             changed = 0
             for row in self.rows:
-                if row["status"] == "closed" and row["current_qty"] != 0:
+                if row["status"] == "closed" and row["current_qty"] != 0 and mine(row):
                     row["current_qty"] = 0
                     changed += 1
             self.rowcount = changed
@@ -244,6 +252,7 @@ def _engine(monkeypatch, rows, api, degradation_records=None, trade_row=None):
         )
     engine = object.__new__(AlpacaEtfEngine)
     engine.api = api
+    engine.bot_ids = ("oracle",)        # the account these test rows belong to
     return engine, connection
 
 

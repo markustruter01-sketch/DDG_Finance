@@ -216,6 +216,11 @@ def _status(order) -> str:
     return str(getattr(order, "status", "")).lower().rsplit(".", 1)[-1]
 
 
+# Table set-up and legacy repairs run once per process (see _ensure_schema).
+_SCHEMA_LOCK = threading.Lock()
+_SCHEMA_READY = False
+
+
 class AlpacaEtfEngine:
     """
     Handles all Alpaca interactions for ETF momentum bots.
@@ -226,15 +231,34 @@ class AlpacaEtfEngine:
     """
 
     def __init__(self, api_key: str, secret_key: str,
-                 base_url: str = "https://paper-api.alpaca.markets"):
+                 base_url: str = "https://paper-api.alpaca.markets",
+                 *, bot_ids: tuple[str, ...] = ()):
+        """``bot_ids``: the ledger ids that belong to THIS Alpaca account. Only
+        their rows are repaired against this account's broker positions."""
         import alpaca_trade_api as tradeapi
         self.api = tradeapi.REST(api_key, secret_key, base_url=base_url)
+        self.bot_ids = tuple(bot_ids)
         logger.info("AlpacaEtfEngine | Connected to Alpaca paper account")
         self._ensure_schema()
 
     def _ensure_schema(self) -> None:
-        """Create alpaca_etf_positions if it doesn't exist. Idempotent — safe to call on every startup."""
+        """Table set-up and one-off legacy repairs: once per process.
+
+        11 Nov 2026: an engine is built every cycle for every account, and the
+        ALTER TABLE below takes an exclusive lock on the whole ledger table, so
+        two bots cycling at once deadlocked (22:14 UTC). It now runs once per
+        process. The per-account current_qty repair runs every time, scoped to
+        this account's own rows.
+        """
+        global _SCHEMA_READY
+        with _SCHEMA_LOCK:
+            if not _SCHEMA_READY:
+                _SCHEMA_READY = self._ensure_schema_once()
+        self._backfill_current_qty()
+
+    def _ensure_schema_once(self) -> bool:
         _ensure_tp()
+        ok = False
         try:
             from db.postgres import get_conn, is_pg_available
             if not is_pg_available():
@@ -292,6 +316,7 @@ class AlpacaEtfEngine:
                     """)
                 conn.commit()
             logger.info("EtfEngine | alpaca_etf_positions schema verified")
+            ok = True
         except Exception as exc:
             logger.error(f"EtfEngine | _ensure_schema failed: {exc}")
 
@@ -317,11 +342,19 @@ class AlpacaEtfEngine:
                 logger.info(f"EtfEngine | TP backfill: updated {rows} row(s) with missing tp1/tp2 prices")
         except Exception as exc:
             logger.warning(f"EtfEngine | TP backfill failed (non-fatal): {exc}")
-
-        self._backfill_current_qty()
+        return ok
 
     def _backfill_current_qty(self) -> None:
-        """Repair safe current_qty mismatches from closed and scaled-out state."""
+        """Repair safe current_qty mismatches from closed and scaled-out state,
+        for this account's own ledger rows only (``self.bot_ids``).
+
+        11 Nov 2026: this used to read every bot's rows and compare them with
+        THIS account's broker positions, so one account could have written
+        another account's quantity (SPY is held by two accounts). No ids given
+        = nothing to repair."""
+        bot_ids = list(getattr(self, "bot_ids", ()) or ())
+        if not bot_ids:
+            return
         _ensure_tp()
         closed_updated = 0
         open_updated = 0
@@ -342,8 +375,10 @@ class AlpacaEtfEngine:
                         FROM alpaca_etf_positions
                         WHERE current_qty IS NULL
                           AND status IN ('open', 'closed')
+                          AND bot_id = ANY(%s)
                         ORDER BY id
-                        """
+                        """,
+                        (bot_ids,),
                     )
                     pending_rows = cur.fetchall()
                     open_rows = [
@@ -358,8 +393,10 @@ class AlpacaEtfEngine:
                         WHERE status = 'open'
                           AND (scaled_out_tp1 IS TRUE OR scaled_out_tp2 IS TRUE)
                           AND current_qty = qty
+                          AND bot_id = ANY(%s)
                         ORDER BY id
-                        """
+                        """,
+                        (bot_ids,),
                     )
                     scaled_out_rows = cur.fetchall()
 
@@ -369,7 +406,9 @@ class AlpacaEtfEngine:
                         SET current_qty = 0
                         WHERE status = 'closed'
                           AND current_qty IS DISTINCT FROM 0
-                        """
+                          AND bot_id = ANY(%s)
+                        """,
+                        (bot_ids,),
                     )
                     closed_updated = cur.rowcount
 

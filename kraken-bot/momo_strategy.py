@@ -47,6 +47,7 @@ def run_momo_account_cycle(profile: dict[str, Any] | None = None, db_id: int | N
         api_key=profile.get("ALPACA_API_KEY") or os.environ.get("ALPACA_BB_API_KEY", ""),
         secret_key=profile.get("ALPACA_SECRET_KEY") or os.environ.get("ALPACA_BB_SECRET_KEY", ""),
         base_url=profile.get("ALPACA_BASE_URL", ALPACA_BASE_URL),
+        bot_ids=(BOT_ID,),
     )
     live = engine.get_positions()
     engine.reconcile_protective_stops(BOT_ID, engine.get_db_positions(BOT_ID))

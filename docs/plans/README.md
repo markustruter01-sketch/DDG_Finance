@@ -31,7 +31,7 @@ In-house algorithmic trading platform (paper only). 3 Alpaca paper accounts (cap
 4. Clean-up: single failed read raising alarm rows (needs 2 in a row); PASS lines logged at WARNING; `buy_market` client ids not bot-tagged; dead `bots_state` rows (bot2_spy_qqq, depeg_hunter, forex_gump, kraken_trend); retire the old Navigator forex engine routes (they query missing tables `forex_trades`, `forex_portfolio`).
 5. Decisions with Markus: trading-API secret compiled into the dashboard bundle (K1); `ENFORCE_DRAWDOWN_LIMITS` (record-only today).
 6. Strategy lock registrations (plan item 17) before 21–22 Nov. Note for Bot 3: the momentum list is heavily one theme (memory/storage/chip equipment) — consider a sector cap.
-7. Public Finance page on ddg.limited (built in the DDG-Control repo; this platform stays private; data flows out only through the existing hourly push to `/api/inbound/fleet`). Open question for Markus: public record from 23 Nov (labelled pre-launch) or 1 Jan 2027.
+7. Public Finance page on ddg.limited (built in the DDG-Control repo, see its docs/plans/README.md; this platform stays private; data flows out only through the existing hourly push to `/api/inbound/fleet`). Open question for Markus: public record from 23 Nov (labelled pre-launch) or 1 Jan 2027.
 
 ## How to work (Markus's rules)
 - Short, simple words. Numbered [ME]/[REPLIT] steps placed right above the copy block they belong to. 🔴 for anything risky, costly or irreversible.

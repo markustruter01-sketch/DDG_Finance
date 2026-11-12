@@ -4,8 +4,9 @@ from __future__ import annotations
 import json
 import math
 import os
-from datetime import datetime, timezone
+from datetime import date, datetime, time as dtime, timedelta, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import httpx
 from loguru import logger
@@ -465,6 +466,17 @@ def build_detail() -> dict[str, Any]:
             }
         )
     positions.sort(key=lambda position: (position["bot_id"], position["symbol"]))
+    # Public page extras: never let them cost the rest of the detail.
+    try:
+        holdings = public_holdings(bot_ids)
+    except Exception as exc:
+        logger.warning(f"ddg-push holdings-skipped {type(exc).__name__}")
+        holdings = []
+    try:
+        benchmark = sp500_benchmark()
+    except Exception as exc:
+        logger.warning(f"ddg-push benchmark-skipped {type(exc).__name__}")
+        benchmark = None
     return {
         "bots_meta": bots_meta,
         "positions": positions[:200],
@@ -473,6 +485,69 @@ def build_detail() -> dict[str, Any]:
         "reconciliation": reconciliation,
         "runner": runner,
         "version": None,
+        "holdings": holdings,
+        "benchmark": benchmark,
+    }
+
+
+# Public DDG Finance page (ddg.limited/finance, DDG-Control lib/public-finance.ts):
+# the record starts 1 Jan 2027 (Brisbane); the S&P 500 is measured from the last
+# close before it. DDG-Control ignores a benchmark with any other base date.
+PUBLIC_RECORD_BASE_DATE = date(2026, 12, 31)
+_NEW_YORK = ZoneInfo("America/New_York")
+
+
+def public_holdings(bot_ids: list[str]) -> list[dict[str, Any]]:
+    """Each bot's holdings by group as % of its own equity (core/holdings.py), flattened."""
+    from core.bot_state import get_all_portfolios
+    from core.holdings import holdings_by_bot
+
+    out: list[dict[str, Any]] = []
+    for bot_id, held in sorted(holdings_by_bot(get_all_portfolios(), set(bot_ids)).items()):
+        for item in (held or {}).get("items", []):
+            pct = item.get("pct")
+            if isinstance(pct, (int, float)) and math.isfinite(pct):
+                out.append({"bot_id": bot_id, "label": str(item.get("label"))[:40], "pct": float(pct)})
+    return out[:150]
+
+
+def _spy_bars(start: date, end: datetime) -> list[dict[str, Any]]:
+    """SPY daily bars, split/dividend-adjusted (total return). SIP needs an end at least
+    ~20 minutes old on this data plan; IEX if SIP is refused. Read-only."""
+    import alpaca_trade_api as tradeapi
+
+    api = tradeapi.REST(os.environ.get("ALPACA_API_KEY", ""), os.environ.get("ALPACA_SECRET_KEY", ""),
+                        base_url="https://paper-api.alpaca.markets")
+    last_err: Exception | None = None
+    for feed in ("sip", "iex"):
+        try:
+            raw = api.get_bars(["SPY"], "1Day", start=start.isoformat(), end=end.isoformat(),
+                               adjustment="all", feed=feed)
+            return sorted(({"day": date.fromisoformat(b["t"][:10]), "close": float(b["c"])} for b in raw._raw),
+                          key=lambda r: r["day"])
+        except Exception as exc:
+            last_err = exc
+    raise RuntimeError(f"SPY bars unavailable ({type(last_err).__name__})")
+
+
+def sp500_benchmark(now: datetime | None = None, fetch=None) -> dict[str, Any] | None:
+    """S&P 500 (SPY) total return from the base close to the last completed session.
+    None before the record has a session, or if the base close is missing."""
+    now = now or datetime.now(timezone.utc)
+    ny = now.astimezone(_NEW_YORK)
+    if ny.date() <= PUBLIC_RECORD_BASE_DATE:
+        return None
+    rows = (fetch or _spy_bars)(PUBLIC_RECORD_BASE_DATE, now - timedelta(minutes=20))
+    if ny.time() < dtime(16, 15):  # today's bar is not a finished session yet
+        rows = [r for r in rows if r["day"] != ny.date()]
+    if len(rows) < 2 or rows[0]["day"] != PUBLIC_RECORD_BASE_DATE or rows[0]["close"] <= 0:
+        return None
+    last = rows[-1]
+    return {
+        "symbol": "SPY",
+        "base_date": PUBLIC_RECORD_BASE_DATE.isoformat(),
+        "as_of": last["day"].isoformat(),
+        "total_return_pct": round((last["close"] / rows[0]["close"] - 1) * 100, 4),
     }
 
 
@@ -492,6 +567,7 @@ def _fit_detail_limits(detail: dict[str, Any]) -> dict[str, Any]:
         "status": 30,
         "bot_id": 64,
         "symbol": 20,
+        "label": 40,
     }
     list_limits = {
         "bots_meta": 20,
@@ -500,6 +576,7 @@ def _fit_detail_limits(detail: dict[str, Any]) -> dict[str, Any]:
         "incidents": 50,
         "flags": 50,
         "triggers": 50,
+        "holdings": 150,
     }
 
     def fit_value(value: Any, field: str | None = None) -> Any:

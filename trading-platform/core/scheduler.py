@@ -603,6 +603,13 @@ async def _scheduled_reconciliation() -> None:
         logger.critical(f"Scheduler | scheduled_reconciliation FAILED: {exc}")
 
 
+# A check that could not run (UNKNOWN, e.g. one broker read timed out) raises an
+# alarm only when it is still UNKNOWN on the next run, 15 minutes later. A FAIL
+# alarms at once. Kept in memory: a restart starts the count again.
+UNKNOWN_RUNS_BEFORE_ALARM = 2
+_unknown_runs: dict[str, int] = {}
+
+
 async def _standing_invariants_job() -> None:
     """Run read-only invariants and alert failures through the shared policy."""
     logger.info("Scheduler | JOB STARTING: standing_invariants")
@@ -613,12 +620,17 @@ async def _standing_invariants_job() -> None:
         report = await asyncio.to_thread(run_all_invariants)
         from core.outside_heartbeat import ping as outside_ping
         outside_ping("API")   # the API and its scheduler are alive (monitor outside Replit)
-        log_method = logger.info if report["overall"] == "PASS" else logger.warning
         for line in format_report(report).splitlines():
-            log_method(f"Scheduler | standing_invariants | {line}")
+            logger.info(f"Scheduler | standing_invariants | {line}")
         for result in report["results"]:
             name = str(result["name"])
             status = str(result["status"])
+            if status in {"FAIL", "UNKNOWN"}:
+                # Only the failing checks are warnings, not every line of the report.
+                logger.warning(f"Scheduler | standing_invariants | {status} {name}: {result['message']}")
+            _unknown_runs[name] = _unknown_runs.get(name, 0) + 1 if status == "UNKNOWN" else 0
+            if status == "UNKNOWN" and _unknown_runs[name] < UNKNOWN_RUNS_BEFORE_ALARM:
+                continue  # one blip: wait for the next run before alarming (or resolving)
             if status in {"FAIL", "UNKNOWN"}:
                 # A failing invariant keeps one open row (renewed daily) instead
                 # of a new row every 15 minutes; it is resolved when it passes.

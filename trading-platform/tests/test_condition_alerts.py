@@ -97,7 +97,8 @@ def test_failing_invariant_with_an_open_row_is_not_recorded_again(monkeypatch):
             "counts": {"PASS": 0, "DRIFT": 0, "FAIL": 1, "UNKNOWN": 0},
             "checked_at": "2026-10-31T00:00:00+00:00",
             "results": [{"name": "zero_unresolved_high_severity_degradations", "status": "FAIL",
-                         "actual": {}, "expected": {}, "difference": {}, "message": "3 remain."}],
+                         "actual": {}, "expected": {}, "difference": {}, "message": "3 remain.",
+                         "threshold_source": "test"}],
         },
     )
     monkeypatch.setattr("core.degradation_tracker.record_degradation", lambda **kwargs: recorded.append(kwargs))
@@ -107,3 +108,60 @@ def test_failing_invariant_with_an_open_row_is_not_recorded_again(monkeypatch):
     asyncio.run(scheduler._standing_invariants_job())
 
     assert recorded == []
+
+def _unknown_report(name="strategy_positions_have_covering_stops"):
+    return {
+        "overall": "UNKNOWN",
+        "counts": {"PASS": 0, "DRIFT": 0, "FAIL": 0, "UNKNOWN": 1},
+        "checked_at": "2026-11-10T21:04:00+00:00",
+        "results": [{"name": name, "status": "UNKNOWN", "actual": {}, "expected": {}, "difference": {},
+                     "message": "Cannot verify stop coverage because a required read was unavailable.",
+                     "threshold_source": "test"}],
+    }
+
+
+def _patch_tracker(monkeypatch, recorded, resolved):
+    monkeypatch.setattr(scheduler, "_unknown_runs", {})
+    monkeypatch.setattr("core.degradation_tracker.record_degradation", lambda **kwargs: recorded.append(kwargs))
+    monkeypatch.setattr("core.degradation_tracker.mark_resolved", lambda *args, **kwargs: resolved.append(args) or 0)
+    monkeypatch.setattr("core.degradation_tracker.has_recent_open", lambda *args, **kwargs: False)
+
+
+def test_one_unknown_run_is_a_blip_two_in_a_row_alarm(monkeypatch):
+    """10 Nov 21:04 UTC: one unavailable broker read raised two error rows at once."""
+    recorded, resolved = [], []
+    _patch_tracker(monkeypatch, recorded, resolved)
+    monkeypatch.setattr("core.invariants.run_all_invariants", _unknown_report)
+
+    asyncio.run(scheduler._standing_invariants_job())
+    assert recorded == [] and resolved == []  # first UNKNOWN: no alarm, nothing resolved
+
+    asyncio.run(scheduler._standing_invariants_job())
+    assert [r["error_type"] for r in recorded] == ["strategy_positions_have_covering_stops"]
+    assert recorded[0]["severity"] == "error"
+
+
+def test_unknown_count_restarts_after_a_pass(monkeypatch):
+    recorded, resolved = [], []
+    _patch_tracker(monkeypatch, recorded, resolved)
+    reports = iter([
+        _unknown_report(),
+        {**_unknown_report(), "overall": "PASS", "results": [{**_unknown_report()["results"][0], "status": "PASS"}]},
+        _unknown_report(),
+    ])
+    monkeypatch.setattr("core.invariants.run_all_invariants", lambda: next(reports))
+
+    for _ in range(3):
+        asyncio.run(scheduler._standing_invariants_job())
+    assert recorded == []  # UNKNOWN, PASS, UNKNOWN: never two in a row
+
+
+def test_fail_still_alarms_on_the_first_run(monkeypatch):
+    recorded, resolved = [], []
+    _patch_tracker(monkeypatch, recorded, resolved)
+    fail = _unknown_report()
+    fail["results"][0]["status"] = "FAIL"
+    monkeypatch.setattr("core.invariants.run_all_invariants", lambda: fail)
+
+    asyncio.run(scheduler._standing_invariants_job())
+    assert [r["severity"] for r in recorded] == ["critical"]

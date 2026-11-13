@@ -31,6 +31,11 @@ packages = ["glibcLocales", "libxcrypt", "postgresql_17"]
 
 [userenv.shared]
 PER_BOT_VAULT_ENABLED = "true"
+# Kill switch: ALERT ONLY (Markus 14 Nov 2026). Paper trading; every automatic trip so far
+# froze all four bots for a data problem (7 Nov Forex records, 9 Nov stop re-arm, 13 Nov
+# OANDA answering 401/504 on and off). It still checks every 5 minutes and records each
+# "would trip" as a warning; it never pauses bots. Re-design before any real money.
+KILL_SWITCH_ARMED = "false"
 
 [userenv.development]
 DDG_FLEET_PUSH_URL = "https://ddg-control.replit.app/api/inbound/fleet"

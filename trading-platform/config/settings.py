@@ -40,7 +40,8 @@ class Settings(BaseSettings):
         default=True,
         description=(
             "Armed by default (FLEET-V1-LIVE-SPEC.md section 4). Enforcement still needs a "
-            "published deployment; the owner disarms by setting KILL_SWITCH_ARMED=false"
+            "published deployment; the owner disarms by setting KILL_SWITCH_ARMED=false "
+            "(done 14 Nov 2026 in .replit [userenv.shared]: alert only)"
         ),
     )
     total_capital_slots: int = Field(

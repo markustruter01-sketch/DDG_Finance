@@ -87,16 +87,19 @@ def _num(value: Any, what: str) -> float:
 def share_snapshot(positions: list[dict[str, Any]], cash: Any, closes: dict[str, float],
                    owner_kept: frozenset[str] = frozenset()) -> dict[str, Any]:
     """An Alpaca account at a session close, without the owner-kept lines:
-    weights of equity, equity (cash + holdings at the close) and share counts."""
+    weights of equity, equity (cash + holdings at the close), share counts, and
+    the owner-kept quantities (a change there is money moving, not strategy)."""
     if not isinstance(positions, list):
         raise SnapshotError("positions are not a list")
     money = _num(cash, "cash")
     qty: dict[str, float] = {}
+    kept: dict[str, float] = {}
     for p in positions:
         sym = canonical_symbol(p.get("symbol"))
         if not sym:
             raise SnapshotError("a position has no symbol")
         if sym in owner_kept:
+            kept[sym] = round(kept.get(sym, 0.0) + _num(p.get("qty"), f"{sym} qty"), 9)
             continue
         q = _num(p.get("qty"), f"{sym} qty")
         if str(p.get("side") or "").lower() == "short":
@@ -111,7 +114,8 @@ def share_snapshot(positions: list[dict[str, Any]], cash: Any, closes: dict[str,
     if equity <= 0:
         raise SnapshotError("equity without the owner-kept lines is not positive")
     return {"weights": {s: v / equity for s, v in sorted(values.items())},
-            "equity": equity, "qty": {s: round(q, 6) for s, q in sorted(qty.items())}}
+            "equity": equity, "qty": {s: round(q, 6) for s, q in sorted(qty.items())},
+            "kept": dict(sorted(kept.items()))}
 
 
 def synthetic(pair: str) -> str:
@@ -292,13 +296,24 @@ def equity_at(curve: list[tuple[Any, float, float]], at: datetime, bars_kind: st
     return best
 
 
-def mirror_gaps(points: list[tuple[date, float | None, float | None]]) -> dict[date, float]:
+def mirror_gaps(points: list[tuple[date, float | None, float | None]],
+                flow_days: frozenset[date] = frozenset()) -> dict[date, float]:
     """Cumulative return gap, mirror minus real account, in percentage points.
 
     Measured from the first close after the start: the mirror starts in cash
-    and buys at the next open, so the real account's first night is not in it."""
+    and buys at the next open, so the real account's first night is not in it.
+    Returns are chained day to day; a flow day (money moved into or out of the
+    strategy's part of the account, e.g. an owner-kept holding was sold and its
+    cash landed there) is left out for both sides, because that day's real
+    return is not the strategy's."""
     pts = sorted(p for p in points if p[1] and p[2])
     if len(pts) < 2:
         return {}
-    _, m0, r0 = pts[1]
-    return {d: round((m / m0 - r / r0) * 100, 4) for d, m, r in pts[1:]}
+    out = {pts[1][0]: 0.0}
+    m_cum = r_cum = 1.0
+    for (_, m0, r0), (day, m, r) in zip(pts[1:], pts[2:]):
+        if day not in flow_days:
+            m_cum *= m / m0
+            r_cum *= r / r0
+        out[day] = round((m_cum - r_cum) * 100, 4)
+    return out

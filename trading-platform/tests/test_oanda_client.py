@@ -185,11 +185,12 @@ def test_token_never_appears_in_transport_errors_or_logs(credentials, caplog) ->
     assert TEST_TOKEN not in caplog.text
 
 
-def test_token_never_appears_in_http_errors_or_logs(credentials, caplog) -> None:
+def test_token_never_appears_in_http_errors_or_logs(credentials, caplog, monkeypatch) -> None:
     caplog.set_level(logging.DEBUG)
-    client = OandaClient(
+    monkeypatch.setattr("core.oanda_client.RETRY_PAUSE_SECONDS", 0)
+    client = OandaClient(                      # a 401 is retried once: both answers carry the token
         http_client=FakeHTTPClient(
-            [FakeResponse({"errorMessage": TEST_TOKEN}, status_code=401)]
+            [FakeResponse({"errorMessage": TEST_TOKEN}, status_code=401)] * 2
         )
     )
 

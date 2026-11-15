@@ -34,7 +34,8 @@ CHECK_NAMES = {
 
 
 def summarize(report: dict[str, Any], *, pause_states: dict[str, bool] | None,
-              unresolved: list[dict[str, Any]] | None, kill_switch_tripped: bool) -> tuple[bool, list[str]]:
+              unresolved: list[dict[str, Any]] | None, kill_switch_tripped: bool,
+              oanda_retries: tuple[int, int] | None = None) -> tuple[bool, list[str]]:
     """Pure: (all_good, lines) from an invariants report and current state.
     DRIFT is inside its allowed band: shown as a note, never fails the verdict."""
     problems: list[str] = []
@@ -56,8 +57,30 @@ def summarize(report: dict[str, Any], *, pause_states: dict[str, bool] | None,
                           and e.get("error_type") != "zero_unresolved_high_severity_degradations")
     if open_alarms:
         problems.append("Open alarms: " + ", ".join(f"{t} ×{n}" for t, n in open_alarms.most_common(6)))
+    if oanda_retries and sum(oanda_retries):
+        recovered, failed = oanda_retries
+        notes.append(f"ℹ️ OANDA answered 401 {recovered + failed}× in 24 h: {recovered} fixed by one retry, "
+                     f"{failed} failed again")
     passed = sum(1 for r in checks if r["status"] in {"PASS", "DRIFT"})
     return (not problems), [f"{passed}/{len(checks)} safety checks pass"] + problems + notes
+
+
+def oanda_retry_counts(get_conn=None) -> tuple[int, int] | None:
+    """(recovered, failed again) OANDA 401 retries in the last 24 h, from runtime_log."""
+    from core.oanda_client import RETRY_LOG_PREFIX
+    try:
+        if get_conn is None:
+            from db.postgres import get_conn
+        with get_conn() as conn, conn.cursor() as cur:
+            cur.execute(
+                """SELECT count(*) FILTER (WHERE message LIKE %s), count(*) FILTER (WHERE message LIKE %s)
+                   FROM runtime_log WHERE ts > now() - interval '24 hours'""",
+                (f"{RETRY_LOG_PREFIX} | recovered%", f"{RETRY_LOG_PREFIX} | failed again%"))
+            recovered, failed = cur.fetchone()
+        return int(recovered), int(failed)
+    except Exception as exc:                          # a note only: never block the health message
+        logger.debug(f"Daily health | OANDA retry count skipped: {type(exc).__name__}")
+        return None
 
 
 def run_and_send() -> dict[str, Any]:
@@ -69,7 +92,7 @@ def run_and_send() -> dict[str, Any]:
     report = run_all_invariants(inputs)
     ok, lines = summarize(report, pause_states=inputs.pause_states,
                           unresolved=inputs.unresolved_degradations,
-                          kill_switch_tripped=latch_tripped())
+                          kill_switch_tripped=latch_tripped(), oanda_retries=oanda_retry_counts())
     title = "DDG Finance · daily health: ✅ All good" if ok else "DDG Finance · daily health: ⚠️ Needs a look"
     _send_async({"embeds": [_embed(title, "\n".join(lines), COLOR_GREEN if ok else COLOR_AMBER)]},
                 alert_type="daily_health", title=title)

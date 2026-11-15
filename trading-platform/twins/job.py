@@ -218,7 +218,7 @@ def share_close(get_conn, now: datetime, bars: dict[str, list[dict[str, Any]]], 
                           inputs_ref="bot_portfolio", same=lambda last: last["inputs"].get("qty") == snap["qty"],
                           reason="real holdings at the close")
         store.record_ref(get_conn, mirror_id, session, snap["equity"], step_at,
-                         {"cash": float(port["cash"]), "qty": snap["qty"]})
+                         {"cash": float(port["cash"]), "qty": snap["qty"], "kept": snap["kept"]})
         names = ((states.get(bot_id) or {}).get("metadata") or {}).get(config.MOMO_STATE_KEY, {}).get("names")
         for kind in ("baseline_full", "baseline_spy"):
             w = config.baseline_weights(bot_id, kind, names)
@@ -347,6 +347,20 @@ def replay_twin(get_conn, acct: dict[str, Any], bars: dict[str, list[dict[str, A
                          stop_pct=cfg.get("stop_pct"))
 
 
+def flow_days(rows: list[dict[str, Any]]) -> frozenset:
+    """Days on which an owner-kept holding changed (sold by its stop, say): the
+    cash it brought is money arriving, not the strategy's return."""
+    days, prev = set(), None
+    for r in rows:
+        kept = (r.get("ref_holdings") or {}).get("kept")
+        if kept is None:
+            continue
+        if prev is not None and kept != prev:
+            days.add(r["day"])
+        prev = kept
+    return frozenset(days)
+
+
 def check_mirror(get_conn, acct, result: engine.Replay) -> float | None:
     """Store the mirror's gap to the real account per day; return the latest.
 
@@ -356,12 +370,13 @@ def check_mirror(get_conn, acct, result: engine.Replay) -> float | None:
     Known and temporary: the mirror books a dividend on the ex-date, the real
     account on the pay date, so the gap opens by weight x dividend in between."""
     rows = store.equity_rows(get_conn, acct["twin_id"])
+    flows = flow_days(rows)
     if acct["bars"] == DAILY:
         pairs = [(r["day"], r["equity"], r["ref_equity"]) for r in rows]
     else:
         pairs = [(r["day"], engine.equity_at(result.curve, r["ref_at"], HOURLY, acct["start_equity"])
                   if r["ref_at"] else None, r["ref_equity"]) for r in rows]
-    gaps = engine.mirror_gaps(pairs)
+    gaps = engine.mirror_gaps(pairs, flows)
     store.set_gaps(get_conn, acct["twin_id"], gaps)
     return gaps[max(gaps)] if gaps else None
 

@@ -935,6 +935,36 @@ def collect_live_snapshot() -> dict[str, Any]:
     }
 
 
+def _mismatch_key(component: str, bot_id: str | None, detail: Any) -> tuple | None:
+    """What a mismatch alarm is about, without its changing numbers: the
+    component, the bot, and each flag's kind and symbol (or check)."""
+    try:
+        flags = json.loads(detail) if isinstance(detail, str) else detail
+        parts = frozenset(
+            (str(f.get("kind") or f.get("trigger") or ""),
+             canonical_symbol(f["symbol"]) if f.get("symbol") else str(f.get("check") or ""))
+            for f in flags if isinstance(f, dict))
+    except Exception:
+        return None             # unreadable: never matches, so the alarm is recorded
+    return (component, bot_id, parts)
+
+
+def _open_mismatch_keys() -> set[tuple]:
+    """Keys of the reconciliation alarms still open. On any read error: none,
+    so every alarm is recorded (fail loud)."""
+    try:
+        from db.postgres import get_conn
+        with get_conn() as conn, conn.cursor() as cur:
+            cur.execute("""SELECT component, bot_id, detail FROM system_degradations
+                           WHERE error_type = 'reconciliation_mismatch' AND resolved_at IS NULL""")
+            keys = {_mismatch_key(c, b, d) for c, b, d in cur.fetchall()}
+    except Exception as exc:
+        logger.warning(f"Reconciliation | open-alarm read failed, recording every alarm: {type(exc).__name__}")
+        return set()
+    keys.discard(None)
+    return keys
+
+
 def reconcile(
     report_only: bool = False,
     cycle_id: str | None = None,
@@ -1009,7 +1039,10 @@ def reconcile(
     if not clean:
         from core.degradation_tracker import record_degradation
 
+        already_open = _open_mismatch_keys()
         for alert in would_alert:
+            if _mismatch_key(alert["component"], alert["bot_id"], alert["detail"]) in already_open:
+                continue            # the same mismatch is already an open alarm: one row, not one per run
             record_degradation(
                 component=alert["component"],
                 severity=alert["severity"],

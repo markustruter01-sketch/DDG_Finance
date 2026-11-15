@@ -58,6 +58,13 @@ def _default_resolve(error_type: str) -> None:
         mark_resolved(COMPONENT, error_type, reason="twins: condition cleared")
 
 
+def _ensure_schema(get_conn) -> None:
+    """Table set-up once per process (spec: at startup), not on every run."""
+    if not getattr(get_conn, "_twins_schema_ready", False):
+        store.ensure_schema(get_conn)
+        get_conn._twins_schema_ready = True
+
+
 def _ny(now: datetime) -> datetime:
     return now.astimezone(NEW_YORK)
 
@@ -340,23 +347,17 @@ def replay_twin(get_conn, acct: dict[str, Any], bars: dict[str, list[dict[str, A
                          stop_pct=cfg.get("stop_pct"))
 
 
-def _ref_value(row, bars) -> float | None:
-    """The real account at that close, valued with the same bars as the mirror
-    (so a later revision of a bar moves both alike); the value as read otherwise."""
-    held = row.get("ref_holdings")
-    if not held:
-        return row["ref_equity"]
-    closes = engine.closes_on(bars, row["day"])
-    if any(s not in closes for s in held["qty"]):
-        return row["ref_equity"]
-    return held["cash"] + sum(q * closes[s] for s, q in held["qty"].items())
+def check_mirror(get_conn, acct, result: engine.Replay) -> float | None:
+    """Store the mirror's gap to the real account per day; return the latest.
 
-
-def check_mirror(get_conn, acct, result: engine.Replay, bars) -> float | None:
-    """Store the mirror's gap to the real account per day; return the latest."""
+    The real side is the value recorded on the day (raw closes), never a later
+    re-valuation: dividend-adjusted bars lower past closes, and the dividend
+    cash then arrives as well, so re-valuing would count each dividend twice.
+    Known and temporary: the mirror books a dividend on the ex-date, the real
+    account on the pay date, so the gap opens by weight x dividend in between."""
     rows = store.equity_rows(get_conn, acct["twin_id"])
     if acct["bars"] == DAILY:
-        pairs = [(r["day"], r["equity"], _ref_value(r, bars)) for r in rows]
+        pairs = [(r["day"], r["equity"], r["ref_equity"]) for r in rows]
     else:
         pairs = [(r["day"], engine.equity_at(result.curve, r["ref_at"], HOURLY, acct["start_equity"])
                   if r["ref_at"] else None, r["ref_equity"]) for r in rows]
@@ -372,7 +373,7 @@ def nightly(now: datetime | None = None, *, get_conn=None, fetch_daily=None, fet
     get_conn = get_conn or _default_get_conn()
     report: dict[str, Any] = {"at": now.isoformat()}
     try:
-        store.ensure_schema(get_conn)
+        _ensure_schema(get_conn)
         report["changes"] = capture_changes(get_conn, now, commit)
         states = _bot_states(get_conn)
         accts = store.accounts(get_conn)
@@ -426,7 +427,7 @@ def replay_all(get_conn, now, daily, fetch_hourly, alarm, resolve) -> dict[str, 
                 continue
             store.upsert_equity(get_conn, tid, engine.daily_points(result.curve, acct["bars"]))
             store.upsert_fills(get_conn, tid, result.fills)
-            gap = check_mirror(get_conn, acct, result, bars) if acct["kind"] == "mirror" else None
+            gap = check_mirror(get_conn, acct, result) if acct["kind"] == "mirror" else None
             out[tid] = {"equity": round(result.curve[-1][1], 2), "fills": len(result.fills), "gap_pp": gap}
             if gap is not None and abs(gap) > config.MIRROR_GUARD_PP:
                 drifting += 1
@@ -464,7 +465,7 @@ def hourly(now: datetime | None = None, *, get_conn=None, fetch_hourly=prices.oa
     get_conn = get_conn or _default_get_conn()
     report: dict[str, Any] = {"at": now.isoformat()}
     try:
-        store.ensure_schema(get_conn)
+        _ensure_schema(get_conn)
         report["changes"] = capture_changes(get_conn, now, commit)
         report["forex"] = forex_read(get_conn, now, fetch_hourly) if forex_open(now) else "forex closed"
     except Exception as exc:

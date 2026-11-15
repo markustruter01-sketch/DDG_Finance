@@ -661,6 +661,11 @@ class AlpacaEtfEngine:
 
     # ── Orders ────────────────────────────────────────────────────────────────
 
+    def _order_by_client_id(self, client_order_id: str):
+        """Read an order back by its client ID: used when a send raised, so a
+        timed-out order is adopted, never sent twice (core/order_ids.py)."""
+        return self.api.get_order_by_client_order_id(client_order_id)
+
     def place_order(
         self,
         symbol: str,
@@ -685,6 +690,7 @@ class AlpacaEtfEngine:
                     client_order_id=client_order_id,
                 ),
                 f"etf-{side}-{symbol}",
+                lookup=self._order_by_client_id,
             )
             logger.info(
                 f"EtfEngine | ORDER PLACED: {side.upper()} {symbol} "
@@ -715,6 +721,7 @@ class AlpacaEtfEngine:
                     client_order_id=client_order_id,
                 ),
                 f"etf-buy-{symbol}",
+                lookup=self._order_by_client_id,
             )
             logger.info(
                 f"EtfEngine | ORDER PLACED: BUY {symbol} "
@@ -900,6 +907,7 @@ class AlpacaEtfEngine:
                     client_order_id=client_order_id,
                 ),
                 self._exit_client_order_prefix(bot_id, symbol) if bot_id else f"etf-exit-{symbol}",
+                lookup=self._order_by_client_id,
             )
             deadline = time.monotonic() + 30
             while time.monotonic() < deadline:
@@ -1300,6 +1308,10 @@ class AlpacaEtfEngine:
                         }
                     except Exception:
                         order_gone = True
+                    if not order_gone and current_status == "replaced":
+                        adopted = self._adopt_replacement_stop(bot_id, symbol, current)
+                        if adopted:
+                            return adopted
                     if not order_gone:
                         if current_status not in {
                             "new",
@@ -1408,6 +1420,7 @@ class AlpacaEtfEngine:
                     client_order_id=client_order_id,
                 ),
                 f"etf-stop-{bot_id}-{symbol}",
+                lookup=self._order_by_client_id,
             )
             self._store_stop_order_id(
                 bot_id, symbol, order.id, stop_price=broker_stop
@@ -1466,6 +1479,32 @@ class AlpacaEtfEngine:
             except Exception:
                 pass
             return None
+
+    def _adopt_replacement_stop(self, bot_id: str, symbol: str, old_order) -> Optional[str]:
+        """A stop replace whose reply was lost: the Alpaca library resends a
+        replace that got HTTP 504, and if the first try went through the resend
+        fails because the old stop is now "replaced". Its successor is the live
+        stop: record it instead of raising a false "naked" alarm (F1, 16 Nov 2026)."""
+        new_id = getattr(old_order, "replaced_by", None)
+        if not new_id:
+            return None
+        try:
+            new = self.api.get_order(new_id)
+        except Exception as exc:
+            logger.warning(f"EtfEngine | {symbol}: replacement stop {new_id} unreadable: {exc}")
+            return None
+        if not (
+            _status(new) in _OPEN_ORDER_STATUSES
+            and same_symbol(new.symbol, symbol)
+            and str(new.side).lower().rsplit(".", 1)[-1] == "sell"
+            and str(new.type).lower().rsplit(".", 1)[-1] in {"stop", "stop_limit", "trailing_stop"}
+        ):
+            return None
+        self._store_stop_order_id(bot_id, symbol, new.id, stop_price=float(new.stop_price or 0) or None)
+        logger.warning(
+            f"EtfEngine | {symbol}: stop replace reply was lost; adopted live replacement {new.id}"
+        )
+        return new.id
 
     def _await_fill_and_protect(
         self,
@@ -1612,6 +1651,7 @@ class AlpacaEtfEngine:
                     client_order_id=client_order_id,
                 ),
                 self._exit_client_order_prefix(bot_id, symbol) if bot_id else f"etf-exit-{symbol}",
+                lookup=self._order_by_client_id,
             )
             logger.info(f"EtfEngine | PARTIAL CLOSE: {symbol} qty={qty:.4f} tif={tif}")
             deadline = time.monotonic() + 20

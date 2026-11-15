@@ -44,9 +44,9 @@ class FakeStore:
 class FakeOanda:
     """Reader + trader + snapshot in one: OANDA's state as a dict of trades."""
 
-    def __init__(self, trades=None, tradeable=True, attach_stops=True, fill=True):
+    def __init__(self, trades=None, tradeable=True, attach_stops=True, fill=True, unclear=False):
         self.trades = dict(trades or {})
-        self.tradeable, self.attach_stops, self.fill = tradeable, attach_stops, fill
+        self.tradeable, self.attach_stops, self.fill, self.unclear = tradeable, attach_stops, fill, unclear
         self.orders, self._id = [], 100
 
     def current_bid_ask(self, pair):
@@ -55,6 +55,10 @@ class FakeOanda:
 
     def market_order(self, pair, units, stop_price):
         self.orders.append(("open", pair, units, stop_price))
+        if self.unclear:
+            return {"filled": False, "trade_id": None, "price": None, "units": None, "unclear": True,
+                    "client_id": "pub-fx-eur_usd-0123456789abcdef",
+                    "reason": "unclear answer (HTTP 504) and read-back failed: may have filled"}
         if not self.fill:
             return {"filled": False, "trade_id": None, "price": None, "units": None, "reason": "MARKET_HALTED"}
         self._id += 1
@@ -220,3 +224,45 @@ def test_sync_marks_only_trades_oanda_reports_closed_with_oandas_close_time():
     assert store.closed[0][1].isoformat() == "2026-11-06T13:30:11.345570+00:00"
     assert store.ids == {"21", "8"}  # still open at OANDA / not reported closed: untouched
     assert fe._oanda_time("bad") is None
+
+
+def test_unclear_order_answer_is_critical_and_never_resent():
+    store, oanda = FakeStore(_record([_d("EUR_USD", "long")])), FakeOanda(unclear=True)
+    report = _run(store, oanda)
+    assert len(oanda.orders) == 1 and store.inserted == []
+    assert report["status"] == "executed with errors"
+    assert report["errors"][0].startswith("CRITICAL EUR_USD: order answer unclear, may have filled")
+
+
+class _Ledger:
+    def __init__(self, ids=()): self.ids, self.inserted = set(ids), []
+    def open_trade_ids(self): return set(self.ids)
+    def insert_open(self, trade, when): self.inserted.append((trade, when)); self.ids.add(trade["trade_id"])
+
+
+def _raw(trade_id, pair="EUR_USD", client_id=None, stop=True):
+    raw = {"id": trade_id, "instrument": pair, "currentUnits": "41666", "price": "1.08120",
+           "openTime": "2026-11-16T14:00:01.000000000Z"}
+    if client_id:
+        raw["clientExtensions"] = {"id": client_id}
+    if stop:
+        raw["stopLossOrder"] = {"id": f"s{trade_id}", "state": "PENDING"}
+    return raw
+
+
+def test_own_unrecorded_trade_is_adopted_with_its_stop_others_are_left_alone(monkeypatch):
+    import forex_execution as fe
+    monkeypatch.setenv("RUNNER_ENVIRONMENT", "published")
+    ledger = _Ledger(ids={"7"})
+    out = fe.adopt_own_trades([
+        _raw("7", client_id="pub-fx-eur_usd-aaaaaaaaaaaaaaaa-t"),                   # already recorded
+        _raw("9", client_id="pub-fx-eur_usd-bbbbbbbbbbbbbbbb-t"),                   # ours, unrecorded
+        _raw("10", pair="USD_JPY", client_id="pub-fx-usd_jpy-cccccccccccccccc-t", stop=False),
+        _raw("11"),                                                                # opened by hand
+        _raw("12", client_id="pub-fx-usd_jpy-dddddddddddddddd-t"),                 # id of another pair
+    ], ledger, NOW)
+    assert out == {"adopted": ["9"], "no_stop": ["10"]}
+    (trade, when), = ledger.inserted
+    assert trade == {"trade_id": "9", "instrument": "EUR_USD", "signed_units": 41666.0,
+                     "entry_price": 1.0812, "stop_order_id": "s9"}
+    assert when.isoformat() == "2026-11-16T14:00:01+00:00"

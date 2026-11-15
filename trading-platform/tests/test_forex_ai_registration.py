@@ -498,3 +498,41 @@ def test_forex_profile_and_database_seed_are_paused_and_hourly():
         in source
     )
     assert "ON CONFLICT (bot_id) DO NOTHING" in source
+
+def test_ledger_sync_records_own_unrecorded_trade_and_alarms_one_without_a_stop(
+    monkeypatch,
+    forex_strategy,
+):
+    """F2 (16 Nov 2026): an order whose answer was unclear and could not be read
+    back may still have filled. The next cycle's sync records it; it places nothing."""
+    monkeypatch.setenv("RUNNER_ENVIRONMENT", "published")
+    raw = [
+        {"id": "9", "instrument": "EUR_USD", "currentUnits": "41666", "price": "1.0812",
+         "clientExtensions": {"id": "pub-fx-eur_usd-bbbbbbbbbbbbbbbb-t"},
+         "stopLossOrder": {"id": "s9"}},
+        {"id": "10", "instrument": "USD_JPY", "currentUnits": "-100", "price": "150.0",
+         "clientExtensions": {"id": "pub-fx-usd_jpy-cccccccccccccccc-t"}},
+    ]
+
+    class Client:
+        def open_trades(self):
+            return raw
+
+    class Store:
+        def __init__(self):
+            self.inserted = []
+        def open_trade_ids(self):
+            return set()
+        def mark_closed(self, ids, when):
+            raise AssertionError("nothing is closed")
+        def insert_open(self, trade, when):
+            self.inserted.append(trade["trade_id"])
+
+    alarms = []
+    import core.degradation_tracker as tracker
+    monkeypatch.setattr(tracker, "record_degradation", lambda **kw: alarms.append(kw))
+    store = Store()
+    assert forex_strategy._sync_ledger(Client(), store) == "closed 0, adopted 1"
+    assert store.inserted == ["9"]
+    assert [a["error_type"] for a in alarms] == ["forex_trade_without_stop"]
+    assert alarms[0]["severity"] == "critical" and "10" in alarms[0]["message"]

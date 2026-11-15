@@ -58,34 +58,73 @@ def test_generated_ids_fit_alpaca_limit():
     assert len(generated) <= ALPACA_CLIENT_ORDER_ID_MAX_LENGTH
 
 
-def test_duplicate_id_retries_once_with_new_id():
-    submitted_ids = []
+class _Broker:
+    """Holds orders by client ID; a send can be accepted and its reply lost."""
 
-    def submit(client_order_id):
-        submitted_ids.append(client_order_id)
-        if len(submitted_ids) == 1:
-            raise RuntimeError("422 client_order_id must be unique")
-        return {"status": "accepted"}
+    def __init__(self, lose_reply_with=None, refuse_with=None, status="new"):
+        self.orders, self.sent, self.lookups = {}, [], []
+        self.lose_reply_with, self.refuse_with, self.status = lose_reply_with, refuse_with, status
 
-    result, client_order_id = submit_with_unique_client_order_id(
-        submit,
-        "retry-prefix",
-    )
+    def submit(self, client_order_id):
+        self.sent.append(client_order_id)
+        if self.refuse_with:
+            raise RuntimeError(self.refuse_with)
+        self.orders[client_order_id] = {"id": f"ord-{len(self.orders) + 1}", "status": self.status}
+        if self.lose_reply_with:
+            raise RuntimeError(self.lose_reply_with)
+        return self.orders[client_order_id]
 
-    assert result == {"status": "accepted"}
-    assert len(submitted_ids) == 2
-    assert submitted_ids[0] != submitted_ids[1]
-    assert client_order_id == submitted_ids[1]
+    def lookup(self, client_order_id):
+        self.lookups.append(client_order_id)
+        if client_order_id not in self.orders:
+            raise RuntimeError("404 order not found")
+        return self.orders[client_order_id]
 
 
-def test_non_duplicate_error_does_not_retry():
-    attempts = []
+def test_duplicate_id_after_a_timed_out_send_adopts_the_order_and_never_resends():
+    """F1 (16 Nov 2026): the Alpaca library resends after HTTP 504; the resend is
+    refused as a duplicate because the first try was accepted. One order only."""
+    broker = _Broker(lose_reply_with="422 client_order_id must be unique")
 
-    def submit(client_order_id):
-        attempts.append(client_order_id)
-        raise RuntimeError("insufficient buying power")
+    order, client_order_id = submit_with_unique_client_order_id(
+        broker.submit, "etf-buy-SPY", lookup=broker.lookup)
 
+    assert len(broker.sent) == 1 and len(broker.orders) == 1
+    assert order == broker.orders[client_order_id] and broker.lookups == [client_order_id]
+
+
+def test_lost_reply_is_adopted_too():
+    broker = _Broker(lose_reply_with="HTTPSConnectionPool: Read timed out.")
+    order, client_order_id = submit_with_unique_client_order_id(
+        broker.submit, "etf-exit-SPY", lookup=broker.lookup)
+    assert len(broker.sent) == 1 and order["id"] == "ord-1"
+
+
+def test_refused_order_raises_the_broker_error_and_is_not_resent():
+    broker = _Broker(refuse_with="insufficient buying power")
     with pytest.raises(RuntimeError, match="insufficient buying power"):
-        submit_with_unique_client_order_id(submit, "no-retry")
+        submit_with_unique_client_order_id(broker.submit, "no-retry", lookup=broker.lookup)
+    assert len(broker.sent) == 1 and len(broker.lookups) == 1
 
-    assert len(attempts) == 1
+
+def test_an_order_the_broker_rejected_is_not_adopted():
+    broker = _Broker(lose_reply_with="HTTP 504", status="rejected")
+    with pytest.raises(RuntimeError, match="HTTP 504"):
+        submit_with_unique_client_order_id(broker.submit, "etf-buy-SPY", lookup=broker.lookup)
+    assert len(broker.sent) == 1
+
+
+def test_duplicate_that_cannot_be_read_back_fails_without_a_second_send():
+    broker = _Broker(lose_reply_with="client_order_id must be unique")
+
+    def broken_lookup(_client_order_id):
+        raise RuntimeError("504 Gateway Time-out")
+
+    with pytest.raises(RuntimeError, match="could not be read back"):
+        submit_with_unique_client_order_id(broker.submit, "etf-stop-SPY", lookup=broken_lookup)
+    assert len(broker.sent) == 1
+
+
+def test_lookup_is_required():
+    with pytest.raises(TypeError):
+        submit_with_unique_client_order_id(lambda _cid: None, "x")  # noqa: the point of the test

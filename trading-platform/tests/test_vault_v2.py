@@ -198,6 +198,7 @@ LIQ = "select a.bot_id, coalesce(h.qty, 0)"
 
 def test_voo_is_sold_once_and_the_proceeds_are_queued_for_bil(fake, monkeypatch):
     sells = []
+    monkeypatch.setattr(vault, "_orders_blocked", lambda bot_id: None)
     monkeypatch.setattr(vault, "_orders_today", {})
     monkeypatch.setattr(vault, "_submit_vault_sell",
                         lambda bot_id, symbol, qty, tag: sells.append((symbol, qty)) or
@@ -227,6 +228,16 @@ def test_voo_sale_waits_for_the_open_and_for_an_open_voo_buy(fake, monkeypatch):
     assert vault.run_voo_liquidation(market_open=False)["bots"][0]["reason"] == "market_closed"
     fake({LIQ: [("oracle", 3.0, 1800.0, None, None, "voo-buy-open")]})
     assert vault.run_voo_liquidation(market_open=True)["bots"][0]["reason"] == "open_voo_buy"
+
+
+@pytest.mark.parametrize("reason", ["bot_paused", "kill_switch_latched"])
+def test_voo_sale_waits_while_the_bot_is_paused_or_the_latch_is_tripped(fake, monkeypatch, reason):
+    """F4 (16 Nov 2026): vault orders obey the bots' pause and the kill-switch latch."""
+    monkeypatch.setattr(vault, "_orders_blocked", lambda bot_id: reason)
+    monkeypatch.setattr(vault, "_submit_vault_sell", lambda *a: pytest.fail("sold while blocked"))
+    fake({LIQ: [("oracle", 3.0, 1800.0, None, None, None)]})
+    assert vault.run_voo_liquidation(market_open=True)["bots"][0] == {
+        "bot_id": "oracle", "action": "blocked", "reason": reason}
 
 
 # ── the dashboard card ──────────────────────────────────────────────────────

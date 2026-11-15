@@ -60,22 +60,50 @@ def is_duplicate_client_order_id_error(exc: BaseException) -> bool:
     )
 
 
+def _order_status(order: Any) -> str:
+    status = order.get("status") if isinstance(order, dict) else getattr(order, "status", "")
+    return str(status or "").lower().rsplit(".", 1)[-1]
+
+
 def submit_with_unique_client_order_id(
     submit: Callable[[str], _ResultT],
     prefix: str,
+    *,
+    lookup: Callable[[str], _ResultT],
 ) -> tuple[_ResultT, str]:
-    """Submit with a generated ID and retry once only on duplicate-ID errors."""
-    for attempt in range(2):
-        client_order_id = make_client_order_id(prefix)
+    """Send ONE order with a new client ID. It is never sent a second time.
+
+    When the send raises, the order may still have reached the broker: the
+    Alpaca libraries resend a request that got HTTP 504, and if the first try
+    had been accepted the resend is refused as a duplicate client ID; a reply
+    can also be lost after the broker took the order. So on any error the
+    order is looked up by its client ID. Found (and not rejected): it is
+    adopted and returned as if the send had succeeded. Not found: the
+    original error is raised. A duplicate-ID refusal that cannot be read back
+    raises too; the caller then treats the order as failed, never resends.
+    (Until 16 Nov 2026 a duplicate-ID refusal made a new ID and sent the
+    order again: one order could become two.)
+    """
+    client_order_id = make_client_order_id(prefix)
+    try:
+        return submit(client_order_id), client_order_id
+    except Exception as exc:
+        duplicate = is_duplicate_client_order_id_error(exc)
         try:
-            return submit(client_order_id), client_order_id
-        except Exception as exc:
-            if attempt == 0 and is_duplicate_client_order_id_error(exc):
-                _logger.warning(
-                    "Order ID collision rejected; regenerating ID and retrying once "
-                    "prefix=%s",
-                    prefix,
-                )
-                continue
+            order = lookup(client_order_id)
+        except Exception as lookup_exc:
+            if duplicate:
+                raise RuntimeError(
+                    f"order {client_order_id} is at the broker (duplicate client ID) "
+                    f"but could not be read back: {lookup_exc}"
+                ) from exc
+            raise exc
+        if order is None or _order_status(order) == "rejected":
             raise
-    raise RuntimeError("unreachable duplicate client-order ID retry state")
+        _logger.warning(
+            "Order send raised but the broker holds it; adopted, not resent "
+            "client_order_id=%s error=%s",
+            client_order_id,
+            str(exc)[:200],
+        )
+        return order, client_order_id

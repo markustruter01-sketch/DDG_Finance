@@ -496,6 +496,8 @@ class AlpacaBot3:
                 json={**payload, "client_order_id": generated_id},
             ),
             f"bot3-order-{symbol.replace('/', '')}",
+            lookup=lambda client_id: self._request(
+                "GET", "/v2/orders:by_client_order_id", params={"client_order_id": client_id}),
         )
         if isinstance(response, dict):
             response.setdefault("client_order_id", client_order_id)

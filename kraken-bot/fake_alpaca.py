@@ -25,6 +25,13 @@ Faults that can be switched on (each modelled on something seen live):
   transient empty reply).
 - ``gap_to(symbol, price)``: the price moves straight to ``price``; any sell
   stop at or above it fills at ``price`` (a gap through the stop).
+- ``lose_reply_next(n, resend, method, order_type)``: the next n calls of
+  ``method`` (submit_order or replace_order; optionally only for one order
+  type) are carried out, then the reply is lost. ``resend=True``: what the
+  Alpaca library does after an HTTP 504 (sends again; a resent submit is
+  refused as a duplicate client_order_id, a resent replace finds the old
+  order no longer open); ``resend=False``: a read time-out
+  (16 Nov 2026 order-path audit, F1).
 
 Time is virtual: FakeClock.sleep advances it, so 30-second broker waits run
 instantly and lag is measured in the engine's own waiting.
@@ -35,6 +42,7 @@ import itertools
 from dataclasses import dataclass, field
 from types import SimpleNamespace
 
+_TIMED_OUT = "HTTPSConnectionPool(host='paper-api.alpaca.markets'): Read timed out."
 OPEN_STATUSES = {"new", "accepted", "pending_new", "partially_filled", "held"}
 
 
@@ -74,6 +82,7 @@ class _Order:
     filled_avg_price: float | None = None
     asset_class: str = "us_equity"
     cancelled_at: float | None = None
+    replaced_by: str | None = None
 
     def view(self, **override) -> SimpleNamespace:
         d = dict(self.__dict__, **override)
@@ -99,6 +108,7 @@ class FakeAlpaca:
     _partial: list[float] = field(default_factory=list)
     _reject: dict[str, int] = field(default_factory=dict)
     _empty_positions: int = 0
+    _lost_replies: list[dict] = field(default_factory=list)
     _entry: dict[str, float] = field(default_factory=dict)
 
     # ── fault switches ────────────────────────────────────────────────────
@@ -110,6 +120,18 @@ class FakeAlpaca:
 
     def reject_next(self, order_type: str, n: int = 1) -> None:
         self._reject[order_type] = self._reject.get(order_type, 0) + n
+
+    def lose_reply_next(self, n: int = 1, resend: bool = True, method: str = "submit_order",
+                        order_type: str | None = None) -> None:
+        self._lost_replies.extend({"resend": resend, "method": method, "type": order_type}
+                                  for _ in range(n))
+
+    def _reply_lost(self, method: str, order_type: str) -> bool | None:
+        """None: reply arrives. True/False: lost (resend or time-out)."""
+        for i, fault in enumerate(self._lost_replies):
+            if fault["method"] == method and fault["type"] in (None, order_type):
+                return self._lost_replies.pop(i)["resend"]
+        return None
 
     def empty_positions_next(self, n: int = 1) -> None:
         self._empty_positions += n
@@ -208,6 +230,13 @@ class FakeAlpaca:
             raise APIError("order not found")
         return self.orders[order_id].view()
 
+    def get_order_by_client_order_id(self, client_order_id: str):
+        self._call("get_order_by_client_order_id", client_order_id)
+        for o in self.orders.values():
+            if o.client_order_id == client_order_id:
+                return o.view()
+        raise APIError("order not found")
+
     def submit_order(self, *, symbol: str, side: str, type: str, time_in_force: str,
                      client_order_id: str, qty=None, notional=None, stop_price=None, **_):
         self._call("submit_order", symbol=symbol, side=side, type=type, qty=qty, stop_price=stop_price)
@@ -235,6 +264,9 @@ class FakeAlpaca:
             ratio = self._partial.pop(0) if self._partial else 1.0
             fill_qty = qty if ratio >= 1 else max(1.0, float(int(qty * ratio)))
             self._fill(o, fill_qty, self.prices[symbol])
+        lost = self._reply_lost("submit_order", type)
+        if lost is not None:
+            raise APIError("client_order_id must be unique" if lost else _TIMED_OUT)
         return o.view()
 
     def cancel_order(self, order_id: str) -> None:
@@ -263,6 +295,10 @@ class FakeAlpaca:
                    time_in_force=time_in_force or old.time_in_force,
                    stop_price=float(stop_price) if stop_price is not None else old.stop_price)
         self.orders[o.id] = o
+        old.replaced_by = o.id
+        lost = self._reply_lost("replace_order", old.type)
+        if lost is not None:
+            raise APIError("order is not open" if lost else _TIMED_OUT)
         return o.view()
 
     def get_latest_trade(self, symbol: str):

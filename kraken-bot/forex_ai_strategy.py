@@ -212,17 +212,30 @@ def _maybe_execute(sheet: dict[str, Any], factory: Callable[[], Any], max_gross:
 
 
 def _sync_ledger(client: Any, store: Any | None) -> str:
-    """Close ledger rows OANDA has closed, every cycle, paused or not. Never raises."""
+    """Keep the ledger in step with OANDA, every cycle, paused or not: close
+    rows OANDA has closed; record trades this system opened but never
+    recorded (an unclear order answer). Places nothing. Never raises."""
     try:
-        from forex_execution import PgForexStore, sync_closed_trades
+        from forex_execution import PgForexStore, adopt_own_trades, sync_closed_trades
         if store is None:
             from db.postgres import get_conn
             store = PgForexStore(get_conn)
-        closed = sync_closed_trades(client, store, datetime.now(timezone.utc))
+        now = datetime.now(timezone.utc)
+        open_trades = client.open_trades()
+        closed = sync_closed_trades(client, store, now, open_trades=open_trades)
         for c in closed:
             logger.warning(f"FOREX ledger | trade {c['trade_id']} closed at OANDA {c['closed_at']} "
                            f"P&L {c['realized_pl']}: marked closed")
-        return f"closed {len(closed)}"
+        found = adopt_own_trades(open_trades, store, now)
+        if found["adopted"]:
+            logger.warning(f"FOREX ledger | own trades missing from the ledger recorded: {found['adopted']}")
+        if found["no_stop"]:
+            from core.degradation_tracker import record_degradation
+            record_degradation(
+                component="forex_execution", severity="critical", error_type="forex_trade_without_stop",
+                message=f"OANDA trades opened by this system have no stop: {found['no_stop']}"[:300],
+                detail="Not recorded in the ledger. Check OANDA now.", bot_id=BOT_ID)
+        return f"closed {len(closed)}, adopted {len(found['adopted'])}"
     except (Exception, SystemExit) as exc:  # db.postgres exits on bad config at import
         logger.warning(f"FOREX ledger | sync skipped: {type(exc).__name__}")
         return f"failed: {type(exc).__name__}"

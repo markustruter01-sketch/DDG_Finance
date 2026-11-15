@@ -1,0 +1,15 @@
+{
+  "id": "TWINS-V1",
+  "registered_at": "2026-11-15, Brisbane, before the first twin record (Phase A proving period)",
+  "source_document": "Project doc claude/finance-ai-twins-build-spec.md (Fable, 15 Nov 2026); code trading-platform/twins/",
+  "hypothesis": "Forward-only record, not a test of edge: pretend accounts (no orders) beside each bot, replayed nightly through this harness's simulator, can stand in for real accounts. Proof: each bot's mirror twin (the bot's own real holdings through the engine) tracks the real account within a tolerance Fable sets after one week of mirror data.",
+  "candidate": "Per Alpaca account (oracle, jerome_macro, spy_qqq_trend): mirror, baseline_full (the bot's asset list always at its limit: F1 = 65% FLEET core at 1.5x + 35% IEF/GLD/DBC/UUP equal; C1 = the core at 1.5x; MOMO-V2 = this month's names equal weight, no brakes), baseline_spy (SPY buy and hold). Forex (forex_ai): mirror on OANDA hourly bars, baseline_spy. AI twins (Phase B) and the Forex rules twin are later amendments.",
+  "candidates_declared": 5,
+  "prior_variants_tried": 0,
+  "universe": "each bot's own asset list; the mirror holds whatever the real account holds, without owner-kept lines (core/bot_registry.py OWNER_KEPT)",
+  "window": "forward only: from each twin's start (first run after this registration) to 31 Dec 2027; version 2 starts at the 21-22 Nov 2026 strategy lock",
+  "sizing": "target weights of equity; fractional shares; a decision after a close fills at the next session's open (shares) or the next hourly bar's open (forex)",
+  "leverage": "mirror: whatever the real account holds (gross cap 10 only as a sanity bound); baselines: no borrowing, gross <= 1.0 (2x funds carry the gearing)",
+  "costs": "shares: research_harness/explore/gear_v1.COSTS (0 commission, 2 bps half spread, 3 bps slippage; cash earns 0; borrowing pays no financing). Forex: half spread measured per pair from 14 days of OANDA hourly bid/ask candles at the twin's start; financing and slippage beyond the spread OMITTED. The mirror check measures what the omissions cost.",
+  "pass_bar": "Phase A: none for results (records only). Engine proof: mirror within Fable's tolerance; until set, a provisional guard of 1.0 percentage point (twins/config.py MIRROR_GUARD_PP) raises an alarm. AI-vs-bot pass marks are written by Fable before the first counted AI vote (spec rule 12)."
+}

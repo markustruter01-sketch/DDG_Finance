@@ -550,6 +550,29 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
     )
     logger.info("Scheduler | Registered: gear_v1_g4_shadow (16:40 NY weekdays, no orders)")
 
+    # AI twins (trading-platform/twins/): pretend accounts, no orders, ever.
+    scheduler.add_job(
+        func=_twins_hourly,
+        trigger=CronTrigger(minute=55, timezone="America/New_York"),
+        id="twins_hourly",
+        name="AI twins: change log + Forex mirror read (no orders)",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=600,
+    )
+    scheduler.add_job(
+        func=_twins_nightly,
+        trigger=CronTrigger(day_of_week="mon-fri", hour=17, minute=15, timezone="America/New_York"),
+        id="twins_nightly",
+        name="AI twins: account reads at the close, replay, mirror check (no orders)",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=3600,
+    )
+    logger.info("Scheduler | Registered: twins_hourly (:55 NY) + twins_nightly (17:15 NY weekdays), no orders")
+
     scheduler.add_job(
         func=_per_bot_vault_monthly_skim,
         trigger=CronTrigger(day_of_week="mon-fri", hour=8, minute=45, timezone="America/New_York"),
@@ -1092,6 +1115,8 @@ _ALWAYS_ACTIVE_JOBS = {
     "degradation_resolver",
     "order_watchdog",
     "gear_v1_g4_shadow",
+    "twins_hourly",            # a paused bot's twin keeps running (twins spec, rule 11)
+    "twins_nightly",
     "daily_benchmark_snapshot",
     "nightly_fleet_equity_snapshot",
     "daily_bot_returns_snapshot",
@@ -1159,6 +1184,26 @@ async def _gear_shadow() -> None:
         logger.info(f"Scheduler | gear_v1_g4_shadow: {result.get('status')} as_of={result.get('as_of')}")
     except Exception as exc:
         logger.error(f"Scheduler | gear_v1_g4_shadow FAILED: {type(exc).__name__}: {exc}")
+
+
+async def _twins_hourly() -> None:
+    """AI twins: change log and the Forex mirror's account read. No orders."""
+    try:
+        from twins.job import hourly
+        report = await asyncio.to_thread(hourly)
+        logger.info(f"Scheduler | twins_hourly: {str(report)[:400]}")
+    except Exception as exc:
+        logger.error(f"Scheduler | twins_hourly FAILED: {type(exc).__name__}: {exc}")
+
+
+async def _twins_nightly() -> None:
+    """AI twins: read the accounts at the close, replay every twin, check the mirrors. No orders."""
+    try:
+        from twins.job import nightly
+        report = await asyncio.to_thread(nightly)
+        logger.info(f"Scheduler | twins_nightly: {str(report)[:800]}")
+    except Exception as exc:
+        logger.error(f"Scheduler | twins_nightly FAILED: {type(exc).__name__}: {exc}")
 
 
 async def _order_watchdog() -> None:

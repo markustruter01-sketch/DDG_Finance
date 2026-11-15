@@ -1,5 +1,5 @@
 # DDG Finance — plan to the 2027 test year
-Written by Claude (Fable 5.2), Tue 10 Nov 2026; last updated Wed 11 Nov ~12:35 Brisbane (Step 2 items 8–13b live; morning checks; PR #98 open). Agreed by Markus 10 Nov.
+Written by Claude (Fable 5.2), Tue 10 Nov 2026; last updated Sun 15 Nov ~15:00 Brisbane (AI twins Phase A built, PR #103; status 12–15 Nov below). Agreed by Markus 10 Nov.
 Roles: FABLE = diagnosis, strategy, specs, pass bars, reviews. OPUS = coding. MARKUS = decisions and things only he can click.
 Target: strategies locked the weekend of 21–22 Nov, record starts Mon 23 Nov 2026 (needs the 5-clean-day gate first).
 Constraint (Markus 10 Nov): Alpaca paper accounts are capped at 3 and all 3 are in use. No fourth account.
@@ -105,6 +105,35 @@ Runs all year as a SHADOW (no orders); decide at end of 2027 whether to switch i
 5. Decisions with Markus: trading-API secret in the dashboard bundle (K1); ENFORCE_DRAWDOWN_LIMITS.
 6. Strategy lock registrations (item 17) before 21–22 Nov.
 7. Public Finance page on ddg.limited (Markus 11 Nov 07:06): performance, holdings, strategy paper incl. failed tests, how the platform works; trading platform stays private, data flows out only via the existing hourly push. Open question: public record from 23 Nov (labelled pre-launch) or 1 Jan 2027.
+
+### Status 12–13 Nov (Opus 5.5)
+- Markus decided (12 Nov): drawdown limits stay record-only (paper); the PUBLIC record starts 1 Jan 2027 (ddg.limited/finance counts from the first push on or after 1 Jan Brisbane, S&P 500 from the 31 Dec close). The internal run start still restarts once at the lock.
+- PR #98 (engine table set-up once; current_qty repair only on own rows) merged and published 11 Nov. PR #100 (fleet push: holdings by group + S&P 500 benchmark) merged, published 12 Nov 23:35 UTC (US closed). Post-check 23:59 UTC: 4 bots cycling, 0 open alarms, stops match (oracle QQQ/SPY; jerome_macro SPY/QQQ/ETH/BTC; spy_qqq_trend none); 6 ERROR lines 23:36–23:38 were the new runner waiting for the old one's oracle lease (5 read; same pattern). First push with holdings landed 23:41 UTC; live at ddg.limited/finance.
+- ddg.limited/finance live (DDG-Control #79). Holdings note explains Vault (BIL) and forex gross exposure >100% (in DDG-Control #80).
+- K1 (secret in the dashboard bundle): checked 13 Nov from outside, anonymous: /, /trading-api/health and /trading-api/bots all 307 to Replit's ReplShield. The bundle is not public. DECISION (Opus, for Markus): accepted risk while private; must be fixed (operator login) before the dashboard is ever made public or anyone else gets Replit access.
+- Outside heartbeat (PR #97): built but OFF: HEARTBEAT_URL_RUNNER / HEARTBEAT_URL_API not set in production (checked 13 Nov, names only). DDG Control's Connections panel shows Finance "stale" after 3 h without a push, but only shows it (Control is autoscale: no timer to send a message). Markus to create two healthchecks.io checks if he wants a message when Finance goes silent.
+- Fix list: (a) + (b) built, PR #101 (UNKNOWN needs two runs in a row; only failing lines warn). (c) not doing: each bot has its own Alpaca account; changing id prefixes risks own-order matching. (d) left: 0 alarm rows for the dead bots_state ids since 10 Nov.
+- Alarms since 10 Nov 00:00 UTC (read 13 Nov 00:12 UTC): 4 invariant rows total, all resolved (2 were the 21:04 UTC blip #101 fixes). Nothing else.
+- STILL NEEDS FABLE before Sat 21 Nov: item 7 (order-path audit, "must never happen" list) and item 17 (registrations, pass bars, Bot 3 exact rules incl. a sector cap on the momentum list). Rehearsal (#94) still needs Markus's go (🔴 real 1-share paper orders, Momentum paused, market open).
+
+### Status 13–14 Nov (Opus 5.5)
+- PR #101 (one UNKNOWN blip no longer alarms) merged, published 13 Nov 01:15 UTC; post-check clean.
+- 🔴 INCIDENT 13 Nov 03:00 UTC: OANDA practice API answered 401/504 on and off (workspace token works; /v3/accounts flipped 504/200/401 within seconds = OANDA flaky, not our token). The armed kill switch tripped (fleet_equity_unknown, then missing_account every ~5 min) and paused ALL four bots for the whole Fri 13 Nov US session. Holdings stayed protected (Atlas QQQ/SPY stops; DBC/UUP stop-exempt by design; Atlas V2 SPY/QQQ/BTC/ETH stops; Momentum cash; Forex 4 trades with stop-losses). No orders placed by anyone.
+- DECISION (Markus 14 Nov 05:20 Brisbane: "the kill switch is causing 99% more harm than good, FIX IT"): kill switch ALERT ONLY. PR #102: KILL_SWITCH_ARMED = "false" in .replit [userenv.shared] (the designed owner switch; no code path change). It still checks every 5 min and records would-trip warnings; never pauses bots. Every automatic trip so far (7 Nov Forex records, 9 Nov stop re-arm, 13 Nov OANDA) froze the fleet for a data problem. Before real money: re-design (one broker's read failure affects only that bot, after several failed checks in a row).
+- Plan for the publish (after 21:00 UTC 13 Nov): publish #102 → confirm no new trip → reset latch (restore_latch + reset with KILL_SWITCH_RESET_CONFIRMATION) → resume all four bots → republish so the API starts with the latch clear → post-check.
+- 5-clean-day gate: the Fri 13 Nov session was an incident (fleet frozen). FABLE to decide whether the gate restarts and whether the 21–22 Nov lock moves.
+- Rehearsal (Markus said go, 14 Nov 05:09): blocked on 13 Nov by the tripped latch. Scheduled check-in trig_01GJhJyKGnPicAraZogHFr8a fires 16 Nov 15:05 UTC (Mon session) to run it.
+- DDG Stripe (Markus 14 Nov): STRIPE_DDG_SECRET_KEY set in Hypest, Control and Finance; all DDG money goes to the Digital Dynamics Stripe account. Cattle Dog Coffee keeps its own Stripe account (run with a partner; only tax/admin under DDG).
+
+### Status 15 Nov (Opus 5.5): AI twins Phase A built, PR #103 (open)
+- Spec: Project doc `claude/finance-ai-twins-build-spec.md` (decisions: `claude/finance-ai-shadow-decisions-2026-11-15.md`). Code `trading-platform/twins/`; registration `research_harness/registrations/TWINS-V1.json`. No orders, ever.
+- 11 twins: mirror + baseline_full + baseline_spy for oracle, jerome_macro, spy_qqq_trend; mirror (OANDA hourly bars) + baseline_spy for forex_ai. All of a bot's twins start with that account's real balance (without owner-kept BTC/ETH) on the first nightly run after the publish.
+- Jobs: twins_hourly (:55 New York: change log of pauses/resumes/builds; Forex mirror read) and twins_nightly (17:15 New York weekdays: account reads at the close, replay, mirror check, hash check). Both keep running when a bot is paused.
+- Mirror check: alarm above a provisional 1.0 point gap. FABLE sets the real tolerance after one week of mirror data.
+- Recorded-day test (real accounts after the 13 Nov close): engine valuation = Alpaca equity to the cent on all three accounts; mirror gap under 0.003 points.
+- Found: `bot_daily_returns.equity_close` is snapshotted 19:15–20:15 UTC, before the 21:00 UTC close since US clocks changed (13 Nov Atlas: 87,079.77 recorded vs 87,124.70 at the close). The twins value at the close. FABLE: decide whether the snapshot moves after the close before the record restarts at the lock.
+- Read from code: council models Groq `openai/gpt-oss-120b`, OpenRouter `nvidia/nemotron-3-ultra-550b-a55b:free`, Google `gemini-3-flash-preview`, temperature 0.2. None is a dated id (spec rule 5 wants dated ids and lowest randomness). The council logs token counts per call, not dollars.
+- Next: FABLE reviews #103 → Markus merges → OPUS publishes with the US market closed, read-only pre/post checks → FABLE writes the Forex rule and the pass marks → OPUS builds Phase B.
 
 ### Step 3 — lock strategies (weekend 21–22 Nov, market closed)
 17. FABLE: registration + pass bar for Bots 1–4 and for the AI shadow, written before the start; exact Bot 3 rules (stock / gold-silver split, trend rule, gearing, stop width).

@@ -1,0 +1,31 @@
+{
+  "about": "Real paper accounts after the Fri 13 Nov 2026 close (bot_portfolio, read 14 Nov 20:38-20:40 UTC) and Alpaca SIP daily bars (adjustment all) for 11-13 Nov. No trades on 13 Nov in any of the three accounts (trade tables; Atlas's table stores closes only). Pulled read-only by the Replit agent, 14 Nov 20:46 UTC.",
+  "portfolios": {
+    "oracle": {"cash_usd": 14678.65, "equity_usd": 87124.7, "positions": [
+      {"symbol": "BIL", "qty": 51.398162849, "side": "long"},
+      {"symbol": "DBC", "qty": 123, "side": "long"},
+      {"symbol": "QQQ", "qty": 24, "side": "long"},
+      {"symbol": "SGOV", "qty": 118.374190978, "side": "long"},
+      {"symbol": "SPY", "qty": 32, "side": "long"},
+      {"symbol": "UUP", "qty": 393, "side": "long"},
+      {"symbol": "VOO", "qty": 9.82e-7, "side": "long"}]},
+    "jerome_macro": {"cash_usd": 4155.76, "equity_usd": 78587.54, "owner_kept_value_usd": 6396.840307, "positions": [
+      {"symbol": "BIL", "qty": 49.331958596, "side": "long"},
+      {"symbol": "BTCUSD", "qty": 0.097758577, "side": "long"},
+      {"symbol": "QQQ", "qty": 34, "side": "long"},
+      {"symbol": "SGOV", "qty": 56.705472636, "side": "long"},
+      {"symbol": "SPY", "qty": 46, "side": "long"}]},
+    "spy_qqq_trend": {"cash_usd": 92523.86, "equity_usd": 99182.46, "positions": [
+      {"symbol": "BIL", "qty": 61.329902171, "side": "long"},
+      {"symbol": "SGOV", "qty": 10.392512198, "side": "long"}]}
+  },
+  "bars": {
+    "BIL":  [["2026-11-11", 91.495, 91.5, 91.49, 91.5], ["2026-11-12", 91.5, 91.51, 91.5, 91.5], ["2026-11-13", 91.53, 91.53, 91.52, 91.53]],
+    "DBC":  [["2026-11-11", 30.87, 31.075, 30.79, 30.84], ["2026-11-12", 30.71, 30.96, 30.63, 30.91], ["2026-11-13", 30.92, 30.99, 30.745, 30.79]],
+    "QQQ":  [["2026-11-11", 687.28, 695.57, 683.5617, 690.38], ["2026-11-12", 680.315, 694.5599, 679.83, 688.17], ["2026-11-13", 688.54, 688.75, 671.681, 679.89]],
+    "SGOV": [["2026-11-11", 100.525, 100.53, 100.52, 100.52], ["2026-11-12", 100.52, 100.54, 100.52, 100.53], ["2026-11-13", 100.56, 100.56, 100.55, 100.56]],
+    "SPY":  [["2026-11-11", 756.8, 762.51, 754.9, 759.81], ["2026-11-12", 753.98, 763.04, 753.67, 757.12], ["2026-11-13", 760.07, 760.12, 747.88, 754.37]],
+    "UUP":  [["2026-11-11", 29.33, 29.36, 29.32, 29.35], ["2026-11-12", 29.34, 29.44, 29.33, 29.42], ["2026-11-13", 29.44, 29.5, 29.405, 29.5]],
+    "VOO":  [["2026-11-11", 695.65, 700.94, 693.93, 698.35], ["2026-11-12", 693.06, 701.42, 692.84, 696.0], ["2026-11-13", 698.66, 698.81, 687.5, 693.38]]
+  }
+}

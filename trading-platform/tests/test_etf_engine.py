@@ -377,7 +377,7 @@ def _close_engine(monkeypatch, rows, api, degradation_records=None):
     monkeypatch.setattr(
         etf_engine_module,
         "submit_with_unique_client_order_id",
-        lambda submitter, _prefix: (submitter("client-order-1"), "client-order-1"),
+        lambda submitter, _prefix, **_kw: (submitter("client-order-1"), "client-order-1"),
     )
     return engine, connection
 
@@ -837,7 +837,7 @@ def test_replace_failure_with_terminal_stop_keeps_fresh_submit_path(monkeypatch)
     monkeypatch.setattr(
         etf_engine_module,
         "submit_with_unique_client_order_id",
-        lambda submitter, _prefix: (submitter("test-client-order"), "test-client-order"),
+        lambda submitter, _prefix, **_kw: (submitter("test-client-order"), "test-client-order"),
     )
 
     result = engine.ensure_protective_stop("oracle", "SPY", 100.0)
@@ -867,7 +867,7 @@ def test_replace_failure_when_stop_reread_fails_uses_guarded_fresh_submit(monkey
     monkeypatch.setattr(
         etf_engine_module,
         "submit_with_unique_client_order_id",
-        lambda submitter, _prefix: (submitter("test-client-order"), "test-client-order"),
+        lambda submitter, _prefix, **_kw: (submitter("test-client-order"), "test-client-order"),
     )
 
     result = engine.ensure_protective_stop("oracle", "SPY", 100.0)

@@ -95,6 +95,7 @@ class JeromeAlpaca:
                     client_order_id=generated_id,
                 ),
                 f"jerome-entry-{symbol}",
+                lookup=lambda client_order_id: self.api.get_order_by_client_order_id(client_order_id),
             )
             logger.info(
                 f"JeromeAlpaca | ORDER PLACED: {side.upper()} {symbol} "
@@ -126,6 +127,7 @@ class JeromeAlpaca:
                     client_order_id=generated_id,
                 ),
                 f"jerome-exit-{symbol}",
+                lookup=lambda client_order_id: self.api.get_order_by_client_order_id(client_order_id),
             )
             logger.info(
                 f"JeromeAlpaca | CLOSED position: {symbol} "

@@ -7,6 +7,10 @@ Order of work, every attempt:
    no AI decision (logged: no new trades).
 2. Read the account; close ledger rows whose OANDA trade is gone (a stop
    filled). If the market is not tradeable yet (weekend), wait.
+   (Every cycle, paused or not, sync_closed_trades and adopt_own_trades also
+   keep the ledger in step with OANDA: closed trades are closed, and a trade
+   this system opened but never recorded, after an unclear order answer, is
+   recorded.)
 3. The risk officer (forex_risk.py) plans closes and opens.
 4. Closes first, then opens: each open is a fill-or-kill market order with
    its stop attached; the new trade is then read back and must show its
@@ -107,12 +111,16 @@ def _oanda_time(value: Any) -> datetime | None:
         return None
 
 
-def sync_closed_trades(reader, store, now: datetime) -> list[dict[str, Any]]:
+def sync_closed_trades(reader, store, now: datetime,
+                       open_trades: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
     """Mark ledger trades closed that OANDA has closed (a stop hit, say).
     Runs every cycle, paused or not, so the records never drift from the
     broker. Only a trade OANDA itself reports CLOSED is marked; anything else
-    is left for reconciliation to flag. Uses OANDA's close time."""
-    open_at_oanda = {str(t.get("id")) for t in reader.open_trades()}
+    is left for reconciliation to flag. Uses OANDA's close time.
+    ``open_trades``: OANDA's raw open trades if already read this cycle."""
+    if open_trades is None:
+        open_trades = reader.open_trades()
+    open_at_oanda = {str(t.get("id")) for t in open_trades}
     closed = []
     for trade_id in sorted(store.open_trade_ids() - open_at_oanda):
         trade = reader.trade(trade_id)
@@ -123,6 +131,36 @@ def sync_closed_trades(reader, store, now: datetime) -> list[dict[str, Any]]:
         closed.append({"trade_id": trade_id, "closed_at": when.isoformat(),
                        "realized_pl": trade.get("realizedPL"), "close_price": trade.get("averageClosePrice")})
     return closed
+
+
+def adopt_own_trades(open_trades: list[dict[str, Any]], store, now: datetime) -> dict[str, list[str]]:
+    """Record open OANDA trades that this system opened (its client ID) but
+    that are not in the ledger: an order whose answer was unclear and could
+    not be read back, then filled (16 Nov 2026 audit, F2). Only reads OANDA
+    and writes the ledger; places nothing. A trade without its stop is not
+    recorded and is returned under "no_stop" for a critical alarm. Trades
+    without this system's client ID (opened by hand) are left to
+    reconciliation."""
+    from core.oanda_trader import client_id_prefix
+    from core.order_ids import client_order_id_matches_prefix
+
+    known = store.open_trade_ids()
+    out: dict[str, list[str]] = {"adopted": [], "no_stop": []}
+    for raw in open_trades:
+        trade_id, pair = str(raw.get("id") or ""), str(raw.get("instrument") or "")
+        client_id = str((raw.get("clientExtensions") or {}).get("id") or "")
+        if (not trade_id or trade_id in known or not pair
+                or not client_order_id_matches_prefix(client_id, client_id_prefix(pair))):
+            continue
+        stop_id = str((raw.get("stopLossOrder") or {}).get("id") or "")
+        if not stop_id:
+            out["no_stop"].append(trade_id)
+            continue
+        store.insert_open({"trade_id": trade_id, "instrument": pair,
+                           "signed_units": float(raw["currentUnits"]), "entry_price": float(raw["price"]),
+                           "stop_order_id": stop_id}, _oanda_time(raw.get("openTime")) or now)
+        out["adopted"].append(trade_id)
+    return out
 
 
 def run_forex_execution(
@@ -202,7 +240,12 @@ def _execute(reader, trader, store, snapshot, sheet_rows, max_gross, now) -> dic
         entry = {**want, "stop_price": level, **res}
         if not res["filled"]:
             report["opens"].append(entry)
-            report["errors"].append(f"{pair}: not filled ({res['reason']})")
+            if res.get("unclear"):
+                # Never resent. If it filled, adopt_own_trades records it next cycle.
+                report["errors"].append(f"CRITICAL {pair}: order answer unclear, may have filled "
+                                        f"(client id {res.get('client_id')}): {res['reason']}")
+            else:
+                report["errors"].append(f"{pair}: not filled ({res['reason']})")
             continue
         live = next((t for t in snapshot(reader)["open_trades"] if str(t["trade_id"]) == res["trade_id"]), None)
         if live is None or not live.get("stop_order_id"):

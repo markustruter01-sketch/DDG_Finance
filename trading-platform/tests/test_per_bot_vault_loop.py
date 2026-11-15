@@ -79,6 +79,7 @@ def broker(monkeypatch):
     orders["old-bil"] = {"status": "filled", "filled_qty": 0.056878971, "filled_avg_price": 91.598, "replaced_by": None}
     orders["old-voo"] = {"status": "filled", "filled_qty": 0.007317924, "filled_avg_price": 710.584, "replaced_by": None}
     monkeypatch.setattr(vault, "vault_enabled", lambda: True)
+    monkeypatch.setattr(vault, "_orders_blocked", lambda bot_id: None)
     monkeypatch.setattr(vault, "_submit_vault_buy", submit)
     monkeypatch.setattr(vault, "_read_vault_order", read)
     monkeypatch.setattr(vault, "_orders_today", {}, raising=False)
@@ -134,3 +135,25 @@ def test_daily_cap_stops_a_runaway(broker, stuck_queue, monkeypatch):
     out = vault.run_deployment_cycle(market_open=True)
     assert broker == []
     assert any(r.get("reason") == "daily_order_cap" for r in out["orders"])
+
+
+@pytest.mark.parametrize("reason", ["bot_paused", "kill_switch_latched"])
+def test_paused_bot_or_tripped_latch_buys_nothing(broker, stuck_queue, monkeypatch, reason):
+    """F4 (16 Nov 2026): vault orders obey the bots' pause and the kill-switch latch."""
+    monkeypatch.setattr(vault, "_orders_blocked", lambda bot_id: reason)
+    out = vault.run_deployment_cycle(market_open=True)
+    assert broker == []
+    assert out["orders"] == [{"bot_id": "oracle", "status": "blocked", "reason": reason}]
+
+
+def test_blocked_check_fails_closed_without_a_pause_row(monkeypatch):
+    import core.bot_state as bot_state
+    import core.kill_switch as kill_switch
+    monkeypatch.setattr(kill_switch, "latch_tripped", lambda: False)
+    monkeypatch.setattr(bot_state, "is_paused", lambda bot_id: True)     # missing/unreadable row = paused
+    assert vault._orders_blocked("oracle") == "bot_paused"
+    monkeypatch.setattr(kill_switch, "latch_tripped", lambda: True)
+    assert vault._orders_blocked("oracle") == "kill_switch_latched"
+    monkeypatch.setattr(kill_switch, "latch_tripped", lambda: False)
+    monkeypatch.setattr(bot_state, "is_paused", lambda bot_id: False)
+    assert vault._orders_blocked("oracle") is None

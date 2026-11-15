@@ -57,6 +57,11 @@ def _client() -> TradingClient:
     return _trading_client
 
 
+def _lookup_order(client_order_id: str):
+    """Read an order back by its client ID (used when a send raised)."""
+    return _client().get_order_by_client_id(client_order_id)
+
+
 # ── Account + positions ────────────────────────────────────────────────────
 
 @alpaca_retry
@@ -173,6 +178,7 @@ def place_order(
                 )
             ),
             f"broker-entry-{ticker}",
+            lookup=_lookup_order,
         )
         result = {
             "id":         str(order.id),
@@ -214,6 +220,7 @@ def place_stop_order(ticker: str, qty: float, stop_price: float) -> dict:
                 )
             ),
             f"broker-stop-{ticker}",
+            lookup=_lookup_order,
         )
         result = {
             "id":         str(order.id),
@@ -315,6 +322,7 @@ def close_position(ticker: str) -> dict:
                 )
             ),
             f"broker-close-{ticker}",
+            lookup=_lookup_order,
         )
         return {
             "id":     str(order.id),
@@ -360,6 +368,7 @@ def close_position_gtc(ticker: str) -> dict:
                 )
             ),
             f"broker-close-gtc-{ticker}",
+            lookup=_lookup_order,
         )
         return {
             "id":     str(order.id),
@@ -471,6 +480,7 @@ def place_short_order(ticker: str, qty_int: int) -> dict:
                 )
             ),
             f"broker-short-{ticker}",
+            lookup=_lookup_order,
         )
         result = {
             "id":         str(order.id),
@@ -516,6 +526,7 @@ def buy_to_cover(ticker: str, qty_int: int) -> dict:
                 )
             ),
             f"broker-cover-{ticker}",
+            lookup=_lookup_order,
         )
         result = {
             "id":         str(order.id),
@@ -566,6 +577,7 @@ def place_short_stop_order(ticker: str, qty_int: int, stop_price: float) -> dict
                 )
             ),
             f"broker-short-stop-{ticker}",
+            lookup=_lookup_order,
         )
         result = {
             "id":         str(order.id),

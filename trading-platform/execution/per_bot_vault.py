@@ -614,6 +614,20 @@ DAILY_ORDER_CAP = 10
 _orders_today: dict[tuple[str, str], int] = {}
 
 
+def _orders_blocked(bot_id: str) -> str | None:
+    """Why the vault may not place an order for this bot now, or None. The
+    vault obeys the same switches as the bots: a paused bot and a tripped
+    kill-switch latch place no vault orders (16 Nov 2026 order-path audit,
+    F4). Both reads fail closed. Reading and recording broker fills still runs."""
+    from core.bot_state import is_paused
+    from core.kill_switch import latch_tripped
+    if latch_tripped():
+        return "kill_switch_latched"
+    if is_paused(bot_id):
+        return "bot_paused"
+    return None
+
+
 def _ny_day() -> str:
     from zoneinfo import ZoneInfo
     return datetime.now(ZoneInfo("America/New_York")).date().isoformat()
@@ -671,6 +685,10 @@ def run_deployment_cycle(*, market_open: bool, minimum_notional: float = MIN_TRA
             )
             rows = cur.fetchall()
     for bot_id, pending_cash, pending_bil, pending_voo, bil_order, voo_order, attempts in rows:
+        blocked = _orders_blocked(bot_id)
+        if blocked:
+            results.append({"bot_id": bot_id, "status": "blocked", "reason": blocked})
+            continue
         pending_cash = float(pending_cash or 0)
         attempts = int(attempts or 0)
         if pending_cash and pending_cash < minimum_notional and not (pending_bil or pending_voo):
@@ -1204,6 +1222,10 @@ def run_voo_liquidation(*, market_open: bool) -> dict[str, Any]:
             if not market_open or open_voo_buy:
                 out.append({"bot_id": bot_id, "action": "deferred",
                             "reason": "market_closed" if not market_open else "open_voo_buy"})
+                continue
+            blocked = _orders_blocked(bot_id)
+            if blocked:
+                out.append({"bot_id": bot_id, "action": "blocked", "reason": blocked})
                 continue
             if not _order_budget_left(bot_id):
                 out.append({"bot_id": bot_id, "action": "blocked", "reason": "daily_order_cap"})

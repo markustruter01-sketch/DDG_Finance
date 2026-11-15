@@ -37,7 +37,8 @@ def test_decision_chain_links_and_detects_tampering():
     assert store.accounts(get_conn)[0]["start_equity"] == 86_919.04
 
     # The database refuses edits and deletes.
-    for sql in ("UPDATE twin_decisions SET reason = 'x'", "DELETE FROM twin_decisions"):
+    for sql in ("UPDATE twin_decisions SET reason = 'x'", "DELETE FROM twin_decisions",
+                "TRUNCATE twin_decisions CASCADE"):
         with pytest.raises(Exception, match="append-only"):
             with get_conn() as conn, conn.cursor() as cur:
                 cur.execute(sql)

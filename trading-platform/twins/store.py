@@ -122,6 +122,10 @@ DO $$ BEGIN
         CREATE TRIGGER {t}_append_only BEFORE UPDATE OR DELETE ON {t}
         FOR EACH ROW EXECUTE FUNCTION twins_append_only();
     END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = '{t}_no_truncate') THEN
+        CREATE TRIGGER {t}_no_truncate BEFORE TRUNCATE ON {t}
+        FOR EACH STATEMENT EXECUTE FUNCTION twins_append_only();
+    END IF;
 END $$;
 """ for t in APPEND_ONLY)
 

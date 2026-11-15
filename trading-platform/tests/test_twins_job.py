@@ -229,3 +229,21 @@ def test_an_unreadable_account_is_a_missed_read_not_a_guess():
     rows = store.decisions(get_conn, "oracle:mirror:v1")
     assert rows[-1]["missed"] and rows[-1]["weights"] is None
     assert not any(r["day"] == D2 and r["ref_equity"] for r in store.equity_rows(get_conn, "oracle:mirror:v1"))
+
+
+@needs_pg
+def test_mirror_gap_uses_the_value_recorded_on_the_day_so_a_dividend_counts_once():
+    # 100 shares at 100, 1.00 dividend: ex-date D2 (price 99), cash paid D3. The real account
+    # is worth 10,000 / 9,900 / 10,000. The mirror (total-return prices) stays at 10,000.
+    get_conn = make_get_conn()
+    store.ensure_schema(get_conn)
+    tid = "oracle:mirror:v1"
+    store.create_account(get_conn, twin_id=tid, bot_id="oracle", kind="mirror", version=1, bars="alpaca_daily",
+                         start_at=ny(D0, 16), start_equity=10_000.0, config={})
+    for day, real in ((D0, 10_000.0), (D1, 10_000.0), (D2, 9_900.0), (D3, 10_000.0)):
+        store.record_ref(get_conn, tid, day, real, ny(day, 16), {"cash": 0.0, "qty": {"SPY": 100.0}})
+    store.upsert_equity(get_conn, tid, [(d, 10_000.0, 1.0) for d in (D0, D1, D2, D3)])
+    acct = store.accounts(get_conn)[0]
+    assert job.check_mirror(get_conn, acct, None) == 0.0          # after the pay date: no gap left
+    gaps = {r["day"]: r["gap_pp"] for r in store.equity_rows(get_conn, tid)}
+    assert gaps == {D0: None, D1: 0.0, D2: 1.0, D3: 0.0}          # open only between ex-date and pay date

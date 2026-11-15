@@ -143,6 +143,11 @@ Runs all year as a SHADOW (no orders); decide at end of 2027 whether to switch i
 - OANDA 401s continued all weekend (4 Forex execution attempts failed while the market was closed; reconciliation and the kill-switch report saw the same). The retry count will show how often it happens on trading days.
 - Next: FABLE: Bot 1-4 registrations, order-path audit (item 7), the daily-returns snapshot timing (before the close since 1 Nov). OPUS: crypto stop-fill ledger close for BTC; Phase B.
 
+### Status 16 Nov (Opus 5.5)
+- GATE RESTARTED (Markus 16 Nov 05:20 Brisbane, "yes"): the 5 clean sessions are now Mon 16 – Fri 20 Nov. The 21–22 Nov lock holds if all five are clean. Tonight's rehearsal (real 1-share paper orders) counts as clean if it ends reconciled.
+- ITEM 7 DONE (audit): `docs/plans/order-path-audit-2026-11-16.md` (Project copy `claude/finance-order-path-audit-2026-11-16.md`). 🔴 F1: a timed-out Alpaca order can be sent twice (our duplicate-id retry). F2: Forex records an unclear order answer as "not filled". F3: unprotected windows up to ~1 h (alarm within 15 min). F4: vault ignores pause and the kill latch. F5: no timeout on Alpaca calls.
+- Next: OPUS builds F1 + F2 + F4 with tests (one PR); FABLE reviews; publish at the lock weekend with the cutover (engine change, not during the gate).
+
 ### Step 3 — lock strategies (weekend 21–22 Nov, market closed)
 17. FABLE: registration + pass bar for Bots 1–4 and for the AI shadow, written before the start; exact Bot 3 rules (stock / gold-silver split, trend rule, gearing, stop width).
 18. OPUS: cutover rehearsed per 9a first, then live (one account F1 -> G4, F1 shadow, labels Bot 1/2/3/4, gold/silver sleeve on Bot 3), Forex 2x/4x "what if" columns, AI shadow harness. FABLE reviews before it goes live.

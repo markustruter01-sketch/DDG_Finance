@@ -3,18 +3,34 @@
 from __future__ import annotations
 
 import os
+import time
 from decimal import Decimal, InvalidOperation
 from typing import Any
 from urllib.parse import quote
 
 import httpx
+from loguru import logger
 
 BASE_URL = "https://api-fxpractice.oanda.com/v3"
 REQUEST_TIMEOUT_SECONDS = 15.0
+# OANDA's practice API answers 401 on and off with a good token (13-15 Nov 2026).
+# A read that gets a 401 is tried once more after this pause. Each retry logs a
+# WARNING with RETRY_LOG_PREFIX (kept 30 days in runtime_log), so the daily
+# health message can count how often it happens.
+RETRY_PAUSE_SECONDS = 1.0
+RETRY_LOG_PREFIX = "OANDA 401 retry"
 
 
 class OandaClientError(RuntimeError):
     """Raised when a practice-account request cannot be completed safely."""
+
+
+class OandaHTTPError(OandaClientError):
+    """The API answered with a non-2xx status."""
+
+    def __init__(self, status: int) -> None:
+        super().__init__(f"OANDA practice API returned HTTP {status}")
+        self.status = status
 
 
 class OandaConfigurationError(OandaClientError):
@@ -70,7 +86,18 @@ class OandaClient:
     ) -> dict[str, Any]:
         from core.link_health import record_link
         try:
-            payload = self._get_unrecorded(path, params=params)
+            try:
+                payload = self._get_unrecorded(path, params=params)
+            except OandaHTTPError as exc:
+                if exc.status != 401:
+                    raise
+                time.sleep(RETRY_PAUSE_SECONDS)       # reads only: a GET is safe to repeat
+                try:
+                    payload = self._get_unrecorded(path, params=params)
+                except OandaClientError as again:
+                    logger.warning(f"{RETRY_LOG_PREFIX} | failed again: {again}")
+                    raise
+                logger.warning(f"{RETRY_LOG_PREFIX} | recovered")
         except OandaClientError as exc:
             record_link("OANDA practice", False, str(exc))
             raise
@@ -102,9 +129,7 @@ class OandaClient:
         except Exception:
             raise OandaClientError("OANDA practice API returned an invalid response") from None
         if status_code < 200 or status_code >= 300:
-            raise OandaClientError(
-                f"OANDA practice API returned HTTP {status_code}"
-            )
+            raise OandaHTTPError(status_code)
 
         try:
             payload = response.json()

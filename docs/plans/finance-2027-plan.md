@@ -1,5 +1,5 @@
 # DDG Finance — plan to the 2027 test year
-Written by Claude (Fable 5.2), Tue 10 Nov 2026; last updated Sun 15 Nov ~15:00 Brisbane (AI twins Phase A built, PR #103; status 12–15 Nov below). Agreed by Markus 10 Nov.
+Written by Claude (Fable 5.2), Tue 10 Nov 2026; last updated Sun 15 Nov ~19:15 Brisbane (twins Phase A live, TWINS-V2 registered, ETH stop fill, weekend alarm fixes). Agreed by Markus 10 Nov.
 Roles: FABLE = diagnosis, strategy, specs, pass bars, reviews. OPUS = coding. MARKUS = decisions and things only he can click.
 Target: strategies locked the weekend of 21–22 Nov, record starts Mon 23 Nov 2026 (needs the 5-clean-day gate first).
 Constraint (Markus 10 Nov): Alpaca paper accounts are capped at 3 and all 3 are in use. No fourth account.
@@ -134,6 +134,14 @@ Runs all year as a SHADOW (no orders); decide at end of 2027 whether to switch i
 - Found: `bot_daily_returns.equity_close` is snapshotted 19:15–20:15 UTC, before the 21:00 UTC close since US clocks changed (13 Nov Atlas: 87,079.77 recorded vs 87,124.70 at the close). The twins value at the close. FABLE: decide whether the snapshot moves after the close before the record restarts at the lock.
 - Read from code: council models Groq `openai/gpt-oss-120b`, OpenRouter `nvidia/nemotron-3-ultra-550b-a55b:free`, Google `gemini-3-flash-preview`, temperature 0.2. None is a dated id (spec rule 5 wants dated ids and lowest randomness). The council logs token counts per call, not dollars.
 - Next: FABLE reviews #103 → Markus merges → OPUS publishes with the US market closed, read-only pre/post checks → FABLE writes the Forex rule and the pass marks → OPUS builds Phase B.
+
+### Status 15 Nov evening (Opus 5.5)
+- AI twins Phase A LIVE: PR #103 + #104 (Fable's review fixes) merged, published 15 Nov 07:16 UTC (US closed). Pre-check clean; post-check: 4 bots unpaused, holdings unchanged, 6 twin tables + append-only/no-truncate guards created, first change_log row 07:55 UTC. Twins are created by the first nightly run (Mon 17:15 New York = Tue 08:15 Brisbane). Fable's review: Project doc `claude/finance-ai-twins-phase-a-review-2026-11-15.md`.
+- TWINS-V2 REGISTERED (PR #105, merged 15 Nov): Forex rule = FX-BT1 baseline; pass marks; luck check (t >= 2.0 for "clear"); both sides through the same engine; AI cost charged to the AI side; month-end freeze + GitHub copy. `docs/plans/ai-twins-2027-registration.md`.
+- 🔴 ETH (owner-kept, Atlas V2) SOLD BY ITS STOP: Alpaca stop-limit order 4e844e8b filled Sat 14 Nov 14:24:36 UTC, 2.222351339 ETH at avg 1852.12 (two fills). Entry was 2471.48: about −$1,376 on the line. Markus 15 Nov 18:16 Brisbane: no rebuy. Ledger row bot3_positions id 2 closed by hand (owner-approved production write; before/after recorded), change_log row 2. Cause of the hourly critical alarms since 14 Nov 16:39 UTC: nothing closed the row, because the old Bot 3 code that handled crypto stop fills no longer runs on this account. Same will happen if the BTC stop fills: TO FIX (Opus) before then.
+- Weekend alarm fixes (PR, this session): reconciliation records one alarm per open mismatch (was one critical row per hourly run); OANDA reads retry once on a 401 and each retry is logged, with a 24 h count in the daily health message (orders are never retried); twins mirror treats an owner-kept sale as money arriving, not engine error; ETH removed from OWNER_KEPT (BTC stays).
+- OANDA 401s continued all weekend (4 Forex execution attempts failed while the market was closed; reconciliation and the kill-switch report saw the same). The retry count will show how often it happens on trading days.
+- Next: FABLE: Bot 1-4 registrations, order-path audit (item 7), the daily-returns snapshot timing (before the close since 1 Nov). OPUS: crypto stop-fill ledger close for BTC; Phase B.
 
 ### Step 3 — lock strategies (weekend 21–22 Nov, market closed)
 17. FABLE: registration + pass bar for Bots 1–4 and for the AI shadow, written before the start; exact Bot 3 rules (stock / gold-silver split, trend rule, gearing, stop width).

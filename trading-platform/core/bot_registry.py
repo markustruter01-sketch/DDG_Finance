@@ -174,7 +174,9 @@ BOT_REGISTRY: dict[str, BotEntry] = {
 # leftover BTC/ETH on Atlas V2's account stays, with its stops). The fleet
 # executor never trades them and the AI twins leave them out of the account
 # they copy. Canonical symbols (core.symbols.canonical_symbol).
-OWNER_KEPT: dict[str, frozenset[str]] = {"jerome_macro": frozenset({"BTCUSD", "ETHUSD"})}
+# ETH left the list on 15 Nov: its stop sold it on 14 Nov 14:24 UTC and Markus
+# decided no rebuy (finance-2027-plan.md, status 15 Nov).
+OWNER_KEPT: dict[str, frozenset[str]] = {"jerome_macro": frozenset({"BTCUSD"})}
 
 
 # Build alias → canonical lookup at module load time

@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import itertools
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Mapping
 
 HOLDOUT_START = date(2021, 1, 1)
@@ -101,6 +101,8 @@ def check_window(end: date, registration_id: str | None, grant: ReadGrant | None
     committed, well-formed registration file — any string is not enough, or
     the lock could be bypassed by typing a made-up id.
     """
+    if isinstance(end, datetime):         # hourly steps (datetime is a date subclass)
+        end = end.date()
     if end < HOLDOUT_START:
         return
     if plan is not None:

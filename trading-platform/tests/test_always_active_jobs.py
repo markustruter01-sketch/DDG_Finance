@@ -12,7 +12,8 @@ def test_always_active_ids_are_real_jobs_and_exclude_order_placers():
     for order_job in ("per_bot_vault_deployment", "per_bot_vault_monthly_skim",
                       "automated_kill_switch", "scheduled_reconciliation"):
         assert order_job not in cs._ALWAYS_ACTIVE_JOBS
-    assert {"standing_invariants", "order_watchdog", "gear_v1_g4_shadow"} <= cs._ALWAYS_ACTIVE_JOBS
+    assert {"standing_invariants", "order_watchdog", "gear_v1_g4_shadow",
+            "twins_hourly", "twins_nightly"} <= cs._ALWAYS_ACTIVE_JOBS
 
 
 def test_vault_v2_retired_the_quarterly_rebalance():

@@ -11,13 +11,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from core.bot_registry import OWNER_KEPT  # the executor never trades them; not an alarm
 from gear_account import sleeve_exclusions
-
-# Holdings the owner has decided stay as they are (Markus, 10 Nov 2026: the
-# leftover BTC/ETH on Atlas V2's account stays, with its stops). The fleet
-# executor never trades them; that is expected, not an alarm. Anything else
-# left untouched still alarms.
-OWNER_KEPT = {"jerome_macro": frozenset({"BTCUSD", "ETHUSD"})}
 
 
 def run_fleet_account(engine, *, bot_id: str, variant, label: str,

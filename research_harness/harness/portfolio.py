@@ -13,6 +13,11 @@ Cash earns the T-bill rate; borrowed cash pays T-bill + financing spread;
 shorts pay borrow. Trade costs come from the CostModel. Weights are fractions
 of equity; sum of |weights| is capped by max_gross.
 
+Steps need not be days: hourly bars keyed by datetime work the same way
+(the AI twins' forex engine). periods_per_year sets the financing and
+borrow accrual per step; on_fill(step, symbol, qty, price, cost, reason) is
+called for every fill so a caller can keep a fill record.
+
 Live parity options (the live sleeve runs the same rules):
 - whole_shares: trade whole shares only (rounded toward zero), as live
   protective stops must cover whole shares.
@@ -99,6 +104,8 @@ def simulate(
     whole_shares: bool = False,
     stop_pct: float | None = None,
     plan: str | None = None,
+    periods_per_year: int = TRADING_DAYS,
+    on_fill: Callable[[Any, str, float, float, float, str], None] | None = None,
 ) -> SimResult:
     check_window(end, registration_id, grant, plan)
     if stop_pct is not None and not 0 < stop_pct < 1:
@@ -126,6 +133,8 @@ def simulate(
         res.fills += 1
         res.traded_notional += abs(notional)
         res.costs_paid += cost
+        if on_fill is not None:
+            on_fill(day, sym, qty, price, cost, reason)
         before = shares.get(sym, 0.0)
         after = before + qty
         if abs(before) < EPS:
@@ -201,12 +210,12 @@ def simulate(
             res.cash_interest += earning * rf_d[k]
             cash += earning * rf_d[k]
         else:
-            charge = -cash * (rf_d[k] + costs.financing_spread_bps_yr / 1e4 / TRADING_DAYS)
+            charge = -cash * (rf_d[k] + costs.financing_spread_bps_yr / 1e4 / periods_per_year)
             res.financing_paid += charge
             cash -= charge
         for s, q in shares.items():
             if q < 0:
-                fee = -q * last[s] * costs.short_borrow_bps_yr / 1e4 / TRADING_DAYS
+                fee = -q * last[s] * costs.short_borrow_bps_yr / 1e4 / periods_per_year
                 res.borrow_paid += fee
                 cash -= fee
         # 3. Mark to close.

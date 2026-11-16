@@ -148,6 +148,14 @@ Runs all year as a SHADOW (no orders); decide at end of 2027 whether to switch i
 - ITEM 7 DONE (audit): `docs/plans/order-path-audit-2026-11-16.md` (Project copy `claude/finance-order-path-audit-2026-11-16.md`). 🔴 F1: a timed-out Alpaca order can be sent twice (our duplicate-id retry). F2: Forex records an unclear order answer as "not filled". F3: unprotected windows up to ~1 h (alarm within 15 min). F4: vault ignores pause and the kill latch. F5: no timeout on Alpaca calls.
 - Next: OPUS builds F1 + F2 + F4 with tests (one PR); FABLE reviews; publish at the lock weekend with the cutover (engine change, not during the gate).
 
+### Status 17 Nov (Fable 5.2)
+- 🔴 GATE STOPPED (Markus 17 Nov 08:39 Brisbane: "I am making the call now... let's stop this 5-day testing window"). Reason: the gate was proving the old order engine; PR #108 (audit F1/F2/F4, an engine change) was due to publish at the lock weekend, after the gate. The Mon 16 – Fri 20 Nov window no longer counts.
+- NEW ORDER (Markus agreed): 1) fix window: everything that changes running code goes in now; 2) ONE new 5-session gate on that final system, nothing merged during it; 3) lock and start the weekend after. The 21–22 Nov lock moves (about 5–6 Dec if the fix window takes a week). The public record start (1 Jan 2027) is unchanged.
+- Fix window list (code-changing; each a small PR, tests green, published with the US market closed): publish #108; time limits on broker calls (audit F5); BTC stop-fill ledger close; daily snapshot after the US close; kill switch per bot (one broker's failed reads pause only that bot, after several in a row); delete dead code (short selling, old Navigator forex routes, the 17 Aug one-time job, dead bots_state rows); display-name table (keys `oracle`, `jerome_macro`, `spy_qqq_trend`, `forex_ai` never change); outside heartbeat on (needs Markus: two monitor URLs).
+- Not in the fix window: folder renames (e.g. kraken-bot) and wider tidy-up: risk without a reliability gain, and they cannot happen after the lock.
+- This PR: automatic tests on GitHub (`.github/workflows/tests.yml`), so every later fix is checked before merge. No running code changed.
+- NOT known when written: whether #108 is published; the result of the Mon 16 Nov session and rehearsal. Read from outside only (ddg.limited push 16 Nov 22:27 UTC: 4 bots unpaused, fleet equity 365,797.04).
+
 ### Step 3 — lock strategies (weekend 21–22 Nov, market closed)
 17. FABLE: registration + pass bar for Bots 1–4 and for the AI shadow, written before the start; exact Bot 3 rules (stock / gold-silver split, trend rule, gearing, stop width).
 18. OPUS: cutover rehearsed per 9a first, then live (one account F1 -> G4, F1 shadow, labels Bot 1/2/3/4, gold/silver sleeve on Bot 3), Forex 2x/4x "what if" columns, AI shadow harness. FABLE reviews before it goes live.

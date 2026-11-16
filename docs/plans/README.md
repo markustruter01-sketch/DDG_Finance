@@ -24,6 +24,8 @@ In-house algorithmic trading platform (paper only). 3 Alpaca paper accounts (cap
 - New since 10 Nov: workspace DB sessions read-only (`PGOPTIONS` in `.replit` `[userenv.development]`; a deliberate write needs a `PGOPTIONS=` prefix); 30-day log copy (`runtime_log`); daily health Discord 08:40 Brisbane; live-vs-research daily check (`live_research_check`, `GET /fleet/live-check`); Home cards show rule + Holds; outside heartbeat (inert until secrets `HEARTBEAT_URL_RUNNER` / `HEARTBEAT_URL_API` are set).
 - OPEN PR #98: engine set-up once per process (fixes a ledger-table deadlock seen 22:14 UTC 10 Nov) + current_qty repair scoped to the account's own rows (latent cross-account write). Needs review, merge, and a publish with the US market closed.
 
+## 🔴 17 Nov 2026: the 5-day gate is STOPPED (Markus). Fix window first, then one new gate, then the lock. See "Status 17 Nov" in `finance-2027-plan.md`. The list below is from 11 Nov and is older than that.
+
 ## Next work (in order) — see the plan's "Agency queue"
 1. PR #98 review → merge → publish (market closed).
 2. Order-path audit + "must never happen" tests on the fake broker (plan item 7).

@@ -1,6 +1,6 @@
 # DDG Finance: road from today to a self-running fund
 
-Written by Claude (Fable 5.2), Tue 17 Nov 2026, for Markus. PROPOSED: nothing here is agreed until Markus says so. This is a plan for building and testing software. It is not financial advice, and no step can promise a profit or a result against the S&P 500.
+Written by Claude (Fable 5.2), Tue 17 Nov 2026, for Markus. AGREED by Markus, Tue 17 Nov 2026 09:17 Brisbane ("Yes, I agree to the plan"). This is a plan for building and testing software. It is not financial advice, and no step can promise a profit or a result against the S&P 500.
 
 ## The goal, in one line
 Markus puts in his own money; the system works out what kind of market it is, which proven strategies to run, how much to give each, and trades it, with hard limits that stop it when something is wrong.
@@ -9,6 +9,13 @@ Markus puts in his own money; the system works out what kind of market it is, wh
 - "Knows the market regime and picks the best strategy" is the hardest part and the part most likely not to work. So it is built last, tested in shadow for a year, and only switched on if it beats the simple alternative (equal money to each proven strategy).
 - The AI advises in shadow first (it may only reduce or skip, never add). It earns control only with a year of evidence.
 - One year of data gives a shortlist, not proof. Real money starts small and steps up.
+
+## Rule for the whole plan: no new accounts, no new paid services
+- Trading accounts stay as they are: 3 Alpaca paper accounts and 1 OANDA practice account. Shadows are fake-money records inside our own database; they need no account.
+- Data: only the price feeds the platform already uses. No strategy may need a new paid data source. (This is why the Defensive stocks strategy below picks by price steadiness only, not by company profits, which would need a paid fundamentals feed.)
+- Free tiers only for anything added: GitHub's test runs, and two free outside-monitor checks.
+- Two things that can still cost more, so they need Markus's yes first: extra AI calls for the Allocator's AI shadow (Phase 3), and Replit Agent credits if the Agent is used for checks.
+- The only new account in the whole plan is a real-money broker account in Phase 5, and only if Phase 4 passes.
 
 ## Phase 0: make the engine trustworthy (now to about Sat 5 Dec 2026)
 One small pull request each, tests green on GitHub, published with the US market closed.
@@ -29,7 +36,7 @@ The AI twins engine already runs fake-money accounts on real prices with no orde
 2. One shared cost model: slippage per trade, borrowing interest on geared positions, AI cost. Starts from estimates; recalibrated monthly from the four real accounts' actual fills.
 3. Nightly run after the US close: every shadow valued at the close, append-only logs, hash check.
 4. Leaderboard page in the dashboard: return after costs, worst fall, days in cash, gap to S&P 500, and a "luck check" column.
-5. Real accounts (4): Atlas (trend, 1.5x), Defensive stocks (replaces Atlas V2 at the lock), Momentum (fixed brake, weekly re-entry, 25% sector cap), Forex AI council.
+5. Real accounts (4): Atlas (trend, 1.5x), Defensive stocks (the 50 S&P 500 stocks with the steadiest prices over the past year, equal weight, monthly; replaces Atlas V2 at the lock), Momentum (fixed brake, weekly re-entry, 25% sector cap), Forex AI council.
 6. Shadows (16) and yardsticks (3) as listed in the 17 Nov chat: trend/gearing 4, stock picking 4, diversifiers 3, short-term 2, forex 3; S&P 500, 60/40, cash.
 7. Lock weekend (target 12 to 13 Dec): registrations merged, cutover of Atlas V2's account, record restarts once.
 Done when: all 23 lines produce a number every night for 5 sessions and the four mirror twins match their real accounts within the agreed tolerance.
@@ -61,7 +68,7 @@ Done when: nine months of side-by-side data exist for (a), (b) and (c).
 3. Fund-level stop: down 15% from the high means cash and a human decision.
 4. Monthly report continues unchanged. Real results are compared with the shadow of the same strategy; a widening gap pauses new money.
 
-## What Markus decides now
-1. Agree or change this plan.
-2. Confirm Defensive stocks replaces Atlas V2's strategy at the lock (the BTC line stays frozen as agreed).
-3. Confirm the lock moves to about 12 to 13 Dec so the Shadow League starts with the record.
+## Decided by Markus, 17 Nov 2026 09:17 Brisbane
+1. The plan is agreed.
+2. Defensive stocks replaces Atlas V2's strategy at the lock (the BTC line stays frozen as agreed earlier).
+3. The lock moves to about 12 to 13 Dec so the Shadow League starts with the record.

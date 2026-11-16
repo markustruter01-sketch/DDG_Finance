@@ -156,6 +156,8 @@ Runs all year as a SHADOW (no orders); decide at end of 2027 whether to switch i
 - This PR: automatic tests on GitHub (`.github/workflows/tests.yml`), so every later fix is checked before merge. No running code changed.
 - NOT known when written: whether #108 is published; the result of the Mon 16 Nov session and rehearsal. Read from outside only (ddg.limited push 16 Nov 22:27 UTC: 4 bots unpaused, fleet equity 365,797.04).
 
+- ROADMAP AGREED (Markus 17 Nov 09:17 Brisbane): `fund-roadmap-2026-11-17.md` is the target from here; where it differs from the line-up above, the roadmap wins. Defensive stocks replaces Atlas V2's strategy at the lock; lock moves to about 12–13 Dec; no new trading accounts or paid services. Opus 5.5 builds it alone per `fund-roadmap-build-guide-for-opus.md`.
+
 ### Step 3 — lock strategies (weekend 21–22 Nov, market closed)
 17. FABLE: registration + pass bar for Bots 1–4 and for the AI shadow, written before the start; exact Bot 3 rules (stock / gold-silver split, trend rule, gearing, stop width).
 18. OPUS: cutover rehearsed per 9a first, then live (one account F1 -> G4, F1 shadow, labels Bot 1/2/3/4, gold/silver sleeve on Bot 3), Forex 2x/4x "what if" columns, AI shadow harness. FABLE reviews before it goes live.

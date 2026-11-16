@@ -4,6 +4,8 @@ Last updated: Wed 11 Nov 2026 ~13:00 Brisbane (UTC+10) by Claude (Opus 5.5 sessi
 Read in this order:
 1. This file (current state, how to work, what is next).
 2. `finance-2027-plan.md` — the agreed plan to the 2027 test year, its checklist and status. **Master copy.**
+4. `fund-roadmap-2026-11-17.md` — AGREED (Markus 17 Nov) road from today to a self-running fund: fix window, Shadow League, Allocator in shadow, staged real money. **This is now the target.**
+5. `fund-roadmap-build-guide-for-opus.md` — how Opus 5.5 builds that roadmap alone (no Fable in the loop).
 3. `forex-council-2027-registration.md` — Bot 4's registered forward test (do not edit; new versions are new dated files).
 
 No secret values are in these files or anywhere in this repo. Secrets live in Replit Secrets only (names may be mentioned, never values).

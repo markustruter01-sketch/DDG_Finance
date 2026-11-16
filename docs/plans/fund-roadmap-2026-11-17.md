@@ -37,7 +37,13 @@ The AI twins engine already runs fake-money accounts on real prices with no orde
 3. Nightly run after the US close: every shadow valued at the close, append-only logs, hash check.
 4. Leaderboard page in the dashboard: return after costs, worst fall, days in cash, gap to S&P 500, and a "luck check" column.
 5. Real accounts (4): Atlas (trend, 1.5x), Defensive stocks (the 50 S&P 500 stocks with the steadiest prices over the past year, equal weight, monthly; replaces Atlas V2 at the lock), Momentum (fixed brake, weekly re-entry, 25% sector cap), Forex AI council.
-6. Shadows (16) and yardsticks (3) as listed in the 17 Nov chat: trend/gearing 4, stock picking 4, diversifiers 3, short-term 2, forex 3; S&P 500, 60/40, cash.
+6. Yardsticks (3): S&P 500 buy-and-hold; 60/40 shares and bonds; cash.
+   Shadows (16), exact rules fixed in each registration file before the start:
+   - Trend and gearing (4): the Atlas trend rule at 1x; at 1.5x; at 2x; today's multi-asset Atlas (FLEET-V1-F1).
+   - Stock picking (4): Momentum (MOMO-V2 with the brake fixed); Momentum with the 25% sector cap; Defensive stocks; equal-weight S&P 500.
+   - Diversifiers (3): trend on bonds, gold, commodities and the dollar only (no shares); gold trend alone; risk-balanced shares, bonds and gold.
+   - Short-term (2): buy index dips and hold a few days; hold the index only around the turn of each month.
+   - Forex (3): the 3-AI council; the registered non-AI baseline (FX-BT1); a simple currency trend rule.
 7. Lock weekend (target 12 to 13 Dec): registrations merged, cutover of Atlas V2's account, record restarts once.
 Done when: all 23 lines produce a number every night for 5 sessions and the four mirror twins match their real accounts within the agreed tolerance.
 

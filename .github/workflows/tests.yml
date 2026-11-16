@@ -1,0 +1,59 @@
+# Runs the test suites on every pull request and on main, so a change is checked before it is
+# merged instead of by hand. Mirrors the local set-up in docs/plans/README.md ("Local tests"):
+# a throwaway Postgres 16 on this machine, dummy API keys, no secrets, no broker, no network trading.
+# The tests' own guards (conftest.py) refuse any database that is not on this machine.
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: qt_test
+        ports:
+          - 54329:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgresql://postgres@ep-nameless-hill-localtest:54329/qt_test
+      FRED_API_KEY: x
+      NEWS_API_KEY: x
+      GROQ_API_KEY: x
+    steps:
+      - uses: actions/checkout@v4
+      - name: Name the local test database the way the tests expect
+        run: echo "127.0.0.1 ep-nameless-hill-localtest" | sudo tee -a /etc/hosts
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+          enable-cache: true
+      - name: Install the locked packages
+        run: uv sync --frozen
+      - name: kraken-bot and sleeve_runtime tests
+        # GitHub sets its own RUNNER_ENVIRONMENT ("github-hosted") and does not let a workflow
+        # replace it, but the platform reads that same name for dev/published. Set it for the
+        # test command only, to the workspace's value.
+        run: RUNNER_ENVIRONMENT=dev uv run pytest kraken-bot sleeve_runtime/tests -q
+      - name: trading-platform tests
+        if: always()
+        working-directory: trading-platform
+        run: RUNNER_ENVIRONMENT=dev uv run pytest tests -q

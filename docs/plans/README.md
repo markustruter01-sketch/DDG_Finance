@@ -1,12 +1,13 @@
 # DDG Finance — start here (for any Claude picking this up)
 
-Last updated: Wed 11 Nov 2026 ~13:00 Brisbane (UTC+10) by Claude (Opus 5.5 session).
+Last updated: Tue 17 Nov 2026 ~09:30 Brisbane (UTC+10) by Claude (Fable 5.2): reading order and the 17 Nov notice only. "Live state" and "Next work" below are still from Wed 11 Nov (Opus 5.5) and are older than the roadmap.
 Read in this order:
-1. This file (current state, how to work, what is next).
-2. `finance-2027-plan.md` — the agreed plan to the 2027 test year, its checklist and status. **Master copy.**
-4. `fund-roadmap-2026-11-17.md` — AGREED (Markus 17 Nov) road from today to a self-running fund: fix window, Shadow League, Allocator in shadow, staged real money. **This is now the target.**
-5. `fund-roadmap-build-guide-for-opus.md` — how Opus 5.5 builds that roadmap alone (no Fable in the loop).
-3. `forex-council-2027-registration.md` — Bot 4's registered forward test (do not edit; new versions are new dated files).
+1. This file (how to work, Replit facts, publish rules).
+2. `fund-roadmap-2026-11-17.md` — AGREED (Markus 17 Nov): the road from today to a self-running fund (fix window, Shadow League, Allocator in shadow, staged real money). **This is the target.**
+3. `fund-roadmap-build-guide-for-opus.md` — how Opus 5.5 builds that roadmap alone (no Fable in the loop).
+4. `finance-2027-plan.md` — the earlier plan, its checklist and the dated status entries. **The running history; add a Status entry after every work session.** Where it differs from the roadmap, the roadmap wins.
+5. `order-path-audit-2026-11-16.md` — every code path that can place an order, findings F1 to F5, and the "must never happen" list.
+6. `forex-council-2027-registration.md` and `ai-twins-2027-registration.md` — registered forward tests (do not edit; new versions are new dated files).
 
 No secret values are in these files or anywhere in this repo. Secrets live in Replit Secrets only (names may be mentioned, never values).
 
@@ -26,7 +27,11 @@ In-house algorithmic trading platform (paper only). 3 Alpaca paper accounts (cap
 - New since 10 Nov: workspace DB sessions read-only (`PGOPTIONS` in `.replit` `[userenv.development]`; a deliberate write needs a `PGOPTIONS=` prefix); 30-day log copy (`runtime_log`); daily health Discord 08:40 Brisbane; live-vs-research daily check (`live_research_check`, `GET /fleet/live-check`); Home cards show rule + Holds; outside heartbeat (inert until secrets `HEARTBEAT_URL_RUNNER` / `HEARTBEAT_URL_API` are set).
 - OPEN PR #98: engine set-up once per process (fixes a ledger-table deadlock seen 22:14 UTC 10 Nov) + current_qty repair scoped to the account's own rows (latent cross-account write). Needs review, merge, and a publish with the US market closed.
 
-## 🔴 17 Nov 2026: the 5-day gate is STOPPED (Markus). Fix window first, then one new gate, then the lock. See "Status 17 Nov" in `finance-2027-plan.md`. The list below is from 11 Nov and is older than that.
+## 🔴 What changed on 17 Nov 2026 (read before the older sections)
+- The 5-day gate (Mon 16 – Fri 20 Nov) is STOPPED by Markus. New order: fix window, then ONE new gate on the final system, then the lock (about 12–13 Dec).
+- The roadmap is agreed. At the lock, Defensive stocks replaces Atlas V2's strategy (the BTC line stays frozen). No new trading accounts or paid services.
+- Tests now run on GitHub for every pull request and on main (`.github/workflows/tests.yml`). Green before any merge.
+- NOT known when written: whether PR #108 (order-path fixes) is published; the result of the Mon 16 Nov session and rehearsal.
 
 ## Next work (in order) — see the plan's "Agency queue"
 1. PR #98 review → merge → publish (market closed).

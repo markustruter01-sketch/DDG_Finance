@@ -38,9 +38,6 @@ jobs:
       FRED_API_KEY: x
       NEWS_API_KEY: x
       GROQ_API_KEY: x
-      # The tests are written to run in the workspace, where the runner is in dev mode
-      # (two strategy-bench tests expect the dev-only route to be open).
-      RUNNER_ENVIRONMENT: dev
     steps:
       - uses: actions/checkout@v4
       - name: Name the local test database the way the tests expect
@@ -52,8 +49,11 @@ jobs:
       - name: Install the locked packages
         run: uv sync --frozen
       - name: kraken-bot and sleeve_runtime tests
-        run: uv run pytest kraken-bot sleeve_runtime/tests -q
+        # GitHub sets its own RUNNER_ENVIRONMENT ("github-hosted") and does not let a workflow
+        # replace it, but the platform reads that same name for dev/published. Set it for the
+        # test command only, to the workspace's value.
+        run: RUNNER_ENVIRONMENT=dev uv run pytest kraken-bot sleeve_runtime/tests -q
       - name: trading-platform tests
         if: always()
         working-directory: trading-platform
-        run: uv run pytest tests -q
+        run: RUNNER_ENVIRONMENT=dev uv run pytest tests -q

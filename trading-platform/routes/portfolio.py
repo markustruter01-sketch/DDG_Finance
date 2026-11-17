@@ -58,7 +58,8 @@ def _fetch_account_positions(api_key: str, secret_key: str, bot_id: str) -> list
     """Read one bot's Alpaca account and normalize it for the dashboard."""
     from alpaca.trading.client import TradingClient
 
-    client = TradingClient(api_key=api_key, secret_key=secret_key, paper=True)
+    from core.broker_http import with_time_limit
+    client = with_time_limit(TradingClient(api_key=api_key, secret_key=secret_key, paper=True))
     positions = client.get_all_positions()
     return [
         {

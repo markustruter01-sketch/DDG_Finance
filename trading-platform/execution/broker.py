@@ -40,6 +40,7 @@ from config.settings import settings
 from analysis.schemas import is_crypto_pair
 from execution.resilience import alpaca_retry
 from core.order_ids import submit_with_unique_client_order_id
+from core.broker_http import with_time_limit
 
 # ── Singleton client ────────────────────────────────────────────────────────
 _trading_client: TradingClient | None = None
@@ -48,11 +49,12 @@ _trading_client: TradingClient | None = None
 def _client() -> TradingClient:
     global _trading_client
     if _trading_client is None:
-        _trading_client = TradingClient(
+        # Every call has a time limit (16 Nov 2026 audit, F5).
+        _trading_client = with_time_limit(TradingClient(
             api_key=settings.alpaca_api_key,
             secret_key=settings.alpaca_secret_key,
             paper=True,
-        )
+        ))
         logger.debug("Broker | TradingClient singleton created")
     return _trading_client
 
@@ -260,10 +262,10 @@ def _get_stock_data_client():
     global _stock_data_client
     if _stock_data_client is None:
         from alpaca.data.historical import StockHistoricalDataClient
-        _stock_data_client = StockHistoricalDataClient(
+        _stock_data_client = with_time_limit(StockHistoricalDataClient(
             api_key=settings.alpaca_api_key,
             secret_key=settings.alpaca_secret_key,
-        )
+        ))
         logger.debug("Broker | StockHistoricalDataClient singleton created")
     return _stock_data_client
 
@@ -285,10 +287,10 @@ def _get_latest_stock_price(ticker: str) -> float | None:
 def _get_latest_crypto_price(ticker: str) -> float | None:
     from alpaca.data.historical import CryptoHistoricalDataClient
     from alpaca.data.requests import CryptoLatestTradeRequest
-    data_client = CryptoHistoricalDataClient(
+    data_client = with_time_limit(CryptoHistoricalDataClient(
         api_key=settings.alpaca_api_key,
         secret_key=settings.alpaca_secret_key,
-    )
+    ))
     req = CryptoLatestTradeRequest(symbol_or_symbols=ticker)
     trades = data_client.get_crypto_latest_trade(req)
     if ticker in trades:

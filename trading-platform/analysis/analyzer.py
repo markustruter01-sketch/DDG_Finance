@@ -190,10 +190,11 @@ def emergency_regime_check() -> tuple[bool, float | None]:
         from alpaca.data.historical import StockHistoricalDataClient
         from alpaca.data.requests import StockSnapshotRequest
 
-        client = StockHistoricalDataClient(
+        from core.broker_http import with_time_limit
+        client = with_time_limit(StockHistoricalDataClient(
             api_key=_settings.alpaca_api_key,
             secret_key=_settings.alpaca_secret_key,
-        )
+        ))
         req = StockSnapshotRequest(symbol_or_symbols="SPY")
         snap = client.get_stock_snapshot(req)
         spy = snap.get("SPY")

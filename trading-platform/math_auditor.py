@@ -313,10 +313,11 @@ def _fetch_alpaca_closes(symbol: str, days: int = 70) -> Optional[list[float]]:
         from alpaca.data.requests import StockBarsRequest  # type: ignore
         from alpaca.data.timeframe import TimeFrame  # type: ignore
 
-        client = StockHistoricalDataClient(
+        from core.broker_http import with_time_limit
+        client = with_time_limit(StockHistoricalDataClient(
             api_key=os.environ.get("ALPACA_API_KEY", ""),
             secret_key=os.environ.get("ALPACA_SECRET_KEY", ""),
-        )
+        ))
         start = (datetime.now(timezone.utc) - timedelta(days=days + 10)).date()
         end = datetime.now(timezone.utc).date()
         req = StockBarsRequest(
@@ -351,7 +352,8 @@ def _fetch_alpaca_current_prices(bot_id: str) -> Optional[dict[str, float]]:
         if not key or not secret:
             raise RuntimeError(f"credentials unavailable for {bot_id}")
 
-        trading_client = TradingClient(key, secret, paper=True)
+        from core.broker_http import with_time_limit
+        trading_client = with_time_limit(TradingClient(key, secret, paper=True))
         if not trading_client.get_clock().is_open:
             logger.info(f"[math_auditor] Market closed for {bot_id}; skipping current prices")
             return None
@@ -360,7 +362,7 @@ def _fetch_alpaca_current_prices(bot_id: str) -> Optional[dict[str, float]]:
         if not symbols:
             return {}
 
-        data_client = StockHistoricalDataClient(key, secret)
+        data_client = with_time_limit(StockHistoricalDataClient(key, secret))
         trades = data_client.get_stock_latest_trade(
             StockLatestTradeRequest(symbol_or_symbols=symbols)
         )

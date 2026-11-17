@@ -210,7 +210,8 @@ def _fresh_read_client(bot_id: str) -> Any:
     key, secret = os.environ.get(key_name, ""), os.environ.get(secret_name, "")
     if not key or not secret:
         raise RuntimeError(f"missing credentials for {canonical_bot_id}")
-    return TradingClient(key, secret, paper=True)
+    from core.broker_http import with_time_limit
+    return with_time_limit(TradingClient(key, secret, paper=True))
 
 
 def _optional_ledger_number(value: Any, field: str) -> float | None:
@@ -514,10 +515,10 @@ def public_holdings(bot_ids: list[str]) -> list[dict[str, Any]]:
 def _spy_bars(start: date, end: datetime) -> list[dict[str, Any]]:
     """SPY daily bars, split/dividend-adjusted (total return). SIP needs an end at least
     ~20 minutes old on this data plan; IEX if SIP is refused. Read-only."""
-    import alpaca_trade_api as tradeapi
+    from core.broker_http import alpaca_rest
 
-    api = tradeapi.REST(os.environ.get("ALPACA_API_KEY", ""), os.environ.get("ALPACA_SECRET_KEY", ""),
-                        base_url="https://paper-api.alpaca.markets")
+    api = alpaca_rest(os.environ.get("ALPACA_API_KEY", ""), os.environ.get("ALPACA_SECRET_KEY", ""),
+                      base_url="https://paper-api.alpaca.markets")
     last_err: Exception | None = None
     for feed in ("sip", "iex"):
         try:

@@ -235,8 +235,8 @@ class AlpacaEtfEngine:
                  *, bot_ids: tuple[str, ...] = ()):
         """``bot_ids``: the ledger ids that belong to THIS Alpaca account. Only
         their rows are repaired against this account's broker positions."""
-        import alpaca_trade_api as tradeapi
-        self.api = tradeapi.REST(api_key, secret_key, base_url=base_url)
+        from core.broker_http import alpaca_rest  # every Alpaca call has a time limit (audit F5)
+        self.api = alpaca_rest(api_key, secret_key, base_url=base_url)
         self.bot_ids = tuple(bot_ids)
         logger.info("AlpacaEtfEngine | Connected to Alpaca paper account")
         self._ensure_schema()

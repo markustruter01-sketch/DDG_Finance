@@ -45,11 +45,12 @@ from config.settings import settings
 
 def _get_trading_client():
     from alpaca.trading.client import TradingClient
-    return TradingClient(
+    from core.broker_http import with_time_limit
+    return with_time_limit(TradingClient(
         api_key=settings.alpaca_api_key,
         secret_key=settings.alpaca_secret_key,
         paper=True,
-    )
+    ))
 
 
 async def _fetch_closed_orders() -> list[dict[str, Any]]:

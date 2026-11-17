@@ -106,7 +106,8 @@ def _infer_bot_from_component(component: str) -> Optional[str]:
 
 def _fetch_alpaca_positions_sync(api_key: str, secret_key: str) -> list[dict]:
     from alpaca.trading.client import TradingClient
-    client = TradingClient(api_key=api_key, secret_key=secret_key, paper=True)
+    from core.broker_http import with_time_limit
+    client = with_time_limit(TradingClient(api_key=api_key, secret_key=secret_key, paper=True))
     positions = client.get_all_positions()
     return [
         {

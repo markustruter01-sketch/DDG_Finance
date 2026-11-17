@@ -1517,7 +1517,8 @@ def _broker_client(bot_id: str):
         raise RuntimeError(f"credentials unavailable for {bot_id}")
     from alpaca.trading.client import TradingClient
 
-    return TradingClient(key, secret, paper=True)
+    from core.broker_http import with_time_limit
+    return with_time_limit(TradingClient(key, secret, paper=True))
 
 
 def read_broker_inputs() -> dict[str, Any]:

@@ -52,7 +52,7 @@ def _cached(fetch):
 
 
 def run_daily(now: datetime | None = None) -> dict[str, Any]:
-    import alpaca_trade_api as tradeapi
+    from core.broker_http import alpaca_rest
 
     from core import bot_state
     from core.cash_park import CASH_PARK_SYMBOLS
@@ -66,8 +66,8 @@ def run_daily(now: datetime | None = None) -> dict[str, Any]:
     portfolios = {p["bot_id"]: p for p in bot_state.get_all_portfolios()}
     rows: dict[str, dict[str, Any]] = {}
     for bot_id, (key_env, secret_env) in ACCOUNT_KEYS.items():
-        api = tradeapi.REST(os.environ.get(key_env, ""), os.environ.get(secret_env, ""),
-                            base_url="https://paper-api.alpaca.markets")
+        api = alpaca_rest(os.environ.get(key_env, ""), os.environ.get(secret_env, ""),
+                          base_url="https://paper-api.alpaca.markets")
         p = portfolios.get(bot_id) or {}
         state = (bot_state.read_metadata(bot_id) or {}).get(STATE_KEYS[bot_id], {})
         rows[bot_id] = live_check.check_account(

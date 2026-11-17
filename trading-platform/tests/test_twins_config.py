@@ -38,7 +38,7 @@ def test_owner_kept_lines_have_one_definition():
     import core.bot_registry as reg
     src = (Path(__file__).resolve().parents[2] / "kraken-bot" / "fleet_account.py").read_text()
     assert "from core.bot_registry import OWNER_KEPT" in src and "OWNER_KEPT = {" not in src
-    assert reg.OWNER_KEPT == {"jerome_macro": frozenset({"BTCUSD"})}     # ETH sold by its stop, 14 Nov
+    assert reg.OWNER_KEPT == {}     # ETH sold by its stop 14 Nov; BTC sold by Markus 17 Nov (no crypto)
 
 
 def test_registration_is_well_formed():

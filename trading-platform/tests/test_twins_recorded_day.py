@@ -9,7 +9,6 @@ from pathlib import Path
 
 import pytest
 
-from core.bot_registry import OWNER_KEPT
 from twins import engine
 from twins.config import DAILY, MIRROR_MAX_GROSS, SHARE_COSTS
 
@@ -17,6 +16,8 @@ FIX = json.loads((Path(__file__).parent / "fixtures" / "twins_recorded_2026-11-1
 BARS = {s: [{"day": date.fromisoformat(d), "open": o, "high": h, "low": lo, "close": c} for d, o, h, lo, c in rows]
         for s, rows in FIX["bars"].items()}
 D11, D12, D13 = date(2026, 11, 11), date(2026, 11, 12), date(2026, 11, 13)
+# The owner-kept list as it was for this recorded day (BTC was sold on 17 Nov; the live list is now empty).
+OWNER_KEPT = {"jerome_macro": frozenset({"BTCUSD"})}
 
 
 @pytest.mark.parametrize("bot", sorted(FIX["portfolios"]))

@@ -491,17 +491,21 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
 
     scheduler.add_job(
         func=_daily_bot_returns_snapshot,
+        # After the US close in New York time, so it is after the close in summer AND winter.
+        # It was 20:15 UTC: after the 16:00 ET close in summer (20:00 UTC) but 45 minutes BEFORE it
+        # in winter (21:00 UTC), so from 1 Nov the "closing" equity was taken mid-session.
+        # 17:25 ET: after the benchmark snapshot (17:10) and before the live-vs-research check (17:40).
         trigger=CronTrigger(
-            hour=20,
-            minute=15,
-            timezone="UTC",
+            hour=17,
+            minute=25,
+            timezone="America/New_York",
         ),
         id="daily_bot_returns_snapshot",
-        name="Daily Per-Bot Return Series (20:15 UTC)",
+        name="Daily Per-Bot Return Series (17:25 ET, after the close)",
         replace_existing=True,
         misfire_grace_time=600,
     )
-    logger.info("Scheduler | Registered: daily_bot_returns_snapshot (daily 20:15 UTC)")
+    logger.info("Scheduler | Registered: daily_bot_returns_snapshot (daily 17:25 ET)")
 
     # Per-bot vault jobs are fail-closed by PER_BOT_VAULT_ENABLED. They are
     # registered in development so the schedule is visible, but do nothing
@@ -1227,6 +1231,11 @@ async def _per_bot_vault_deployment() -> None:
         logger.error(f"Scheduler | per_bot_vault_deployment FAILED: {exc}")
 
 
+def new_york_date(now: datetime | None = None) -> date:
+    """The trading day's date in New York (the row's date for the closing snapshot)."""
+    return (now or datetime.now(timezone.utc)).astimezone(pytz.timezone("America/New_York")).date()
+
+
 async def _daily_bot_returns_snapshot() -> None:
     """Record all active bots without ever writing a partial fleet."""
     try:
@@ -1235,7 +1244,7 @@ async def _daily_bot_returns_snapshot() -> None:
             snapshot_daily_returns,
         )
         await asyncio.to_thread(ensure_research_tables)
-        result = await asyncio.to_thread(snapshot_daily_returns)
+        result = await asyncio.to_thread(snapshot_daily_returns, snapshot_date=new_york_date())
         stale_count = int(result.get("stale_count", 0))
         skipped_count = int(result.get("skipped_count", 0))
         if stale_count or skipped_count:

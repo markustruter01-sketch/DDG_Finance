@@ -106,6 +106,8 @@ class OandaTrader:
         order may have filled."""
         if not isinstance(units, int) or units == 0:
             raise ValueError("units must be a non-zero integer")
+        from core.no_crypto import refuse_crypto_units
+        refuse_crypto_units(instrument, units, "OANDA market_order")  # no crypto, anywhere (17 Nov 2026)
         client_id = make_client_order_id(client_id_prefix(instrument))
         try:
             status, payload = self._send("POST", "orders", {"order": {

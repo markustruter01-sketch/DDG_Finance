@@ -158,6 +158,14 @@ Runs all year as a SHADOW (no orders); decide at end of 2027 whether to switch i
 
 - ROADMAP AGREED (Markus 17 Nov 09:17 Brisbane): `fund-roadmap-2026-11-17.md` is the target from here; where it differs from the line-up above, the roadmap wins. Defensive stocks replaces Atlas V2's strategy at the lock; lock moves to about 12–13 Dec; no new trading accounts or paid services. Opus 5.5 builds it alone per `fund-roadmap-build-guide-for-opus.md`.
 
+### Status 18 Nov morning (Opus 5.5)
+- PUBLISHED 17 Nov ~10:07 UTC (US closed): #119 (BTC sold, OWNER_KEPT empty) and #120 (daily closing snapshot at 17:25 New York time, all year). First run at the new time: 17 Nov 22:25 UTC.
+- READ-ONLY HEALTH CHECK, production, 17 Nov 20:44 UTC (`.local/claude_reports/health-20261118.txt`): all four bots unpaused and cycling (last success 20:09–20:40 UTC); reconciliation 20:10 UTC clean; OANDA's 4 open trades match `forex_ai_trades` exactly; Alpaca holdings match the ledgers (BIL/SGOV are cash parking; SGOV only in the portfolio mirror, reconciliation clean). No crypto on the 3 Alpaca or the OANDA account. Kraken account balance UNKNOWN (no read access checked).
+- 11 unresolved alarms, all stale: 6 forex HTTP 401 (14–15 Nov, Forex has cycled cleanly since), 1 forex stale-workflow (15 Nov), 4 "unresolved high-severity" meta rows. Closing them is a production write: ASK MARKUS.
+- `bot_daily_returns` 14–16 Nov rows were taken ~19:40–19:59 UTC, i.e. before the 21:00 UTC close (the #120 bug). Not rewritten.
+- PRs open: #121 kill switch per bot (item 5; stays unarmed), #122 dead code (item 7, code part). Item 6 (momentum brake) was done 11 Nov (status "ITEM 14 CLOSED": index and averages agree on two feeds; per-name check from Alpaca bars).
+- WAITING ON MARKUS: merge #121/#122; yes to close the 11 stale alarms; yes to delete dead `bots_state` rows; arm the kill switch (after #121 is live); two free heartbeat monitor URLs (item 8); where to keep the database backups (item 8b).
+
 ### Status 17 Nov evening (Opus 5.5)
 - 🔴 NO CRYPTO, FULL STOP (Markus 17 Nov): "none of the accounts at all trade any crypto... on any of the platforms, on any of the systems". Reason: Bitcoin security breaches.
 - PR #117: every order that would buy crypto (coin pairs, crypto funds such as IBIT/GBTC/ETHA) is refused before it is sent and logged critical, on every Alpaca client (shared session from #116) and on OANDA. Sells still work.

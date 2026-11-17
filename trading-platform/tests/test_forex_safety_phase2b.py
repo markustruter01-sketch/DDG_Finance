@@ -333,9 +333,14 @@ def test_live_reconciliation_records_oanda_read_failure_as_unknown(monkeypatch):
     finding = snapshot["account_findings"][0]
     assert finding["kind"] == "oanda_read_failed"
     assert finding["status"] == "UNKNOWN"
-    flags = ks.evaluate_snapshot(snapshot, now=100.0)
+    # One failed read is a blip: nothing trips. Three checks in a row: that bot's trigger (item 5).
+    ks._state["read_fail_counts"] = {}; ks._state["read_fail_seen"] = {}
+    assert not any(f["trigger"] == "missing_account" for f in ks.evaluate_snapshot(snapshot, now=100.0))
+    for n in (2, 3):
+        snapshot = {**snapshot, "captured_at": f"check-{n}"}
+        flags = ks.evaluate_snapshot(snapshot, now=100.0)
     assert any(
-        flag["trigger"] == "missing_account" and flag["status"] == "UNKNOWN"
+        flag["trigger"] == "missing_account" and flag["status"] == "UNKNOWN" and flag["bot_id"] == "forex_ai"
         for flag in flags
     )
     result = check_reconciliation_health(

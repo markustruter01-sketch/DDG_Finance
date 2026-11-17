@@ -846,9 +846,16 @@ def collect_live_snapshot() -> dict[str, Any]:
                 "detail": str(exc),
             })
             continue
-        acct = client.get_account()
-        positions = _positions(client)
-        orders = _orders(client)
+        try:
+            acct = client.get_account()
+            positions = _positions(client)
+            orders = _orders(client)
+        except Exception as exc:
+            # One broker that cannot be read is that bot's problem only (kill switch: 3 in a row).
+            logger.critical(f"Reconciliation | broker read failed for {bot_id}: {exc}")
+            account_findings.append({"bot_id": bot_id, "kind": "broker_read_failed", "status": "UNKNOWN",
+                                     "detail": str(exc)[:300]})
+            continue
         settling_symbols[resolve_bot_id(bot_id)] = safe_recent_fill_symbols(bot_id, client)
         ledger = _ledger_positions(bot_id)
         ledger_failures = [

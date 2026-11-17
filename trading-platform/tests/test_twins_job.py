@@ -123,7 +123,10 @@ def _row(get_conn, twin_id, day):
 
 
 @needs_pg
-def test_three_nights_start_mirror_baselines_check_and_alarm():
+def test_three_nights_start_mirror_baselines_check_and_alarm(monkeypatch):
+    # An owner-kept line, as BTC was until 17 Nov (the live list is empty now; the mechanism stays).
+    import core.bot_registry as reg
+    monkeypatch.setattr(reg, "OWNER_KEPT", {"jerome_macro": frozenset({"BTCUSD"})})
     get_conn = make_get_conn()
     _platform_tables(get_conn)
     alarms = Alarms()

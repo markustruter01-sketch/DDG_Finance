@@ -986,35 +986,6 @@ async def status_summary() -> dict:
     except Exception:
         pass
 
-    try:
-        import psycopg2 as _pg2_apex, os as _os_apex
-        _db_apex = _os_apex.environ.get("DATABASE_URL")
-        _apex_status = "unknown"
-        if _db_apex:
-            _apex_conn = _pg2_apex.connect(_db_apex)
-            try:
-                with _apex_conn.cursor() as _apexc:
-                    _apexc.execute("SELECT status FROM kraken_heartbeat WHERE id = 4")
-                    _apexr = _apexc.fetchone()
-                    if _apexr:
-                        _apex_status = str(_apexr[0] or "running").lower()
-            finally:
-                _apex_conn.close()
-        bot_statuses["apex-predator"] = {"display_name": "Apex Predator \u2014 Crypto Momentum", "status": _apex_status}
-    except Exception as _apex_exc:
-        logger.debug(f"[STATUS] Apex Predator state unavailable: {_apex_exc}")
-        bot_statuses["apex-predator"] = {"display_name": "Apex Predator \u2014 Crypto Momentum", "status": "unknown"}
-
-    try:
-        fx = _get_forex_engine()
-        if fx:
-            fx_state = fx.get_state()
-            bot_statuses["navigator"] = {
-                "display_name": "Navigator",
-                "status": "paused" if fx_state.get("paused") else "running",
-            }
-    except Exception:
-        bot_statuses["navigator"] = {"display_name": "Navigator", "status": "unknown"}
 
 
     alert_queue_size = 0

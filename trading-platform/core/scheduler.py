@@ -338,24 +338,6 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
             "(not enabled outside published deployment)"
         )
 
-    # ── ONE-TIME: oracle residual cleanup (2026-08-17 09:31 ET) ──────────────
-    # Stage 3B left EMR/LMT/PRU in the oracle paper account. GTC stops were
-    # cancelled manually but stuck in pending_cancel over the weekend. This job
-    # fires once at Monday open, cancels any remaining orders, market-sells all
-    # positions, logs the result, and is automatically removed by DateTrigger.
-    _et = pytz.timezone("America/New_York")
-    _cleanup_dt = _et.localize(datetime(2026, 8, 17, 9, 31, 0))
-    if datetime.now(_et) < _cleanup_dt:
-        scheduler.add_job(
-            func=_oracle_residual_cleanup,
-            trigger=DateTrigger(run_date=_cleanup_dt),
-            id="oracle_residual_cleanup_20260817",
-            name="ONE-TIME: Close oracle residual EMR/LMT/PRU at Monday open",
-            replace_existing=True,
-            misfire_grace_time=300,
-        )
-        logger.info("Scheduler | Registered ONE-TIME: oracle_residual_cleanup at 2026-08-17 09:31 ET")
-    # ── END one-time cleanup ──────────────────────────────────────────────────
 
     scheduler.add_job(
         func=_daily_health_check,
@@ -960,81 +942,6 @@ async def _shadow_signal_retention_sweep() -> None:
         )
     except Exception as exc:
         logger.warning(f"Scheduler | shadow_signal_retention_sweep failed (non-fatal): {exc}")
-
-
-async def _oracle_residual_cleanup() -> None:
-    """
-    ONE-TIME job — 2026-08-17 09:31 ET.
-    Closes the Stage 3B residual (EMR/LMT/PRU) left in the oracle paper account
-    after the stock scanner was retired.  GTC stops were stuck in pending_cancel
-    over the weekend; they will have cleared by 09:31.  DateTrigger fires this
-    job once and then auto-removes it.
-    """
-    logger.info("Scheduler | oracle_residual_cleanup: STARTING — cancelling stops + closing EMR/LMT/PRU")
-
-    api_key = os.environ.get("ALPACA_API_KEY", "")
-    secret_key = os.environ.get("ALPACA_SECRET_KEY", "")
-    headers = {
-        "APCA-API-KEY-ID": api_key,
-        "APCA-API-SECRET-KEY": secret_key,
-    }
-    base = "https://paper-api.alpaca.markets/v2"
-
-    try:
-        async with httpx.AsyncClient(timeout=30) as client:
-
-            # Step 1 — cancel all open orders (belt-and-suspenders for stops)
-            cancel_resp = await client.delete(f"{base}/orders", headers=headers)
-            logger.info(f"Scheduler | oracle_residual_cleanup: cancel all orders → HTTP {cancel_resp.status_code}")
-            await asyncio.sleep(3)
-
-            # Step 2 — close all positions (cancel_orders=true as extra safety)
-            close_resp = await client.delete(
-                f"{base}/positions", headers=headers,
-                params={"cancel_orders": "true"},
-            )
-            logger.info(f"Scheduler | oracle_residual_cleanup: delete all positions → HTTP {close_resp.status_code}")
-            try:
-                items = close_resp.json()
-                if isinstance(items, list):
-                    for item in items:
-                        sym = item.get("symbol", "?")
-                        status = item.get("status", "?")
-                        msg = item.get("body", {}).get("message", "submitted")
-                        logger.info(f"Scheduler | oracle_residual_cleanup: {sym} → {status} ({msg})")
-            except Exception:
-                pass
-
-            # Step 3 — wait for fills then verify flat
-            await asyncio.sleep(8)
-            pos_resp = await client.get(f"{base}/positions", headers=headers)
-            positions = pos_resp.json() if pos_resp.status_code == 200 else []
-            ord_resp = await client.get(f"{base}/orders", headers=headers, params={"status": "open", "limit": 20})
-            orders = ord_resp.json() if ord_resp.status_code == 200 else []
-            acct_resp = await client.get(f"{base}/account", headers=headers)
-            acct = acct_resp.json() if acct_resp.status_code == 200 else {}
-
-            cash = float(acct.get("cash", 0))
-            equity = float(acct.get("equity", 0))
-
-            if not positions and not orders:
-                logger.info(
-                    f"Scheduler | oracle_residual_cleanup: ORACLE FLAT ✓ — "
-                    f"0 positions, 0 orders, cash=${cash:,.2f}, equity=${equity:,.2f}"
-                )
-            else:
-                logger.warning(
-                    f"Scheduler | oracle_residual_cleanup: NOT FLAT — "
-                    f"{len(positions)} position(s), {len(orders)} order(s) remaining"
-                )
-                for p in positions:
-                    logger.warning(
-                        f"Scheduler | oracle_residual_cleanup: RESIDUAL {p['symbol']} "
-                        f"qty={p['qty']} mktval=${float(p['market_value']):,.2f}"
-                    )
-
-    except Exception as exc:
-        logger.error(f"Scheduler | oracle_residual_cleanup: FAILED — {exc}")
 
 
 async def _run_micro_audit() -> None:

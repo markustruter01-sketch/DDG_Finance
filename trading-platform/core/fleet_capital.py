@@ -4,7 +4,7 @@ Single source of truth for where each account's run starts.
 Markus, 10 Nov 2026: the track record starts after the 9-10 Nov stop-safety
 fixes (PR #89). Every "since start" figure, the comparison and the fleet risk
 stats are measured from RUN_START = the 9 Nov 2026 US session, using each
-account's equity in bot_daily_returns for that date (snapshot 20:15 UTC,
+account's equity in bot_daily_returns for that date (snapshot 17:25 New York time, after the close,
 read from production 10 Nov). No broker reset. It restarts once more at the
 strategy lock (claude/finance-2027-plan.md, Step 3).
 """

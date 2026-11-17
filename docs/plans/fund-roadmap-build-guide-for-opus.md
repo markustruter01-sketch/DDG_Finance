@@ -1,8 +1,16 @@
-# Build guide for Opus 5.5: from today's platform to the fund roadmap
+# Build guide for Opus 5.5: Finance first, then the whole-company list
 
-Written by Claude (Fable 5.2), Tue 17 Nov 2026. You (Opus 5.5) are the only builder. Fable is NOT in the loop: do not wait for a Fable review, a Fable spec or a Fable decision. Where older notes say "FABLE decides", you propose, write the reason down, and Markus decides.
+Written by Claude (Fable 5.2), Tue 17 Nov 2026. Part B added the same day. You (Opus 5.5) are the only builder. Fable is NOT in the loop: do not wait for a Fable review, a Fable spec or a Fable decision. Where older notes say "FABLE decides", you propose, write the reason down, and Markus decides.
 
-The plan you are building is `fund-roadmap-2026-11-17.md` (same folder). Markus agreed to it on 17 Nov 2026 (plan agreed; Defensive stocks replaces Atlas V2 at the lock; lock moves to about 12 to 13 Dec).
+**Two parts, in this order:**
+- **Part A — DDG Finance.** The plan you are building is `fund-roadmap-2026-11-17.md` (same folder). Markus agreed to it on 17 Nov 2026 (plan agreed; Defensive stocks replaces Atlas V2 at the lock; lock moves to about 12 to 13 Dec).
+- **Part B — the rest of the company.** Fixes from the company audit and builds from the growth plan. Start Part B when Part A's Phase 0 items 1 to 8 are published and the gate (item 9) is running. Nothing may merge in this repo during the gate, so those days are for Part B in the other repos.
+
+Part A dates always win. If Phase 1 work is due, do it before any Part B work.
+
+---
+
+# Part A — DDG Finance
 
 ## Read first, in this order
 1. `docs/plans/README.md` (how to work, Replit facts, publish rules).
@@ -32,7 +40,8 @@ Each line: what to build, where to start looking, and the test that proves it. F
 6. **Momentum brake check.** Recompute the book index, 100-day average and volatility by hand from Alpaca bars for the dates in the 10 Nov note. If the code is wrong, fix it with a test; if it is right, write that down. Do not change the strategy rule here.
 7. **Dead code and names.** Delete: short-selling paths, old Navigator forex routes, the 17 Aug one-time job, dead `bots_state` rows (rows need Markus's yes: production write). Add the display-name table. Do NOT rename folders. Proof: test suite green, nothing imports the deleted modules.
 8. **Outside heartbeat.** Needs two free monitor URLs from Markus set as `HEARTBEAT_URL_RUNNER` and `HEARTBEAT_URL_API`. Proof: both monitors show a ping.
-9. **Gate.** Five US sessions, nothing merged, daily read-only check written into the plan. Any incident restarts the count.
+8b. **Database copies out of GitHub (from the company audit).** `backups/` holds database dump files, including a copy of production. Ask Markus where he wants them kept (his own drive; no new paid service). After he confirms he has them: remove the dump files from the repo, add `backups/*.dump*` to `.gitignore`, keep the manifest text files. Old git history still holds the files; rewriting history needs Markus's yes and is not needed while the repo stays private. Proof: test suite green; `backups/` holds no dump.
+9. **Gate.** Five US sessions, nothing merged, daily read-only check written into the plan. Any incident restarts the count. **While the gate runs, work on Part B.**
 
 ## Phase 1 work orders: Shadow League (December 2026)
 Build on `trading-platform/twins/` and `research_harness/registrations/`. Do not write a second engine.
@@ -61,3 +70,178 @@ Do not start them. In January 2028 produce the scorecard exactly as the roadmap'
 
 ## If you are stuck
 Stop, write what you know and do not know into the plan's Status entry, and ask Markus one clear question with your recommended answer.
+
+---
+
+# Part B — the rest of the company
+
+## Read first
+1. `DDG-Control/docs/plans/README.md` (company map, how to work with Markus).
+2. `DDG-Control/docs/plans/company-audit-2026-11-17.md` (what is wrong and why).
+3. `DDG-Control/docs/plans/growth-plan-2026-11-17.md` (where the money is and why).
+4. The start-here file of the repo you are about to touch: `cattle-dog-coffee/docs/plans/README.md`, `ddg-hypest/docs/HYPEST-BUILD-PLAN.md`, and each repo's `AGENTS.md` or `replit.md` if present.
+
+## Rules for Part B
+1. **Four repos only**, all under GitHub user `markustruter01-sketch`: `DDG-Control`, `cattle-dog-coffee`, `ddg-hypest`, `quant-terminal`. Never open, clone or read any other repo on that account. They are not DDG.
+2. Each repo's own rules win over this list. If they clash, stop and ask Markus.
+3. One change per pull request. Checks green before you ask for a merge. Never weaken a test.
+4. **Name no charity in anything the public can see** until Markus says a partnership is signed. The wording is "animal charities".
+5. Never put a price, a total or a discount in the browser's hands. The server works out all money.
+6. Never print, commit or paste a secret, a customer's details or a database address.
+7. **Stop and ask Markus before:** new or changed Stripe products or prices, anything on a live Stripe account, production data changes, any new service or cost, any words about law, health, money or charity that the public will read, and any publish of Cattle Dog Coffee that changes the database (he must press Publish on the Replit website for those).
+8. Replit Agent tasks and AI calls cost money. Batch them. Have each Replit task write a short report to `.local/claude_reports/NAME.txt` and read that.
+9. **Do not build a kit before a client has paid a deposit.** Do not build Hypest features before the demand test says to.
+10. Simple English in every note, page and pull request. Write VERIFIED, INFERRED or UNKNOWN.
+11. After each session: add a dated status entry to that repo's start-here file, and tick the order in this list (add "DONE, date, PR number").
+
+## State on 17 Nov 2026 (VERIFIED by Fable)
+- **Done, do not redo:** charity wording changed to "animal charities" on the coffee store and ddg.limited (coffee PR #15, Control PR #87); ddg.limited says "Raised", not "Given", and "four businesses"; Hypest tells search engines not to list it (PR #44); coffee postage by weight, admin postage screen, delivery notes, `/admin` path (coffee PRs #12 to #14).
+- **Live:** ddg.limited and Hypest were published on 17 Nov after those changes (check the status entries for the result).
+- **Not live:** Cattle Dog Coffee. The live store still ran the old build on 17 Nov (its `/api/config` had no `shipping` field). The database changed, so only Markus can publish it, on the Replit website. Until he does, nothing from coffee PR #12 onward is live, including the charity wording.
+- **Some audit items came from notes and may be out of date.** The coffee API already has `lib/refunds.ts`, `lib/rate-limit.ts`, `lib/test-hardening.ts` and `routes/charity-payouts.ts`, and the store has `CharityPayoutsPage.tsx`. Read the code before you build anything.
+- **How paths are written below:** in `DDG-Control`, `cattle-dog-coffee` and `ddg-hypest`, a path starting `routes/` or `lib/` means under `artifacts/api-server/src/`. The two exceptions are the shared packages at the repo root: `lib/db` and `lib/pricing-core`. Confirm every path in the code before editing; INFERRED until you have opened the file.
+
+## Jobs only Markus can do (do not wait on these; remind him in each status entry)
+- Press Publish for Cattle Dog Coffee on the Replit website.
+- 2-step login on GitHub, Replit, both Stripe accounts, the domain company, Google, brokers, bank.
+- Lawyer: DDG Build contract; Hypest terms, privacy and waiver. Broker: insurance. Accountant: GST and company structure.
+- Turn on daily database backups in Replit for Coffee and Hypest.
+- Create free uptime monitors (you give him the addresses, order B1.11).
+- Sign the charity agreement; pay the charity in $100 lots.
+- Confirm prices for kits and founding clients.
+
+## B1 — Safety net (from the audit). Do these first, in this order.
+
+**B1.1 Security headers on ddg.limited and the coffee store.**
+- Repos: `DDG-Control`, `cattle-dog-coffee`. One pull request each.
+- Start: copy the approach in `ddg-hypest/artifacts/api-server/src/lib/security-headers.ts`. Add it in each repo's `artifacts/api-server/src/app.ts`. Turn off the "X-Powered-By" header.
+- Care: start the content policy in report-only mode. ddg.limited draws a 3D scene and loads a Replit script (`i.replit.com/script.js`); the store redirects to Stripe. The web pages themselves are static files served by Replit, not by the API: check each `artifacts/*/.replit-artifact/artifact.toml` for a way to set headers on them. If there is none, write UNKNOWN and protect the API only.
+- Proof: a test that the headers are present on the health route (`/api/healthz`); in the preview the home page, checkout redirect and admin still work.
+
+**B1.2 Automatic type check for DDG Control.**
+- Start: copy `cattle-dog-coffee/.github/workflows/typecheck.yml`.
+- Proof: green on its own pull request.
+
+**B1.3 Privacy page for ddg.limited.**
+- Start: `artifacts/ddg-control/site/Site.tsx` (routes and footer), `content.ts` (words), `Build.tsx` (the form already says "We only use your details to reply").
+- Build: one short page: what the Build form collects (name, email, project notes), why, who sees it, how to ask for deletion, how to contact DDG. Link it in the footer and under the form.
+- Ask first: Markus approves the words.
+
+**B1.4 Coffee legal pages catch up.**
+- Start: `artifacts/store/src/components/store/PrivacyPolicyContent.tsx`, `ShippingReturnsContent.tsx`.
+- Build: privacy page lists delivery instructions and the "dog in the yard" answer (asked on the Stripe checkout page, saved on the order). Shipping page says postage depends on the total weight; do not hard-code the amounts (they are set in admin). Update both "Last updated" dates.
+- Ask first: Markus approves the words.
+
+**B1.5 Real sitemap for the coffee store.**
+- VERIFIED 17 Nov: `/sitemap.xml` returns the home page. `artifacts/store/public/robots.txt` exists.
+- Build: `artifacts/store/public/sitemap.xml` listing the public pages; point to it from `robots.txt`.
+
+**B1.6 Refunds made inside Stripe.**
+- Notes say a refund done in Stripe does not update the order. `lib/refunds.ts`, `routes/stripe-webhook.ts` and `lib/stripe-webhook-events.ts` exist: read them and write down what is and is not handled before building.
+- Build only the gap: a refund event marks the order refunded, and the bag count and charity total go down to match.
+- Proof: a test in the style of `lib/test-order-money.ts` using a recorded event.
+- Ask first: adding an event to the live Stripe webhook is Markus's click.
+
+**B1.7 Coffee hardening list.**
+- Start: the open items in `cattle-dog-coffee/docs/plans/README.md`; then `lib/rate-limit.ts` and `lib/test-hardening.ts` to see what already exists.
+- Build: one pull request per item still open (checkout rate limit, which sites may call the API, safe waitlist export, admin login code scope).
+
+**B1.8 One source for coffee prices.**
+- Start: `lib/pricing-core/src/index.ts` (the only place sums belong), `artifacts/store/src/App.tsx`, `artifacts/store/src/lib/types.ts`.
+- Build: the shop page shows what `pricing-core` and the API say; it re-computes nothing.
+- Proof: `lib/test-pricing.ts` passes; no second copy of a postage or discount formula in `artifacts/store`.
+
+**B1.9 One GST meter for the whole company.**
+- Why: the $75,000 line counts all DDG sales together. The coffee admin meter counts coffee only.
+- Start (DDG-Control): `artifacts/ddg-control/src/pages/Money.tsx`, `artifacts/api-server/src/routes/finance.ts`, `routes/overview.ts`, `lib/cdc-store.ts`, `lib/hypest-store.ts`, `routes/quotes.ts`.
+- Build: last 12 months of sales, all businesses added, against $75,000, plus a simple forward look (last 3 months times 4). In the coffee admin (`artifacts/store/src/components/admin/DashboardScreen.tsx`) add the words "Coffee only. Whole company: see DDG Control."
+- Proof: a test with fixed inputs, in the style of `test-finance-cdc-summary.ts`.
+
+**B1.10 Charity: "Raised" and "Paid", in $100 lots.**
+- Start (coffee): `routes/charity-progress.ts`, `routes/charity-payouts.ts`, `artifacts/store/src/components/admin/CharityScreen.tsx`, `components/store/CharityPayoutsPage.tsx`, `Hero.tsx`. Read first: payout recording already exists.
+- Build: (a) the admin shows a clear prompt each time the unpaid amount reaches another $100; (b) the store and ddg.limited show "Paid so far" beside "Raised". For ddg.limited: Coffee's `routes/ddg.ts` adds the paid total to its summary; Control's `lib/cdc-store.ts` reads it; `routes/public.ts` adds it to `/api/public/summary`; `site/Site.tsx` shows it.
+- Leave the admin-only placeholder text alone. Rule 4 applies to everything public.
+
+**B1.11 Uptime addresses and runbooks.**
+- Build: in each repo, `docs/runbooks/incidents.md` (site down, wrong charge, data leak, bot misbehaving; five lines each: how you notice, first step, who to tell, how to undo, where the logs are) and `docs/runbooks/restore.md` (how to bring the database back from a backup).
+- Give Markus the exact health addresses to watch. All three APIs answer at `/api/healthz` (VERIFIED in `routes/health.ts` of each repo, 17 Nov).
+
+**B1.12 Bot keys.**
+- Start (DDG-Control): `artifacts/api-server/src/lib/bot-keys.ts`, `routes/bots.ts`, `routes/auth.ts`.
+- Build: a table in the notes of what each key (FREYA, TYR, HEIMDALL, PLUTUS, DDG_BOT_KEY) may call. Narrow each key to its job. Each key can be switched off alone.
+- Proof: one test per key that a route outside its job answers "not allowed".
+
+**B1.13 Hypest launch checklist.**
+- Build: `ddg-hypest/docs/LAUNCH-CHECKLIST.md`: lawyer-reviewed pages replace the drafts in `artifacts/hypest-web/src/pages/legal-page.tsx`; robots tag in `artifacts/hypest-web/index.html` back to "index, follow"; `STRIPE_LIVE_APPROVED`; own domain; support mailbox working; insurance. You write the list. Markus decides each line.
+
+## B2 — Money builds (from the growth plan). After B1, in this order unless Markus changes it.
+
+**B2.1 Coffee gifts. DATE-SENSITIVE: live by Mon 30 Nov 2026 or leave it for 2027. Ask Markus if it should jump the queue.**
+- Start: `artifacts/api-server/src/routes/checkout.ts`, `lib/delivery-notes.ts`, `artifacts/store/src/components/store/CartDrawer.tsx`, `SubscriptionPlansPage.tsx`.
+- Build, smallest version first: a "This is a gift" choice that adds a gift-note field at checkout (two custom fields are used today; confirm Stripe's limit in its documentation before adding a third) and shows the note on the order in admin. Then, only with Markus's yes (new Stripe prices): pre-paid 3 and 6 month gift subscriptions.
+- Proof: test checkout in the Stripe sandbox shows the field; the note is saved on a paid test order.
+
+**B2.2 Kits on ddg.limited.**
+- Start: `artifacts/ddg-control/site/content.ts` (the services list and `CARE`), `Build.tsx`.
+- Build: three kits (Shop, Control room, Front desk), each with a set-up price and a monthly price. Custom prices stay.
+- Ask first: Markus confirms every price and every sentence.
+
+**B2.3 Enquiry: instant reply and a draft quote.**
+- Start: `artifacts/api-server/src/routes/build.ts`, `routes/quotes.ts`, `lib/email.ts`, `test-quotes.ts`, `artifacts/ddg-control/src/pages/Clients.tsx`, and `docs/plans/ddg-build-plan.md` for what is already built.
+- Build: a new enquiry sends the person a plain "we got it" email and creates a draft quote in Control. Nothing with a price goes to a client without Markus's click.
+- Proof: `test-quotes.ts` extended; one test enquiry in the preview.
+
+**B2.4 Case studies.**
+- Build: three short pages on ddg.limited: the coffee store, DDG Control, the Finance platform. Facts only. Blur any email address or private number in screenshots.
+
+**B2.5 Profit per bag and per plan.**
+- VERIFIED: Control already estimates coffee profit (`artifacts/api-server/src/lib/cdc-store.ts`, `test-cattle-dog-profit.ts`).
+- Build: show profit per bag size and per subscription plan on Control's Money page, with a line for Markus's packing time (he types the hours).
+
+**B2.6 Scoreboard in Control.**
+- Start: `artifacts/ddg-control/src/pages/Home.tsx`, `routes/overview.ts`, `routes/metrics.ts`.
+- Build: four numbers. Monthly repeating income (coffee subscriptions + kit and care plans + Hypest members). Cash in this week, by business. Markus's hours this week, by business (he types them). AI and hosting cost this month (he types them).
+
+**B2.7 Partner links for rescue groups.**
+- Ask first: Markus has the written agreement wording and has checked the fundraising rules (audit, section 3.1).
+- Start (coffee): `lib/db/src/schema/`, `artifacts/api-server/src/lib/schema-ensure.ts` (the pattern for new tables), `routes/checkout.ts`, `routes/stripe-webhook.ts`, `routes/admin.ts`.
+- Build: a `partners` table (name, code, cents per bag, active). A link with the partner's code is remembered in the cart; the browser sends only the code, the server looks up the amount. The code is saved on the Stripe session and the order. Admin screen: bags and amount owed per partner. Public page explaining the programme with an enquiry form.
+- This changes the database: Markus publishes on the Replit website.
+- Proof: tests for a valid code, an unknown code, an inactive partner, and a refund.
+
+**B2.8 Friend codes, review request, parcel card page.**
+- Start: `lib/loyalty.ts`, `routes/promo-codes.ts`, `lib/email.ts` (read what exists first).
+- Build: a friend code that gives both people a discount once; an email asking for a review ten days after dispatch; one page for the QR code on the parcel card with three links (Hypest waitlist, the novel when ready, the friend code).
+
+**B2.9 Office plan page.**
+- Build: a page for a standing monthly order of 1 kg bags with an enquiry form. No new payment flow until an office says yes.
+
+**B2.10 Hypest demand test. No new training features.**
+- Start: `ddg-hypest/artifacts/hypest-web` and `docs/HYPEST-BUILD-PLAN.md`.
+- Build: three public "coming soon" pages (service fitness tests; train for a date; shift workers), each with a waitlist form and a clear "yes, email me" tick. Only these three pages may be listed by search engines; the app stays hidden. Count sign-ups and visits per page where Markus can see them.
+- Then, in Stripe test mode only: a yearly plan. And measure AI cost per member (start in `artifacts/api-server/src/coaching` and `billing`).
+- Ask first: the words on each page. No live payments.
+
+**B2.11 One email list.**
+- Build: a sign-up box with a "yes, email me" tick on ddg.limited, the coffee footer and the Hypest waitlist. Save the date and the source. Every email carries an unsubscribe link.
+- Ask first: before adding any mail-sending service.
+
+**B2.12 Kit 1 "Shop". Only after a client has paid a deposit.**
+- Start: `cattle-dog-coffee`.
+- Build: move the brand name, colours, words, product list, postage rules and charity text into one settings file. Write `docs/NEW-SHOP.md`: how to stand up a copy for a client (new Replit app, new database, the client's own Stripe keys in Replit Secrets, their domain). Clients never share a database.
+- Proof: a demo shop with a made-up brand runs from the same code.
+
+**B2.13 Shared base. After Kit 1.**
+- Build: one small package with the security headers, health route, rate limit, GitHub check file and start-here template. Move each repo onto it one at a time.
+
+**B2.14 Kit 3 "Front desk". Only after a client asks and pays.**
+- Build: web chat and email first. A hard cost cap per client. Each client's data kept apart.
+
+**B2.15 Monthly numbers post.**
+- Build: a job that drafts a short public post from `/api/public/summary` for Freya. Markus approves before anything is posted.
+
+**B2.16 Novel sale page. Only when Markus says the book is ready.**
+- Build: pay, then an emailed download link that expires. Reuse the coffee checkout. No new service.
+
+## If you are stuck on Part B
+Same as Part A: stop, write VERIFIED / INFERRED / UNKNOWN in the repo's status entry, and ask Markus one clear question with your recommended answer.

@@ -382,7 +382,8 @@ def _submit_vault_buy(bot_id: str, symbol: str, notional: float, queue_id: str) 
     key, secret = os.environ.get(key_name, ""), os.environ.get(secret_name, "")
     if not key or not secret:
         raise RuntimeError(f"missing account credentials for {bot_id}")
-    client = TradingClient(key, secret, paper=True)
+    from core.broker_http import with_time_limit
+    client = with_time_limit(TradingClient(key, secret, paper=True))  # audit F5
     cash = float(client.get_account().cash or 0)
     if cash - float(notional) < 0:
         logger.critical(

@@ -26,8 +26,8 @@ class JeromeAlpaca:
 
     def __init__(self, api_key: str, secret_key: str,
                  base_url: str = "https://paper-api.alpaca.markets"):
-        import alpaca_trade_api as tradeapi
-        self.api = tradeapi.REST(api_key, secret_key, base_url=base_url)
+        from core.broker_http import alpaca_rest  # every Alpaca call has a time limit (audit F5)
+        self.api = alpaca_rest(api_key, secret_key, base_url=base_url)
         logger.info("JeromeAlpaca | Connected to Alpaca paper account")
 
     def get_account(self) -> dict:

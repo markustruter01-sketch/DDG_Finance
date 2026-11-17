@@ -220,7 +220,8 @@ def fetch_tradable_us_equities() -> list[Asset]:
     secret_key = os.environ.get("ALPACA_SECRET_KEY", "")
     if not api_key or not secret_key:
         raise RuntimeError("ALPACA_API_KEY/ALPACA_SECRET_KEY are required for asset discovery")
-    client = TradingClient(api_key=api_key, secret_key=secret_key, paper=True)
+    from core.broker_http import with_time_limit
+    client = with_time_limit(TradingClient(api_key=api_key, secret_key=secret_key, paper=True))
     raw_assets = list(client.get_all_assets())
     output: list[Asset] = []
     included = 0

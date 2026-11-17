@@ -598,7 +598,7 @@ def _write_portfolio_from_alpaca(bot_id: str, profile: dict) -> bool:
     account_read_ok = False
     positions_read_ok = False
     try:
-        import alpaca_trade_api as tradeapi
+        from core.broker_http import alpaca_rest  # every Alpaca call has a time limit (audit F5)
 
         api_key = profile.get("ALPACA_API_KEY", "")
         secret_key = profile.get("ALPACA_SECRET_KEY", "")
@@ -608,7 +608,7 @@ def _write_portfolio_from_alpaca(bot_id: str, profile: dict) -> bool:
             logger.debug(f"[{bot_id}] portfolio write skipped — no Alpaca credentials")
             return False
 
-        api = tradeapi.REST(api_key, secret_key, base_url=base_url)
+        api = alpaca_rest(api_key, secret_key, base_url=base_url)
         acct = api.get_account()
         account_read_ok = True
         posns = api.list_positions()

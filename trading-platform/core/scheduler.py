@@ -617,6 +617,10 @@ async def _scheduled_reconciliation() -> None:
 # alarms at once. Kept in memory: a restart starts the count again.
 UNKNOWN_RUNS_BEFORE_ALARM = 2
 _unknown_runs: dict[str, int] = {}
+# Checks that only count OTHER alarms. They stay in the report and the daily health
+# message, but never file an alarm of their own: an alarm about alarms is noise
+# (4 such rows were open on 17 Nov 2026). Any row already open is closed.
+NO_ALARM_ROW_INVARIANTS = frozenset({"zero_unresolved_high_severity_degradations"})
 
 
 async def _standing_invariants_job() -> None:
@@ -637,6 +641,9 @@ async def _standing_invariants_job() -> None:
             if status in {"FAIL", "UNKNOWN"}:
                 # Only the failing checks are warnings, not every line of the report.
                 logger.warning(f"Scheduler | standing_invariants | {status} {name}: {result['message']}")
+            if name in NO_ALARM_ROW_INVARIANTS:
+                mark_resolved("invariant", name, "counts other alarms only; no row of its own")
+                continue
             _unknown_runs[name] = _unknown_runs.get(name, 0) + 1 if status == "UNKNOWN" else 0
             if status == "UNKNOWN" and _unknown_runs[name] < UNKNOWN_RUNS_BEFORE_ALARM:
                 continue  # one blip: wait for the next run before alarming (or resolving)

@@ -119,3 +119,18 @@ def test_daily_return_stale_clears_once_the_portfolio_is_written_again():
     assert resolution_for_event(event, state) is None                      # still stale
     state["portfolios"]["forex_ai"] = {"last_updated": NOW - timedelta(minutes=30)}
     assert resolution_for_event(event, state) == "portfolio is being written again"
+
+
+def test_stale_workflow_with_only_a_bot_component_is_tied_to_that_bot():
+    from core.degradation_resolver import _canonical_bot
+    assert _canonical_bot({"component": "bot/forex_ai", "bot_id": None}) == "forex_ai"
+    assert _canonical_bot({"component": "bot/not_a_bot", "bot_id": None}) is None
+
+
+def test_forex_execution_failure_clears_only_after_a_later_successful_cycle():
+    state = _state()
+    late = {**_event("forex_execution"), "ts": NOW - timedelta(hours=2)}
+    assert resolution_for_event(late, state)
+    # The last success was BEFORE the failure: still open.
+    early = {**_event("forex_execution"), "ts": NOW}
+    assert resolution_for_event(early, state) is None

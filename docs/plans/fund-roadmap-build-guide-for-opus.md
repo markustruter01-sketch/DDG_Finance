@@ -2,6 +2,8 @@
 
 Written by Claude (Fable 5.2), Tue 17 Nov 2026. Part B added the same day. You (Opus 5.5) are the only builder. Fable is NOT in the loop: do not wait for a Fable review, a Fable spec or a Fable decision. Where older notes say "FABLE decides", you propose, write the reason down, and Markus decides.
 
+**Handover (applies to Part A and Part B).** Several Opus sessions on different accounts share this work. Before you start, read `DDG-Control/docs/handover/README.md`. After every merged pull request, add an entry there and mark the order here "DONE, date, PR number". A session can run out of usage without warning: never leave work uncommitted; push a draft pull request that says what is left.
+
 **Two parts, in this order:**
 - **Part A — DDG Finance.** The plan you are building is `fund-roadmap-2026-11-17.md` (same folder). Markus agreed to it on 17 Nov 2026 (plan agreed; Defensive stocks replaces Atlas V2 at the lock; lock moves to about 12 to 13 Dec).
 - **Part B — the rest of the company.** Fixes from the company audit and builds from the growth plan. Start Part B when Part A's Phase 0 items 1 to 8 are published and the gate (item 9) is running. Nothing may merge in this repo during the gate, so those days are for Part B in the other repos.

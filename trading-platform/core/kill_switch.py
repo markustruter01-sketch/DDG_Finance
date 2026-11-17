@@ -32,6 +32,10 @@ DUST_QTY = 1e-6
 EQUITY_STOP_SHORTFALL_TOLERANCE = 1.0
 MISSING_STOP_SECONDS = 60.0
 MISMATCH_REQUIRED_CHECKS = 2
+# A broker that cannot be read pauses only that bot, and only after this many
+# checks in a row fail (fix window item 5). One blip pauses nobody; a good read
+# starts the count again.
+READ_FAIL_REQUIRED_CHECKS = 3
 RESET_CONFIRMATION_ENV_VAR = "KILL_SWITCH_RESET_CONFIRMATION"
 # kill_switch_events doubles as the persisted latch: the switch is tripped
 # while the newest event is anything other than a reset.
@@ -62,6 +66,8 @@ _state: dict[str, Any] = {
     "last_snapshot": {},
     "missing_stop_since": {},
     "mismatch_counts": {},
+    "read_fail_counts": {},
+    "read_fail_seen": {},
 }
 
 
@@ -618,14 +624,40 @@ def evaluate_snapshot(snapshot: dict[str, Any], now: float | None = None) -> lis
     for disagreement in snapshot.get("pause_state_disagreements", []):
         triggers.append({"trigger": "pause_state_disagreement", **disagreement})
 
-    for finding in snapshot.get("account_findings", []):
-        triggers.append({"trigger": "missing_account", **finding})
+    triggers.extend(_confirmed_read_failures(snapshot))
 
     # Liveness is collected with the live broker snapshot. Keeping it in the
     # snapshot makes this evaluator pure and prevents synthetic/unit snapshots
     # from silently querying a real database.
     triggers.extend(snapshot.get("liveness_findings", []))
 
+    return triggers
+
+
+def _confirmed_read_failures(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
+    """A failed broker read becomes a trigger only after READ_FAIL_REQUIRED_CHECKS
+    checks in a row for that bot. Several callers evaluate the same snapshot, so a
+    snapshot (by captured_at) is counted once per bot."""
+    failing: dict[str, dict[str, Any]] = {}
+    for finding in snapshot.get("account_findings", []):
+        failing.setdefault(str(finding.get("bot_id") or "fleet"), finding)
+    stamp = snapshot.get("captured_at")
+    counts, seen = _state["read_fail_counts"], _state["read_fail_seen"]
+    # Bots that were read fine in this snapshot start again from zero.
+    for account in snapshot.get("accounts", []):
+        bot = str(account.get("bot_id"))
+        if bot not in failing:
+            counts.pop(bot, None); seen.pop(bot, None)
+    triggers = []
+    for bot, finding in failing.items():
+        if stamp is None or seen.get(bot) != stamp:
+            counts[bot] = counts.get(bot, 0) + 1
+            seen[bot] = stamp
+        if counts[bot] >= READ_FAIL_REQUIRED_CHECKS:
+            triggers.append({"trigger": "missing_account", "failed_checks": counts[bot], **finding})
+        else:
+            logger.warning(f"Kill switch | {bot} broker read failed ({counts[bot]}/{READ_FAIL_REQUIRED_CHECKS} before it pauses): "
+                           f"{finding.get('kind')}")
     return triggers
 
 
@@ -700,7 +732,9 @@ def _cancel_non_protective(snapshot: dict[str, Any]) -> int:
 # A broker/ledger mismatch is about ONE account's records, so it pauses that
 # bot only and does not latch the fleet (Markus, 7 Nov 2026: a Forex records
 # slip had frozen all four bots for four days). Everything else stays fleet-wide.
-BOT_SCOPED_TRIGGERS = frozenset({"broker_ledger_mismatch"})
+# A broker that cannot be read (after READ_FAIL_REQUIRED_CHECKS in a row) is the
+# same: only that bot pauses (fix window item 5).
+BOT_SCOPED_TRIGGERS = frozenset({"broker_ledger_mismatch", "missing_account"})
 
 
 def _bot_scoped(trigger: dict[str, Any]) -> bool:
@@ -713,7 +747,7 @@ def _pause_bots(bots: list[str], triggers: list[dict[str, Any]], snapshot: dict[
     failed = []
     for bot_id in bots:
         try:
-            set_paused(bot_id, True, reason="broker_ledger_mismatch")
+            set_paused(bot_id, True, reason=",".join(sorted({str(t.get("trigger")) for t in triggers if t.get("bot_id") == bot_id})) or "bot_scoped")
         except Exception as exc:
             failed.append(bot_id)
             logger.critical(f"Kill switch | FAILED to pause {bot_id}: {exc}")
@@ -727,8 +761,11 @@ def _pause_bots(bots: list[str], triggers: list[dict[str, Any]], snapshot: dict[
         try:
             from core.degradation_tracker import record_degradation
             record_degradation(
-                component="kill_switch", severity="critical", error_type="bot_paused_ledger_mismatch",
-                message=f"Paused {trigger.get('bot_id')}: broker and ledger disagree"[:300],
+                component="kill_switch", severity="critical",
+                error_type="bot_paused_broker_unreadable" if trigger.get("trigger") == "missing_account" else "bot_paused_ledger_mismatch",
+                message=(f"Paused {trigger.get('bot_id')}: broker could not be read {trigger.get('failed_checks')} checks in a row"
+                         if trigger.get("trigger") == "missing_account"
+                         else f"Paused {trigger.get('bot_id')}: broker and ledger disagree")[:300],
                 detail=json.dumps({**trigger, "action": action}, default=str)[:2000],
                 bot_id=str(trigger.get("bot_id")))
         except Exception as exc:
@@ -736,8 +773,8 @@ def _pause_bots(bots: list[str], triggers: list[dict[str, Any]], snapshot: dict[
         try:
             from notifications.condition_alerts import alert_condition
             alert_condition(
-                source="kill_switch", condition="broker_ledger_mismatch", bot_id=str(trigger.get("bot_id")),
-                title=f"Bot paused: {trigger.get('bot_id')} broker/ledger mismatch",
+                source="kill_switch", condition=str(trigger.get("trigger")), bot_id=str(trigger.get("bot_id")),
+                title=f"Bot paused: {trigger.get('bot_id')} {'broker unreadable' if trigger.get('trigger') == 'missing_account' else 'broker/ledger mismatch'}",
                 description=("Only this bot was paused; the other bots keep running. "
                              f"Evidence: {json.dumps(trigger, default=str, sort_keys=True)}"),
                 fields=[{"name": "Action", "value": action, "inline": False}])
@@ -804,6 +841,8 @@ def reset(opening_equity: float | None = None, confirmation_token: str | None = 
     _state["last_snapshot"] = {}
     _state["missing_stop_since"] = {}
     _state["mismatch_counts"] = {}
+    _state["read_fail_counts"] = {}
+    _state["read_fail_seen"] = {}
     logger.warning("Kill switch manually reset after explicit confirmation")
 
 

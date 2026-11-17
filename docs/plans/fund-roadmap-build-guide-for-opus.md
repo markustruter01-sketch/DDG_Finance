@@ -30,6 +30,7 @@ Part A dates always win. If Phase 1 work is due, do it before any Part B work.
 6. Never invent a number or a result. Write VERIFIED (with file and line), INFERRED or UNKNOWN.
 7. After every work session add a dated "Status" entry to `finance-2027-plan.md`: what changed, what was published, what is unknown, what is next.
 8. You review your own work, since no second model does: before asking for a merge, re-read the whole diff once as a hostile reviewer and list in the pull request what could go wrong and how you checked it.
+9. **No crypto, full stop (Markus, 17 Nov 2026).** No account, platform or system trades any cryptocurrency: no coins, no crypto pairs, no crypto funds (IBIT, GBTC, ETHA…), in no strategy, shadow, yardstick, Allocator or AI suggestion. The order guard (`trading-platform/core/no_crypto.py`, PR #117) refuses every crypto buy; never weaken or bypass it. Selling the last BTC needs Markus's yes like any order.
 
 ## Phase 0 work orders (in this order)
 Each line: what to build, where to start looking, and the test that proves it. File paths come from the audit and notes; confirm each in the code before editing.

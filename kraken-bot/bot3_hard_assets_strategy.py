@@ -476,6 +476,8 @@ class AlpacaBot3:
         return prices
 
     def submit(self, symbol: str, side: str, qty: float, order_type: str, **extra: Any) -> dict[str, Any]:
+        from core.no_crypto import refuse_crypto_buy
+        refuse_crypto_buy(symbol, side, "bot3 submit")  # no crypto, anywhere (17 Nov 2026)
         from core.order_ids import submit_with_unique_client_order_id
         payload = {
             "symbol": symbol,

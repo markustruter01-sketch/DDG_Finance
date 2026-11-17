@@ -1,5 +1,6 @@
 """
-Time limits on every call to Alpaca (16 Nov 2026 order-path audit, F5).
+Time limits on every call to Alpaca (16 Nov 2026 order-path audit, F5), and the
+no-crypto rule (Markus, 17 Nov 2026; core/no_crypto.py) on every order sent.
 
 Neither Alpaca library sets a time limit on its HTTP calls: a connection that
 hangs would stall that bot's cycle until the process is restarted. Every Alpaca
@@ -27,13 +28,20 @@ TIMEOUT = (CONNECT_S, READ_S)
 
 
 class TimeLimitedSession(requests.Session):
-    """A requests session that never waits forever: every call gets a time limit."""
+    """A requests session that never waits forever (every call gets a time limit)
+    and never sends an order that would buy crypto."""
 
     def __init__(self, timeout: Any = TIMEOUT):
         super().__init__()
         self.time_limit = timeout
 
     def request(self, method, url, **kwargs):  # type: ignore[override]
+        # No crypto, anywhere: an order that would buy crypto is never sent.
+        if str(method).upper() in ("POST", "PATCH") and "/orders" in str(url):
+            body = kwargs.get("json")
+            if isinstance(body, dict):
+                from core.no_crypto import refuse_crypto_buy
+                refuse_crypto_buy(body.get("symbol"), body.get("side"), f"Alpaca {method} {url}")
         if kwargs.get("timeout") is None:
             kwargs["timeout"] = self.time_limit
         return super().request(method, url, **kwargs)

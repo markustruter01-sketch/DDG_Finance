@@ -15,10 +15,8 @@ v2 changes
 
 v2.1 additions (Bear Engine)
 -----------------------------
-  • place_short_order()       — SELL_SHORT market order (whole shares, DAY TIF)
   • buy_to_cover()            — BUY market order to close a short (GTC)
   • place_short_stop_order()  — BUY stop order (stop-buy above price) to cap loss on short
-  • check_shortable()         — Alpaca asset endpoint; returns (shortable, easy_to_borrow)
   • get_positions() now includes `side` field ("long" or "short")
   • get_account() now exposes `initial_margin` (used for short exposure cap)
 
@@ -429,78 +427,10 @@ def close_all_positions() -> int:
 # ── Short Selling Primitives (Bear Engine v2.1) ────────────────────────────
 
 @alpaca_retry
-def check_shortable(ticker: str) -> tuple[bool, bool]:
-    """
-    Check whether *ticker* can be shorted via Alpaca.
-
-    Returns
-    -------
-    (shortable, easy_to_borrow)
-        Both must be True for the algo scanner to open a short.
-    """
-    try:
-        from alpaca.trading.requests import GetAssetsRequest
-        from alpaca.trading.enums import AssetClass as AlpacaAssetClass
-        asset = _client().get_asset(ticker)
-        shortable = bool(getattr(asset, "shortable", False))
-        easy_to_borrow = bool(getattr(asset, "easy_to_borrow", False))
-        logger.debug(
-            f"Broker | check_shortable({ticker}): shortable={shortable} etb={easy_to_borrow}"
-        )
-        return shortable, easy_to_borrow
-    except Exception as exc:
-        logger.warning(f"Broker | check_shortable({ticker}) failed: {exc} — returning (False, False)")
-        return False, False
+# Opening a short (check_shortable, place_short_order) was removed 18 Nov 2026: no strategy shorts.
+# buy_to_cover and place_short_stop_order stay, so a short could still be protected and closed.
 
 
-@alpaca_retry
-def place_short_order(ticker: str, qty_int: int) -> dict:
-    """
-    Place a SELL_SHORT market order for *qty_int* whole shares (DAY TIF).
-
-    Parameters
-    ----------
-    ticker  : str   Equity ticker (no "/" — not for crypto).
-    qty_int : int   Must be a whole positive integer (Alpaca does not support
-                    fractional short positions).  Enforced here with math.floor().
-
-    Returns
-    -------
-    dict with id, symbol, side, qty, status.
-    """
-    qty = max(1, math.floor(qty_int))
-    logger.info(f"Broker | SHORT {ticker} qty={qty} (DAY market order)")
-    try:
-        order, client_order_id = submit_with_unique_client_order_id(
-            lambda generated_id: _client().submit_order(
-                MarketOrderRequest(
-                    symbol=ticker,
-                    qty=qty,
-                    side=OrderSide.SELL_SHORT,
-                    time_in_force=TimeInForce.DAY,
-                    client_order_id=generated_id,
-                )
-            ),
-            f"broker-short-{ticker}",
-            lookup=_lookup_order,
-        )
-        result = {
-            "id":         str(order.id),
-            "symbol":     order.symbol,
-            "side":       order.side.value,
-            "qty":        qty,
-            "status":     order.status.value,
-            "created_at": str(order.created_at),
-            "client_order_id": client_order_id,
-        }
-        logger.info(f"Broker | Short order placed: {result['id']} {ticker} status={result['status']}")
-        return result
-    except Exception as exc:
-        logger.error(f"Broker | Short order failed for {ticker}: {exc}")
-        raise RuntimeError(f"Short order failed for {ticker}: {exc}") from exc
-
-
-@alpaca_retry
 def buy_to_cover(ticker: str, qty_int: int) -> dict:
     """
     Place a BUY market order to close an existing short position (GTC).

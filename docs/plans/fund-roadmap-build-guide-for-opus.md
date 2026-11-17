@@ -101,6 +101,29 @@ Stop, write what you know and do not know into the plan's Status entry, and ask 
 - **Some audit items came from notes and may be out of date.** The coffee API already has `lib/refunds.ts`, `lib/rate-limit.ts`, `lib/test-hardening.ts` and `routes/charity-payouts.ts`, and the store has `CharityPayoutsPage.tsx`. Read the code before you build anything.
 - **How paths are written below:** in `DDG-Control`, `cattle-dog-coffee` and `ddg-hypest`, a path starting `routes/` or `lib/` means under `artifacts/api-server/src/`. The two exceptions are the shared packages at the repo root: `lib/db` and `lib/pricing-core`. Confirm every path in the code before editing; INFERRED until you have opened the file.
 
+## Decisions Markus made on 17 Nov (VERIFIED, his words in chat)
+- The growth plan is approved. Build is the main effort. This means effort and order of work. **It does not mean a big new system. Build nothing that is not a numbered order in this list.**
+- **No talking and nobody he knows.** Clients come only in writing, from strangers who have shown they want a build. Never contact, list or suggest anyone Markus knows or deals with (friends, family, Coffee Alliance, coffee customers, market contacts).
+- **You never send a message, proposal or email yourself.** You find, draft and build. Markus presses send. He creates every account (they need his identity).
+- Prices: listed prices stay. First five clients: website $1,300, store $6,500, platform or app $9,750, AI assistant $3,250.
+- DDG has Markus's full-time week. He already makes social content.
+- Open: whether B2.1 (coffee gifts) goes before the Finance fixes. Ask him first thing.
+
+## B0 — Client engine. Do this first in Part B, before B1.
+Read the growth plan, section 3, "How to get clients". Small pieces only.
+
+**B0.1 Founding offer on ddg.limited.** Start: `artifacts/ddg-control/site/content.ts`, `Build.tsx`. Show "first five clients" prices beside the listed ones, and a count of places left that Markus sets by hand. Markus approves the words.
+
+**B0.2 Written-only intake.** Start: `Build.tsx`, `routes/build.ts`, `routes/quotes.ts`. The form collects enough to quote without a call (what the business does, pages or features wanted, examples they like, deadline, budget band). The page says plainly: "We work in writing. No calls needed." Then B2.3 (instant reply and draft quote).
+
+**B0.3 Marketplace pack.** No code. Write `DDG-Control/docs/sales/`: an Upwork profile draft, three proposal templates (website, store, AI helper), and a one-page check of which Australian job boards still take web jobs and what each charges (VERIFIED from each site's own pages, with links). Markus creates the accounts.
+
+**B0.4 Proposal helper.** When Markus pastes a job post into chat, you return: fit (yes or no, one line why), a written proposal, and a small mock-up page he can link. Skip posts that demand calls. No scraping of sites that forbid it.
+
+**B0.5 Signal list for mock-up emails.** Only after B0.1 to B0.4. Apply the two-signal filter in the growth plan exactly. Ten businesses at most per batch, strangers only, public information only. For each: the signals with links, a mock-up, a draft email with DDG's name, ABN and an opt-out line. Markus sends. Ask him to clear the wording with his lawyer before the first batch.
+
+**B0.6 Channel scoreboard.** In Control (`pages/Clients.tsx`): per channel, sent, replies, paid jobs, AI cost, Markus's minutes. Show the stop rule: no paid job after 40 tries means pause.
+
 ## Jobs only Markus can do (do not wait on these; remind him in each status entry)
 - Press Publish for Cattle Dog Coffee on the Replit website.
 - 2-step login on GitHub, Replit, both Stripe accounts, the domain company, Google, brokers, bank.

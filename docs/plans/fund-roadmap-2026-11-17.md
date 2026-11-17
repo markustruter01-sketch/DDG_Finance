@@ -17,11 +17,17 @@ Markus puts in his own money; the system works out what kind of market it is, wh
 - Two things that can still cost more, so they need Markus's yes first: extra AI calls for the Allocator's AI shadow (Phase 3), and Replit Agent credits if the Agent is used for checks.
 - The only new account in the whole plan is a real-money broker account in Phase 5, and only if Phase 4 passes.
 
+## Rule for the whole plan: no crypto, full stop (Markus, 17 Nov 2026)
+- No account, platform or system trades any cryptocurrency: no coins (BTC, ETH…), no crypto pairs, no funds that hold crypto (IBIT, GBTC, ETHA…). Not in any strategy, shadow, yardstick, Allocator choice or AI suggestion, now or later.
+- Reason (Markus): security breaches around Bitcoin; if Bitcoin is breached, the rest of crypto goes with it.
+- Enforced in code (PR #117): every order that would buy crypto is refused before it is sent and raises a critical alarm, on Alpaca and OANDA.
+- Selling is still allowed, so the stop keeps protecting the one crypto holding left (owner-kept BTC in `jerome_macro`) until it is gone. When and whether to sell it now is Markus's call.
+
 ## Phase 0: make the engine trustworthy (now to about Sat 5 Dec 2026)
 One small pull request each, tests green on GitHub, published with the US market closed.
 1. Publish PR #108 (one order per send, Forex read-back, vault obeys pause).
 2. Time limit on every broker call (audit F5).
-3. BTC stop-fill closes its ledger row.
+3. Crypto exit closes its ledger row: when the last BTC is sold (by its stop or by Markus), the row closes once, no repeating alarm, and BTC leaves the owner-kept list.
 4. Daily closing snapshot taken after the US close.
 5. Kill switch per bot: one broker's failed reads pause only that bot, after 3 failed checks in a row. Then arm it again.
 6. Momentum: recompute the trend brake by hand from Alpaca bars; fix it if wrong.
@@ -59,7 +65,7 @@ This is the "knows the regime, picks the strategy" brain. Rules first, AI second
 2. Allocation table: for each regime, a fixed share for each strategy family. Written down before it starts.
 3. Hard limits the brain cannot break: no strategy above 40% of the fund; total gearing at most 1.5x; if the fund falls 15% from its high, go to cash and wait for a human.
 4. Three shadow funds run side by side: (a) equal money to every strategy, (b) the rules Allocator, (c) the rules Allocator with the AI council allowed to reduce or skip.
-5. "Global": start with US-listed funds that hold world shares, bonds, gold and commodities, plus currencies at OANDA. No extra brokers or exchanges until this works.
+5. "Global": start with US-listed funds that hold world shares, bonds, gold and commodities, plus currencies at OANDA. Never crypto. No extra brokers or exchanges until this works.
 Done when: nine months of side-by-side data exist for (a), (b) and (c).
 
 ## Phase 4: decide (January 2028)
@@ -76,5 +82,5 @@ Done when: nine months of side-by-side data exist for (a), (b) and (c).
 
 ## Decided by Markus, 17 Nov 2026 09:17 Brisbane
 1. The plan is agreed.
-2. Defensive stocks replaces Atlas V2's strategy at the lock (the BTC line stays frozen as agreed earlier).
+2. Defensive stocks replaces Atlas V2's strategy at the lock. (Amended 17 Nov: no crypto anywhere; the BTC line is no longer kept, only protected by its stop until it is sold.)
 3. The lock moves to about 12 to 13 Dec so the Shadow League starts with the record.

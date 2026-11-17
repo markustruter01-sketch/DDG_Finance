@@ -14,7 +14,7 @@ MASTER COPY: this file in GitHub (quant-terminal `docs/plans/finance-2027-plan.m
 | 4 Forex | forex_ai | 3-AI vote, risk 0.5%/trade (option A) | scorecard also shows what 2x and 4x would have made; leverage only after 60 trades show an edge |
 - FLEET-V1-F1 (today's Atlas) continues as a no-orders shadow.
 - Nothing has passed a clean test. The 2021–2026 window has been used several times; the paper record is the test.
-- DECIDED (Markus 10 Nov): the leftover BTC/ETH in jerome_macro STAYS (frozen holding with its stops, about 15% of that account on 10 Nov: BTC ~$7.3k, ETH ~$4.7k of ~$80k). No crypto strategy anywhere else. Reports must show that account's result with and without the crypto line so the strategy's own record is readable.
+- SUPERSEDED 17 Nov (no crypto, full stop; see Status 17 Nov). Was: DECIDED (Markus 10 Nov): the leftover BTC/ETH in jerome_macro STAYS (frozen holding with its stops, about 15% of that account on 10 Nov: BTC ~$7.3k, ETH ~$4.7k of ~$80k). No crypto strategy anywhere else. Reports must show that account's result with and without the crypto line so the strategy's own record is readable.
 
 ### Bot 3 detail
 - Stock part: MOMO-V2 (research_harness/explore/MOMO-V2-PLAN.md): top 50 S&P 500 stocks by 12-1 momentum, equal weight, book-level trend and volatility brakes, 20% stops, monthly. Markus 2 Nov: stocks must be in the comparison.
@@ -158,6 +158,13 @@ Runs all year as a SHADOW (no orders); decide at end of 2027 whether to switch i
 
 - ROADMAP AGREED (Markus 17 Nov 09:17 Brisbane): `fund-roadmap-2026-11-17.md` is the target from here; where it differs from the line-up above, the roadmap wins. Defensive stocks replaces Atlas V2's strategy at the lock; lock moves to about 12–13 Dec; no new trading accounts or paid services. Opus 5.5 builds it alone per `fund-roadmap-build-guide-for-opus.md`.
 
+### Status 17 Nov evening (Opus 5.5)
+- 🔴 NO CRYPTO, FULL STOP (Markus 17 Nov): "none of the accounts at all trade any crypto... on any of the platforms, on any of the systems". Reason: Bitcoin security breaches.
+- PR #117: every order that would buy crypto (coin pairs, crypto funds such as IBIT/GBTC/ETHA) is refused before it is sent and logged critical, on every Alpaca client (shared session from #116) and on OANDA. Sells still work.
+- Fix window item "BTC stop-fill ledger close" becomes "crypto exit closes its ledger row" (BTC sold by stop or by Markus).
+- PR #116 (time limits on broker calls, F5) merged; not yet published.
+- WAITING ON MARKUS: whether to sell the remaining owner-kept BTC now (an order: needs his yes); publish approval for #116/#117 (US market closed); the live website still says the Finance bots read/hold crypto.
+
 ### Step 3 — lock strategies (weekend 21–22 Nov, market closed)
 17. FABLE: registration + pass bar for Bots 1–4 and for the AI shadow, written before the start; exact Bot 3 rules (stock / gold-silver split, trend rule, gearing, stop width).
 18. OPUS: cutover rehearsed per 9a first, then live (one account F1 -> G4, F1 shadow, labels Bot 1/2/3/4, gold/silver sleeve on Bot 3), Forex 2x/4x "what if" columns, AI shadow harness. FABLE reviews before it goes live.
@@ -168,7 +175,7 @@ Runs all year as a SHADOW (no orders); decide at end of 2027 whether to switch i
 21. Real money only after 90 clean paper days and measured costs.
 
 ## Not doing
-- A crypto strategy or sleeve (Markus 10 Nov). Existing BTC/ETH in jerome_macro stays as is.
+- Any crypto, on any account or system, full stop (Markus 17 Nov; was "no crypto sleeve", 10 Nov). Coins, pairs and crypto funds. Buys refused in code (PR #117). The last BTC in jerome_macro is only protected by its stop until it is sold.
 - A fourth Alpaca paper account (cap is 3).
 - Jane Street Kaggle data (anonymised high-speed data; we run no such models).
 - Conviction-based Forex leverage before 60 trades show an edge.

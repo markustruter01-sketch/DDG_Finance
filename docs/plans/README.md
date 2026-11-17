@@ -17,7 +17,7 @@ In-house algorithmic trading platform (paper only). 3 Alpaca paper accounts (cap
 | Account (bot_id) | Name on dashboard | Strategy now | 2027 plan |
 |---|---|---|---|
 | oracle | Atlas | FLEET-V1-F1 (65% S&P/Nasdaq trend up to 1.5x + 35% bonds/gold/commodities/dollar trend) | see plan line-up |
-| jerome_macro | Atlas V2 | FLEET-V1-C1 (S&P/Nasdaq trend up to 1.5x) + owner-kept BTC/ETH | |
+| jerome_macro | Atlas V2 | FLEET-V1-C1 (S&P/Nasdaq trend up to 1.5x) + owner-kept BTC (no crypto rule: protected by its stop, never added to; ETH sold 14 Nov) | Defensive stocks at the lock |
 | spy_qqq_trend | Momentum | MOMO-V2 (top 50 S&P 500 stocks by 12-1 momentum, monthly, trend brake); in cash since 3 Nov | Bot 3 = MOMO-V2 ~70% + gold/silver trend ~30% |
 | forex_ai | Forex | 3-AI council vote, 0.5% risk/trade, max 4 trades | Bot 4 |
 
@@ -29,7 +29,8 @@ In-house algorithmic trading platform (paper only). 3 Alpaca paper accounts (cap
 
 ## 🔴 What changed on 17 Nov 2026 (read before the older sections)
 - The 5-day gate (Mon 16 – Fri 20 Nov) is STOPPED by Markus. New order: fix window, then ONE new gate on the final system, then the lock (about 12–13 Dec).
-- The roadmap is agreed. At the lock, Defensive stocks replaces Atlas V2's strategy (the BTC line stays frozen). No new trading accounts or paid services.
+- The roadmap is agreed. At the lock, Defensive stocks replaces Atlas V2's strategy.
+- 🔴 NO CRYPTO, FULL STOP (Markus 17 Nov): no account or system trades any crypto. Buys are refused in code (PR #117); sells still work so the last BTC stays protected until it is sold. No new trading accounts or paid services.
 - Tests now run on GitHub for every pull request and on main (`.github/workflows/tests.yml`). Green before any merge.
 - NOT known when written: whether PR #108 (order-path fixes) is published; the result of the Mon 16 Nov session and rehearsal.
 

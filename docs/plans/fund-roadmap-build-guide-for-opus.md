@@ -36,7 +36,7 @@ Each line: what to build, where to start looking, and the test that proves it. F
 
 1. **Publish PR #108.** Already merged. Pre-check, publish, post-check. Proof: post-check clean, four bots cycling.
 2. **Time limits on broker calls (F5).** Start: `kraken-bot/alpaca_etf_engine.py`, `trading-platform/execution/broker.py`, `trading-platform/core/oanda_trader.py`. Proof: fake-broker test where a call hangs; the cycle ends with an alarm, no second order.
-3. **BTC stop-fill closes its ledger row.** Start: status entry of 15 Nov (ETH case) and the code that tracks owner-kept holdings. Proof: test that replays a filled stop; the row closes once, no repeating alarm.
+3. **Crypto exit closes its ledger row.** No crypto anywhere (Markus 17 Nov; the buy guard is PR #117). Start: status entry of 15 Nov (ETH case) and the code that tracks owner-kept holdings. Proof: test that replays a filled BTC stop or sale; the row closes once, no repeating alarm, and BTCUSD leaves `OWNER_KEPT`.
 4. **Daily snapshot after the US close.** Start: where `bot_daily_returns.equity_close` is written (scheduler). Proof: test with a fixed clock on both sides of the US clock change.
 5. **Kill switch per bot.** Start: `trading-platform/core/kill_switch.py`; `.replit` holds `KILL_SWITCH_ARMED="false"`. Build: a failed read from one broker affects only that bot, and only after 3 failed checks in a row. Proof: tests for one bad broker (only that bot pauses), one blip (nobody pauses), and recovery. Arm it only after Markus says yes.
 6. **Momentum brake check.** Recompute the book index, 100-day average and volatility by hand from Alpaca bars for the dates in the 10 Nov note. If the code is wrong, fix it with a test; if it is right, write that down. Do not change the strategy rule here.

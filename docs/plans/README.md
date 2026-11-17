@@ -4,7 +4,7 @@ Last updated: Tue 17 Nov 2026 ~09:30 Brisbane (UTC+10) by Claude (Fable 5.2): re
 Read in this order:
 1. This file (how to work, Replit facts, publish rules).
 2. `fund-roadmap-2026-11-17.md` — AGREED (Markus 17 Nov): the road from today to a self-running fund (fix window, Shadow League, Allocator in shadow, staged real money). **This is the target.**
-3. `fund-roadmap-build-guide-for-opus.md` — how Opus 5.5 builds that roadmap alone (no Fable in the loop).
+3. `fund-roadmap-build-guide-for-opus.md` — how Opus 5.5 builds that roadmap alone (no Fable in the loop). Since 17 Nov it also holds Part B: the whole-company build list (audit fixes and growth builds in the other DDG repos), to be worked while the Finance gate runs.
 4. `finance-2027-plan.md` — the earlier plan, its checklist and the dated status entries. **The running history; add a Status entry after every work session.** Where it differs from the roadmap, the roadmap wins.
 5. `order-path-audit-2026-11-16.md` — every code path that can place an order, findings F1 to F5, and the "must never happen" list.
 6. `forex-council-2027-registration.md` and `ai-twins-2027-registration.md` — registered forward tests (do not edit; new versions are new dated files).

@@ -163,7 +163,9 @@ Runs all year as a SHADOW (no orders); decide at end of 2027 whether to switch i
 - PR #117: every order that would buy crypto (coin pairs, crypto funds such as IBIT/GBTC/ETHA) is refused before it is sent and logged critical, on every Alpaca client (shared session from #116) and on OANDA. Sells still work.
 - Fix window item "BTC stop-fill ledger close" becomes "crypto exit closes its ledger row" (BTC sold by stop or by Markus).
 - PR #116 (time limits on broker calls, F5) merged; not yet published.
-- WAITING ON MARKUS: whether to sell the remaining owner-kept BTC now (an order: needs his yes); publish approval for #116/#117 (US market closed); the live website still says the Finance bots read/hold crypto.
+- PUBLISHED 17 Nov ~07:16 UTC (US closed): #116 (broker time limits) and #117 (no-crypto guard). Tests in the workspace before publish: 293 + 1,097 passed. Outside check after: ddg.limited push 07:16 UTC, 4 bots unpaused. Alarms and broker-vs-ledger: NOT checked from inside (UNKNOWN).
+- 🔴 BTC SOLD (Markus 17 Nov 17:38 Brisbane: "Yes, sell the Bitcoin"). Stop a21f0320 cancelled; one market sell 0.097758577 BTC/USD filled 07:41:36 UTC at avg 64,519.74 (order 25ae6d82). Entry 78,973.10: about −$1,413 on the line (arithmetic). bot3_positions id 1 closed, bot_portfolio BTC item removed, change_log row 16 (owner-approved production write; before/after in `.local/claude_reports/btc-sale.txt`). No crypto left on any account. OWNER_KEPT emptied in code (PR "BTC sold").
+- (superseded) WAITING ON MARKUS: whether to sell the remaining owner-kept BTC now (an order: needs his yes); publish approval for #116/#117 (US market closed); the live website still says the Finance bots read/hold crypto.
 
 ### Step 3 — lock strategies (weekend 21–22 Nov, market closed)
 17. FABLE: registration + pass bar for Bots 1–4 and for the AI shadow, written before the start; exact Bot 3 rules (stock / gold-silver split, trend rule, gearing, stop width).

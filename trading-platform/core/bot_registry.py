@@ -176,7 +176,10 @@ BOT_REGISTRY: dict[str, BotEntry] = {
 # they copy. Canonical symbols (core.symbols.canonical_symbol).
 # ETH left the list on 15 Nov: its stop sold it on 14 Nov 14:24 UTC and Markus
 # decided no rebuy (finance-2027-plan.md, status 15 Nov).
-OWNER_KEPT: dict[str, frozenset[str]] = {"jerome_macro": frozenset({"BTCUSD"})}
+# BTC left on 17 Nov: Markus ruled no crypto anywhere and had it sold (market
+# sell filled 17 Nov 07:41 UTC, ledger row closed). The list is empty and must
+# stay so for crypto: core/no_crypto.py refuses any crypto buy.
+OWNER_KEPT: dict[str, frozenset[str]] = {}
 
 
 # Build alias → canonical lookup at module load time

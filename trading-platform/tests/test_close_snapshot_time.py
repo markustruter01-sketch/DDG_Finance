@@ -44,3 +44,13 @@ def test_the_row_is_dated_by_the_new_york_trading_day():
     # 22:25 UTC on 17 Nov is 17:25 on 17 Nov in New York; 01:00 UTC on 18 Nov is still 17 Nov there.
     assert str(cs.new_york_date(datetime(2026, 11, 17, 22, 25, tzinfo=timezone.utc))) == "2026-11-17"
     assert str(cs.new_york_date(datetime(2026, 11, 18, 1, 0, tzinfo=timezone.utc))) == "2026-11-17"
+
+
+def test_published_deployment_registers_its_jobs(monkeypatch):
+    """18 Nov 2026: a name used only in the published branch (_et) went missing and the publish crashed.
+    Register the jobs as the published deployment does."""
+    import core.scheduler as cs
+    monkeypatch.setenv("REPLIT_DEPLOYMENT", "1")
+    scheduler = AsyncIOScheduler()
+    cs._register_jobs(scheduler)
+    assert scheduler.get_job("deploy_hash_check_startup") is not None

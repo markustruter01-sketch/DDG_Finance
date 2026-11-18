@@ -30,6 +30,7 @@ RESOLVABLE_ERROR_TYPES = (
     "daily_return_portfolio_stale",
     "entry_empty_response_guard",
     "entry_order_failed",
+    "forex_execution",
     "protective_stop_failed",
     "reconciliation_mismatch",
     "stop_placement_failed",
@@ -71,6 +72,10 @@ def _canonical_bot(row: dict[str, Any]) -> str | None:
     component = str(row.get("component") or "")
     if component in BOT_ALIASES:
         return BOT_ALIASES[component]
+    # "bot/<id>" for any registered bot (the stale-workflow alarm writes component="bot/forex_ai"
+    # with no bot_id, so it could never clear before 18 Nov 2026).
+    if component.startswith("bot/") and component[4:] in BOTS:
+        return component[4:]
     for prefix, canonical in (
         ("bot/", None),
         ("oracle_", "oracle"),
@@ -291,6 +296,17 @@ def resolution_for_event(
         if _bot_cycle_recovered(state, bot_id) and _reconciliation_is_clean(state):
             return "bot cycle recovered and latest broker/ledger reconciliation is clean"
         return None
+
+    # A failed Forex execution (e.g. OANDA HTTP 401 on 14-15 Nov 2026) is over once the bot
+    # has completed a successful cycle AFTER the failure.
+    if error_type == "forex_execution":
+        cycle = state["cycles"].get(bot_id) if bot_id else None
+        if not cycle or str(cycle.get("status") or "").lower() != "success":
+            return None
+        done, failed = _parse_ts(cycle.get("last_success_at")), _parse_ts(event.get("ts"))
+        if done is None or (failed is not None and done <= failed):
+            return None
+        return "bot completed a successful cycle after the execution failure"
 
     if error_type in {"entry_order_failed", "close_position_failed", "close_failed"}:
         if _bot_cycle_recovered(state, bot_id):

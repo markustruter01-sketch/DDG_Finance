@@ -165,3 +165,20 @@ def test_fail_still_alarms_on_the_first_run(monkeypatch):
 
     asyncio.run(scheduler._standing_invariants_job())
     assert [r["severity"] for r in recorded] == ["critical"]
+
+
+def test_the_count_of_other_alarms_never_files_an_alarm_of_its_own(monkeypatch):
+    """17 Nov 2026: 4 open rows only said "other alarms are open"."""
+    recorded, resolved = [], []
+    _patch_tracker(monkeypatch, recorded, resolved)
+    monkeypatch.setattr(
+        "core.invariants.run_all_invariants",
+        lambda: {"overall": "FAIL", "counts": {"PASS": 0, "DRIFT": 0, "FAIL": 1, "UNKNOWN": 0},
+                 "checked_at": "2026-11-18T00:00:00+00:00",
+                 "results": [{"name": "zero_unresolved_high_severity_degradations", "status": "FAIL",
+                              "actual": {}, "expected": {}, "difference": {}, "message": "7 remain.",
+                              "threshold_source": "test"}]},
+    )
+    asyncio.run(scheduler._standing_invariants_job())
+    assert recorded == []
+    assert resolved and resolved[0][1] == "zero_unresolved_high_severity_degradations"

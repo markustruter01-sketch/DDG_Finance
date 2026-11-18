@@ -443,7 +443,8 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
         )
         logger.info("Scheduler | Registered: deploy_hash_check_nightly (daily 18:30 ET)")
 
-        _startup_check_dt = datetime.now(_et) + timedelta(seconds=60)
+        # (_et used to be defined by the 17 Aug one-time job removed in #122; that broke this line.)
+        _startup_check_dt = datetime.now(pytz.timezone("America/New_York")) + timedelta(seconds=60)
         scheduler.add_job(
             func=_deploy_hash_check,
             trigger=DateTrigger(run_date=_startup_check_dt),

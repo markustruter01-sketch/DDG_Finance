@@ -68,6 +68,18 @@ This is the "knows the regime, picks the strategy" brain. Rules first, AI second
 5. "Global": start with US-listed funds that hold world shares, bonds, gold and commodities, plus currencies at OANDA. Never crypto. No extra brokers or exchanges until this works.
 Done when: nine months of side-by-side data exist for (a), (b) and (c).
 
+## Phase 3a: outside views in the AI layer (added by Markus, 18 Nov 2026)
+Markus values the public market views of Luke Gromen (FFTT, "Forest for the Trees") and Jim Bianco (Bianco Research) and wants the AI layer to weigh them heavily. The bots' rules never read them; only the AI layer does.
+1. Collect: a daily job reads only what the two publish for free (public posts, interviews, podcasts, free notes). Paid newsletter text is never used unless Markus holds a subscription whose terms allow it. Markus names the exact sources.
+2. Summarise: the AI turns each item into a short "view card": who, date, topic (rates, dollar, oil, shares, gold, bonds), direction, how strongly held, time frame, link. We keep our own summary and the link, never their text. No crypto topic is ever turned into a suggestion.
+3. Track: one "current view" per person per topic. Older views fade; a new view replaces the old one.
+4. Use: the AI council reads the cards next to market data. It must write whether it agrees or disagrees with each relevant view, and why.
+5. Limits: the AI still may only reduce or skip, inside the Allocator's hard limits. Outside views can never place a trade, add gearing or override a stop or the kill switch.
+6. Score: every view is logged with what the market did next, so each person's weight is earned by results. Markus's starting weight is "heavy"; the log shows whether that holds.
+7. Where it runs: shadow fund (c) only, from April 2027, registered before it starts. Collection and scoring can start earlier (from January 2027) so there is a record. Using it in a real paper bot (for example the Forex AI council) would be a new dated strategy version, and only after the shadow record supports it.
+Costs: no new paid service. The daily AI summaries are extra AI calls, so they need Markus's yes on the monthly cost before the job is switched on.
+Done when: cards are written every day for 20 days with no missed day, and every AI council note in fund (c) cites the views it used.
+
 ## Phase 4: decide (January 2028)
 1. A strategy passes if, after costs, it matched or beat the S&P 500, or came close with a clearly smaller worst fall, and passes the luck check adjusted for 16 tries.
 2. The Allocator passes only if (b) beat (a) after costs. The AI passes only if (c) beat (b) after its own bill.

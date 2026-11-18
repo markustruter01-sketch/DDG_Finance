@@ -68,6 +68,19 @@ No rule changes. Month-end job: freeze, hash, copy to GitHub, one-page report. Q
 4. Three shadow funds: equal money; rules Allocator; rules Allocator plus AI reduce-or-skip. The AI version needs Markus's yes first (extra AI cost).
 5. No orders from any of this. It only reads shadow results and writes its own shadow record.
 
+## Phase 3a work orders: outside views (Gromen, Bianco) in the AI layer
+Read the roadmap's Phase 3a first. Build in this order, one pull request each. Nothing here sends an order.
+1. **Ask Markus first:** the exact public sources for each person (links), whether he holds paid subscriptions and what their terms allow, and a yes on the monthly AI cost. Do not guess sources. Do not scrape anything behind a login or paywall.
+2. **Source list:** one committed file listing each allowed source (person, link, type). The collector reads only what is in this file.
+3. **Collector:** a daily job (after the US close) that fetches new public items from the list. Store: person, date published, link, title, and a hash of the fetched text for de-duplication. Do not store the full text. A failed fetch files one alarm per source per day at most and never blocks trading jobs.
+4. **View cards:** one AI call per new item producing a fixed JSON card: person, date, topic (rates, dollar, oil, shares, gold, bonds, other), direction (up, down, neutral, unclear), strength (1 to 3), time frame, one-sentence summary in our own words, link. Validate the JSON; reject and log anything else. Crypto topics are stored as `other` with no direction and are never passed to the council as a suggestion.
+5. **Current-view table:** latest card per person per topic, with a weight that halves every 30 days (register the number). A newer card on the same topic replaces the old one.
+6. **Council input:** the AI council's prompt for shadow fund (c) gets the current-view table. Its written note must list each view it used and say agree or disagree with a reason. Test: a note with no such list is rejected.
+7. **Limits, tested:** the council's output type stays "reduce or skip". A test proves that no card content can raise a position, raise gearing, move a stop or clear a pause.
+8. **Scoreboard:** for each card, record the market move over the card's time frame (from price data we already have) and whether the view was right. Show per person, per topic hit rates on the dashboard next to the leaderboard. Append-only.
+9. **Registration:** hash and date the source list, card format, decay number and council prompt before fund (c) starts in April 2027. Changing any of them later is a new dated version.
+Proof for the phase: 20 days of cards with no missed day; every fund (c) council note cites its views; the limits test is green.
+
 ## Phases 4 and 5
 Do not start them. In January 2028 produce the scorecard exactly as the roadmap's Phase 4 defines it, including the case "nothing passed". Real money is Markus's decision alone.
 

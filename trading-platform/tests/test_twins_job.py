@@ -182,7 +182,9 @@ def test_three_nights_start_mirror_baselines_check_and_alarm(monkeypatch):
     d3 = _row(get_conn, "oracle:mirror:v1", D3)
     assert d3["gap_pp"] < -4.5
     assert [(e, b) for e, b, _ in alarms.raised] == [("twin_mirror_drift", "oracle")]
-    assert alarms.resolved[-2:] == ["twin_replay_failed", "twin_job_failed"]   # drift stays open
+    tonight = alarms.resolved[alarms.resolved.index("twin_replay_failed", len(alarms.resolved) - 6):]
+    assert tonight[0] == "twin_replay_failed" and tonight[-1] == "twin_job_failed"
+    assert "twin_mirror_drift" not in tonight                                  # drift stays open
     fx = [_row(get_conn, "forex_ai:mirror:v1", d)["gap_pp"] for d in (D1, D2, D3)]
     assert fx[0] is None and fx[1] == 0.0 and abs(fx[2]) < 0.01   # flat prices: only the spread
     assert report["chains"] == {}

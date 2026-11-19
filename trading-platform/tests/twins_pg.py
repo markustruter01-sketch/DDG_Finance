@@ -10,7 +10,7 @@ from contextlib import contextmanager
 
 import pytest
 
-TABLES = ("twin_fills", "twin_equity_daily", "twin_votes", "twin_decisions", "twin_accounts",
+TABLES = ("twin_month_freeze", "twin_fills", "twin_equity_daily", "twin_votes", "twin_decisions", "twin_accounts",
           "change_log", "bot_portfolio", "bots_state")
 
 

@@ -13,6 +13,9 @@ any existing table.
   is read and never touched by the replay.
 - change_log: APPEND-ONLY. Every pause, resume, publish, manual action and
   rule change, dated.
+- twin_month_freeze: APPEND-ONLY. Each twin's figures for a finished month,
+  written once on the first night after it ends and never recomputed
+  (TWINS-V2 "Record keeping"; twins/month_end.py).
 
 Every function takes get_conn (a context manager yielding a psycopg2
 connection), so tests run on a throwaway local Postgres.
@@ -108,6 +111,24 @@ CREATE TABLE IF NOT EXISTS change_log (
 );
 CREATE INDEX IF NOT EXISTS idx_change_log_kind ON change_log (kind, bot_id, id DESC);
 
+CREATE TABLE IF NOT EXISTS twin_month_freeze (
+    twin_id          TEXT NOT NULL REFERENCES twin_accounts (twin_id),
+    month            DATE NOT NULL,              -- first day of the month frozen
+    equity_start     DOUBLE PRECISION NOT NULL,  -- last value before the month (or the start balance)
+    equity_end       DOUBLE PRECISION NOT NULL,  -- last value in the month
+    return_pct       DOUBLE PRECISION NOT NULL,
+    worst_fall_pct   DOUBLE PRECISION NOT NULL,  -- largest peak-to-trough drop inside the month
+    ref_equity_end   DOUBLE PRECISION,           -- the real account's value (mirror twins only)
+    days             INTEGER NOT NULL,
+    decisions        INTEGER NOT NULL,
+    missed           INTEGER NOT NULL,
+    votes            INTEGER NOT NULL,
+    ai_cost_usd      DOUBLE PRECISION NOT NULL,
+    last_hash        TEXT,                       -- last decision hash up to the month end
+    frozen_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (twin_id, month)
+);
+
 CREATE OR REPLACE FUNCTION twins_append_only() RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN
     RAISE EXCEPTION '% is append-only', TG_TABLE_NAME;
@@ -115,7 +136,7 @@ END;
 $$;
 """
 
-APPEND_ONLY = ("twin_decisions", "twin_votes", "change_log")
+APPEND_ONLY = ("twin_decisions", "twin_votes", "change_log", "twin_month_freeze")
 _TRIGGERS = "".join(f"""
 DO $$ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = '{t}_append_only') THEN
@@ -321,3 +342,43 @@ def last_change(get_conn: GetConn, kinds: tuple[str, ...], bot_id: str | None = 
         return None
     detail = r[5] if isinstance(r[5], dict) else json.loads(r[5] or "{}")
     return {"id": r[0], "at": r[1], "bot_id": r[2], "kind": r[3], "summary": r[4], "detail": detail}
+
+
+# ── month-end freeze (append-only) ────────────────────────────────────────────
+FREEZE_FIELDS = ("twin_id", "month", "equity_start", "equity_end", "return_pct", "worst_fall_pct",
+                 "ref_equity_end", "days", "decisions", "missed", "votes", "ai_cost_usd", "last_hash")
+
+
+def freeze_month(get_conn: GetConn, row: dict[str, Any]) -> bool:
+    """Write one month's figures; False if that month is already frozen (never rewritten)."""
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            f"INSERT INTO twin_month_freeze ({', '.join(FREEZE_FIELDS)}) "
+            f"VALUES ({', '.join(['%s'] * len(FREEZE_FIELDS))}) ON CONFLICT (twin_id, month) DO NOTHING",
+            tuple(row[f] for f in FREEZE_FIELDS))
+        return cur.rowcount == 1
+
+
+def frozen(get_conn: GetConn, month: date | None = None) -> list[dict[str, Any]]:
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(f"SELECT {', '.join(FREEZE_FIELDS)}, frozen_at FROM twin_month_freeze"
+                    + (" WHERE month = %s" if month else "") + " ORDER BY month, twin_id",
+                    (month,) if month else ())
+        return [dict(zip(FREEZE_FIELDS + ("frozen_at",), r)) for r in cur.fetchall()]
+
+
+def month_activity(get_conn: GetConn, twin_id: str, start: datetime, end: datetime) -> dict[str, Any]:
+    """Decisions, missed, AI votes and their cost with step/created time in [start, end)."""
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute("SELECT COUNT(*) FILTER (WHERE NOT missed), COUNT(*) FILTER (WHERE missed) "
+                    "FROM twin_decisions WHERE twin_id = %s AND step_at >= %s AND step_at < %s",
+                    (twin_id, start, end))
+        decided, missed = cur.fetchone()
+        cur.execute("SELECT COUNT(*), COALESCE(SUM(cost_usd), 0) FROM twin_votes "
+                    "WHERE twin_id = %s AND created_at >= %s AND created_at < %s", (twin_id, start, end))
+        votes, cost = cur.fetchone()
+        cur.execute("SELECT hash FROM twin_decisions WHERE twin_id = %s AND step_at < %s ORDER BY id DESC LIMIT 1",
+                    (twin_id, end))
+        last = cur.fetchone()
+    return {"decisions": int(decided), "missed": int(missed), "votes": int(votes),
+            "ai_cost_usd": float(cost), "last_hash": last[0] if last else None}

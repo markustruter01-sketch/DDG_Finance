@@ -434,6 +434,7 @@ def nightly(now: datetime | None = None, *, get_conn=None, fetch_daily=None, fet
         report["twins"] = replay_all(get_conn, now, daily, fetch_hourly, alarm, resolve)
         report["chains"] = verify_all(get_conn, alarm)
         report["month_end"] = _month_end(get_conn, now, report["twins"], alarm, resolve)
+        report["allocator"] = _allocator(get_conn, now, alarm) if with_league else "off"
         resolve("twin_job_failed")
     except Exception as exc:
         logger.exception("twins nightly failed")
@@ -452,6 +453,17 @@ def _month_end(get_conn, now, replayed: dict[str, Any], alarm, resolve) -> Any:
     except Exception as exc:
         logger.exception("month-end step failed")
         alarm("error", "twin_month_end_failed", f"month-end step failed: {type(exc).__name__}: {str(exc)[:200]}")
+        return f"failed: {type(exc).__name__}"
+
+
+def _allocator(get_conn, now, alarm) -> Any:
+    """The two shadow funds' values tonight; one alarm the first time one falls 15%. Never stops the night."""
+    try:
+        from twins import allocator
+        return allocator.check(get_conn, now, alarm)
+    except Exception as exc:
+        logger.exception("allocator check failed")
+        alarm("error", "allocator_check_failed", f"Allocator check failed: {type(exc).__name__}: {str(exc)[:200]}")
         return f"failed: {type(exc).__name__}"
 
 

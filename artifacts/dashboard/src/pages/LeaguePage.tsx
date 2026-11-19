@@ -8,18 +8,19 @@ import { Shell, Status } from "@/components/Shell";
 // computed by the API (twins/leaderboard.py), this page only formats it.
 
 type Row = {
-  id: string; name: string; kind: "real" | "yardstick" | "shadow"; family: string | null;
+  id: string; name: string; kind: "real" | "yardstick" | "shadow" | "allocator"; family: string | null;
   days: number; first_day: string | null; last_day: string | null; equity: number | null;
   return_pct: number | null; worst_fall_pct: number | null; days_in_cash: number | null;
   gap_to_spx_pp: number | null; luck: string | null; dsr: number | null;
 };
-type Board = { league_version: number; note: string; rows: Row[];
+type Board = { league_version: number; note: string; rows: Row[]; regime?: string | null;
   luck_rule: { clear_at_dsr: number; min_days: number; n_trials: number; status: string } };
 
 type Costs = { month: string; model_bps: number;
   market_fills: { fills: number; median_bps?: number; above_model?: boolean } };
 
-const KIND: Record<Row["kind"], string> = { real: "Real accounts", yardstick: "Yardsticks", shadow: "Shadows" };
+const KIND: Record<Row["kind"], string> = { real: "Real accounts", yardstick: "Yardsticks", shadow: "Shadows",
+  allocator: "Allocator (shadow funds)" };
 const pct = (v: number | null, signed = false) =>
   v === null ? "—" : `${signed && v > 0 ? "+" : ""}${v.toFixed(2)}%`;
 const pp = (v: number | null) => (v === null ? "—" : `${v > 0 ? "+" : ""}${v.toFixed(2)} pts`);
@@ -50,10 +51,11 @@ export default function LeaguePage() {
         <p className="small" style={{ margin: 0 }}>
           Every strategy on fake money, valued at each US close with the same costs. No orders. Real accounts show
           their real balance. {board.data?.note}
+          {board.data?.regime ? ` Market mood tonight (Allocator label): ${board.data.regime}.` : ""}
         </p>
         {board.isLoading && <div className="note">Reading the league…</div>}
         {board.isError && <Status tone="problem" word={`League unreadable: ${errorText(board.error)}`} />}
-        {(["real", "yardstick", "shadow"] as const).map((kind) => {
+        {(["real", "yardstick", "shadow", "allocator"] as const).map((kind) => {
           const part = rows.filter((r) => r.kind === kind);
           if (!part.length) return null;
           return (

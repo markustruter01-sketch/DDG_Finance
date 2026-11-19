@@ -1,0 +1,56 @@
+{
+  "id": "ALLOCATOR-V1",
+  "status": "PROPOSED by Opus 5.5, 19-20 Nov 2026: every number below needs Markus's yes. Version 0 runs from publish as a trial with the league's proving run; the counted shadow is April-December 2027 (roadmap Phase 3), registered before it starts. The AI fund (c) is NOT built: it needs Markus's yes on its extra AI cost.",
+  "source_document": "docs/plans/fund-roadmap-2026-11-17.md Phase 3; build guide Phase 3 orders 1-5; code research_harness/league/allocator.py, trading-platform/twins/allocator.py",
+  "hypothesis": "Leaning money toward the strategy families that suit the market's mood beats spreading it equally (fund b beats fund a after costs).",
+  "regime_measurements": {
+    "trend": "SPY close above its 200-session average",
+    "breadth": "share of S&P 500 members (same list as the stock shadows) whose close is above their own 200-session average",
+    "rates": "IEF 60-session return (falling IEF = rates rising)",
+    "roughness": "SPY annualised 20-session volatility vs the median of the same measure over the past 252 sessions"
+  },
+  "labels": "direction 'up' when at least 2 of: trend above; breadth >= 50%; IEF 60-session return >= 0. 'rough' when 20-session volatility is above its 252-session median, else 'calm'. Labels: calm up, rough up, calm down, rough down. Written once per US session, the night of that session, to the append-only allocator_labels table.",
+  "allocation_table": {
+    "calm up": {
+      "trend": 0.35,
+      "stocks": 0.35,
+      "diversifier": 0.1,
+      "short_term": 0.1,
+      "forex": 0.1
+    },
+    "rough up": {
+      "trend": 0.25,
+      "stocks": 0.25,
+      "diversifier": 0.25,
+      "short_term": 0.1,
+      "forex": 0.15
+    },
+    "calm down": {
+      "trend": 0.2,
+      "stocks": 0.15,
+      "diversifier": 0.35,
+      "short_term": 0.1,
+      "forex": 0.2
+    },
+    "rough down": {
+      "trend": 0.15,
+      "stocks": 0.1,
+      "diversifier": 0.4,
+      "short_term": 0.1,
+      "forex": 0.25
+    }
+  },
+  "lines": "the league's rules lines (not yardsticks, not FX-COUNCIL): a family's share split equally between its lines with a value that day; a family with none today waits in cash (Y-CASH).",
+  "funds": {
+    "a (ALLOC-EQUAL)": "every rules line the same share, rebalanced at the first session of each month",
+    "b (ALLOC-RULES)": "the table, rebalanced when the label changes and at the first session of each month",
+    "c": "NOT BUILT (AI reduce-or-skip; needs Markus's yes on cost)"
+  },
+  "limits": "both funds: no line above 40% (excess to cash); total exposure at most 1.5x (2x funds count double, BIL counts nothing, forex counts its gross), scaled down into cash; a 15% fall from the fund's high moves it to cash for good and raises one alarm, until Markus resets it.",
+  "costs": "each line's own costs are inside its value; moving money between lines costs 5 bps of the amount moved (the league's per-trade cost).",
+  "timing": "decided at a session's close from that session's label; earns from the next session.",
+  "start_equity": "100,000 fake dollars per fund",
+  "pass_bar": "Roadmap Phase 4: the Allocator passes only if fund (b) beat fund (a) after costs (January 2028). The size of 'beat' is UNKNOWN until Markus sets it.",
+  "candidates_declared": 1,
+  "prior_variants_tried": 0
+}

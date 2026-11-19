@@ -71,7 +71,8 @@ def test_read_from_the_twins_tables_after_two_nights():
         store.upsert_equity(get_conn, acct["twin_id"], engine.daily_points(res.curve, acct["bars"]))
     board = lb.read(get_conn)
     assert board["league_version"] == league.LEAGUE_VERSION
-    assert len(board["rows"]) == 18
+    assert len([r for r in board["rows"] if r["kind"] != "allocator"]) == 18
+    assert {r["id"] for r in board["rows"] if r["kind"] == "allocator"} == {"ALLOC-EQUAL", "ALLOC-RULES"}
     assert board["luck_rule"]["n_trials"] == 16          # declared up front, not the count running
     spx = next(r for r in board["rows"] if r["id"] == "Y-SPX")
     assert spx["days"] >= 1 and spx["return_pct"] is not None

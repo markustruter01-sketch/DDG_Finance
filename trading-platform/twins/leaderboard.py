@@ -30,6 +30,7 @@ N_TRIALS = 16          # shadows declared in the roadmap (the forex three includ
 MIN_LUCK_DAYS = 60
 LUCK_CLEAR = 0.95
 REAL_BOTS = ("oracle", "jerome_macro", "spy_qqq_trend", "forex_ai")
+COUNCIL_BOT, COUNCIL_LINE = "forex_ai", "FX-COUNCIL"     # registrations/league/FX-COUNCIL.json
 
 
 def worst_fall(values: list[float]) -> float:
@@ -126,6 +127,12 @@ def read(get_conn) -> dict[str, Any]:
             lines.append({"id": acct["bot_id"], "name": display_name(acct["bot_id"]), "kind": "real",
                           "family": "real account", "start_equity": None,
                           "curve": [(r["day"], r["ref_equity"]) for r in rows if r["ref_equity"]]})
+            if acct["bot_id"] == COUNCIL_BOT:      # the council's shadow line = its mirror, engine-valued
+                decs = [(r["step_at"].astimezone(engine.NEW_YORK).date(), r["weights"])
+                        for r in store.decisions(get_conn, acct["twin_id"]) if not r["missed"]]
+                lines.append({"id": COUNCIL_LINE, "name": "Forex AI council (mirror twin)", "kind": "shadow",
+                              "family": "forex", "start_equity": acct["start_equity"],
+                              "curve": [(r["day"], r["equity"]) for r in rows if r["equity"]], "decisions": decs})
     n_trials = max(N_TRIALS, sum(1 for ln in lines if ln["kind"] == "shadow"))
     return {"league_version": league.LEAGUE_VERSION,
             "note": ("Version 0 is the proving run, not the record." if league.LEAGUE_VERSION == 0 else ""),

@@ -18,6 +18,7 @@ hash is stored on the account, so a later edit to the file is visible.
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable
@@ -37,6 +38,15 @@ REG_DIR = Path(__file__).resolve().parents[2] / "research_harness" / "registrati
 HISTORY_CALENDAR_DAYS = 600            # covers 380 sessions of warm-up (momentum's 12-1 + its brake)
 CATCH_UP_SESSIONS = 15                 # a longer outage is reported; older sessions are not re-asked
 UNIVERSE_TIMEOUT_SECONDS = 30
+FX_DAILY_CANDLES = 500                 # ~2 years of forex days: FX-BT1 walks from its start (13 months in 2027)
+
+
+def oanda_daily(pairs: list[str]) -> dict[str, list[dict[str, Any]]]:
+    """Complete OANDA daily mid candles per pair (read-only)."""
+    from core.oanda_client import OandaClient
+
+    with OandaClient() as client:
+        return {p: client.daily_candles(p, count=FX_DAILY_CANDLES) for p in pairs}
 
 
 def twin_id(sid: str) -> str:
@@ -87,9 +97,11 @@ def ensure_accounts(get_conn, session: date, registrations: dict[str, dict[str, 
             continue
         cfg = {"registration": strategy.id, "registration_hash": registration_hash(reg),
                "league_version": LEAGUE_VERSION, "family": strategy.family, "name": strategy.name,
-               "max_gross": 1.0, "allow_short": False, "stop_pct": strategy.stop_pct,
+               "max_gross": strategy.max_gross, "allow_short": strategy.allow_short,
+               "stop_pct": strategy.stop_pct,
                "costs": "twins.config.SHARE_COSTS (0 commission, 2 bps half spread, 3 bps slippage); "
-                        "2x funds carry their own borrowing cost in their price; idle money in BIL"}
+                        + ("forex financing (overnight interest) left out, as in FX-BT1" if strategy.forex else
+                           "2x funds carry their own borrowing cost in their price; idle money in BIL")}
         if store.create_account(get_conn, twin_id=tid, bot_id=LEAGUE_BOT, kind=kind_of(strategy),
                                 version=LEAGUE_VERSION, bars=DAILY, start_at=step_at,
                                 start_equity=START_EQUITY, config=cfg):
@@ -113,6 +125,7 @@ def run_days(calendar: tuple[date, ...], last_run: date | None, session: date) -
 
 def run(get_conn, now: datetime, session: date, *, fetch_daily=None,
         universe_loader: Callable[[], tuple[tuple[str, ...], dict[str, str], str]] | None = None,
+        fetch_fx_daily: Callable[[list[str]], dict[str, list[dict[str, Any]]]] | None = None,
         reg_dir: Path = REG_DIR) -> tuple[dict[str, Any], dict[str, list[dict[str, Any]]]]:
     """Decisions for every shadow up to ``session``. Returns (report, bars);
     the caller merges the bars into the night's replay so new names have prices."""
@@ -146,6 +159,16 @@ def run(get_conn, now: datetime, session: date, *, fetch_daily=None,
     symbols = set(families.fixed_symbols()) | set(universe)
     bars = prices.alpaca_daily(sorted(symbols), oldest - timedelta(days=HISTORY_CALENDAR_DAYS), now,
                                fetch=fetch_daily)
+    fx_ok = False
+    if any(s.forex for s, _ in todo):
+        from research_harness.league import forex as fx
+        try:
+            bars.update(fx.bars_from_daily_candles((fetch_fx_daily or oanda_daily)(list(fx.PAIRS))))
+            fx_ok = all(p in bars for p in fx.PAIRS)
+            report["forex"] = "ok" if fx_ok else "some pairs missing"
+        except Exception as exc:              # OANDA's intermittent 401s: a missed night for the forex lines
+            report["forex"] = f"unavailable: {type(exc).__name__}"
+            logger.warning(f"league | OANDA daily candles unavailable tonight: {type(exc).__name__}: {exc}")
     calendar = tuple(b["day"] for b in bars.get("SPY", []))
     ctx = base.Context(calendar=calendar, universe=tuple(s for s in universe if s in bars), sectors=sectors)
     view = HistoryView(bars)
@@ -159,15 +182,18 @@ def run(get_conn, now: datetime, session: date, *, fetch_daily=None,
         start = engine.step_of(acct["start_at"], DAILY)
         mine = [d for d in days if d >= start]
         rows = store.decisions(get_conn, tid)
-        if strategy.uses_universe and not ctx.universe:
+        why_not = ("S&P 500 member list unavailable" if strategy.uses_universe and not ctx.universe else
+                   "OANDA daily candles unavailable" if strategy.forex and not fx_ok else None)
+        if why_not:
             for d in mine:
-                _missed(get_conn, tid, now, engine.step_close(d, DAILY), "S&P 500 member list unavailable")
-            report[tid] = f"missed {len(mine)}: no member list"
+                _missed(get_conn, tid, now, engine.step_close(d, DAILY), why_not)
+            report[tid] = f"missed {len(mine)}: {why_not}"
             continue
         has_decision = any(not r["missed"] for r in rows)
         sent = 0
+        mine_ctx = replace(ctx, start=start)
         for d in mine:
-            call = base.decide(strategy, view, ctx, d, has_decision)
+            call = base.decide(strategy, view, mine_ctx, d, has_decision)
             if call is None:
                 continue
             if _decide(get_conn, tid, now, engine.step_close(d, DAILY), call.weights,

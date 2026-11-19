@@ -78,3 +78,23 @@ def test_read_from_the_twins_tables_after_two_nights():
     assert spx["days"] >= 1 and spx["return_pct"] is not None
     cash = next(r for r in board["rows"] if r["id"] == "Y-CASH")
     assert cash["days_in_cash"] == cash["days"]
+
+
+@needs_pg
+def test_records_card_reads_logs_freeze_costs_and_heartbeat(monkeypatch):
+    from test_league import fake_fetch, fake_fx_now, fake_universe
+
+    get_conn = make_get_conn()
+    store.ensure_schema(get_conn)
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute("DROP TABLE IF EXISTS execution_slippage")          # no fills from other tests
+    now = datetime.combine(date(2026, 11, 17), time(17, 15), NEW_YORK)
+    league.run(get_conn, now, date(2026, 11, 17), fetch_daily=fake_fetch, universe_loader=fake_universe,
+               fetch_fx_daily=fake_fx_now)
+    monkeypatch.setenv("HEARTBEAT_URL_RUNNER", "https://example.invalid/ping")
+    monkeypatch.delenv("HEARTBEAT_URL_API", raising=False)
+    r = lb.records(get_conn)
+    assert r["logs"]["lines"] == 18 and r["logs"]["broken"] == []
+    assert r["league_last_run"] is not None and r["last_frozen_month"] is None
+    assert r["costs"]["model_bps"] == 5.0 and r["costs"]["fills"] == 0
+    assert r["heartbeat"] == {"runner": True, "api": False}           # whether it is set, never the URL

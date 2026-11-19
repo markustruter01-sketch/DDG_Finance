@@ -361,6 +361,19 @@ async def lifespan(app: FastAPI):
     if scheduler is not None:
         logger.info("DDG fleet push job registered (hourly, 5-minute startup delay)")
 
+    # The ddg.limited showcase (display-only copy of the main dashboard): every 30 minutes, and only while
+    # the US market is closed (core/ddg_showcase.py).
+    from core.ddg_showcase import push_showcase
+    _add_scheduler_job(
+        scheduler,
+        func=push_showcase,
+        trigger=_ITrigger(minutes=30),
+        id="ddg_showcase_push",
+        name="DDG Finance showcase push (market closed only)",
+        replace_existing=True,
+        next_run_time=_ddg_push_first_run + timedelta(minutes=2),
+    )
+
     _register_yahoo_refresh_jobs(scheduler)
 
     from apscheduler.triggers.cron import CronTrigger as _CronTrigger

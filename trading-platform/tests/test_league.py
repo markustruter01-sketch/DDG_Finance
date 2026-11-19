@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import math
 from datetime import date, datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -250,7 +251,7 @@ def test_f1_split_matches_the_live_fleet():
 def test_every_strategy_has_a_registration_and_no_crypto_anywhere():
     from core.no_crypto import is_crypto
 
-    assert len(fam.STRATEGIES) == 16 and len(fam.BY_ID) == 16
+    assert len(fam.STRATEGIES) == 18 and len(fam.BY_ID) == 18         # + FX-COUNCIL (the Forex mirror) = 19 lines
     assert sum(1 for s in fam.STRATEGIES if s.family == "yardstick") == 3
     for s in fam.STRATEGIES:
         reg = league.load_registration(s.id)
@@ -281,6 +282,23 @@ def fake_fetch(symbols, start):
     return {s: [b for b in bars.get(s, []) if b["day"] >= start] for s in symbols if s in bars}
 
 
+def fake_fx_now(pairs):
+    """OANDA-shaped daily candles closing on every weekday up to 18 Nov 2026."""
+    from research_harness.league import forex as fx
+    out = {}
+    for k, p in enumerate(pairs):
+        rows, px = [], 1.0 + k / 10
+        for i, d in enumerate(LIVE_CAL):
+            px *= 1.0004 * (1.003 if i % 2 else 0.997) if k % 2 else 0.9996 * (1.003 if i % 2 else 0.997)
+            opened = datetime.combine(d - timedelta(days=1), time(17, 0), NEW_YORK)
+            rows.append({"time": opened.astimezone(ZoneInfo("UTC")).strftime("%Y-%m-%dT%H:%M:%S.000000000Z"),
+                         "complete": True, "mid": {"o": str(px), "h": str(px * 1.002), "l": str(px * 0.998),
+                                                   "c": str(px)}})
+        out[p] = rows
+    assert set(out) <= set(fx.PAIRS)
+    return out
+
+
 def fake_universe():
     _, names = stock_market(60, LIVE_CAL)
     return tuple(names), {n: f"Sector{i % 8}" for i, n in enumerate(names)}, "test"
@@ -294,20 +312,23 @@ def test_two_nights_start_every_line_value_it_and_keep_the_chain(tmp_path):
     store.ensure_schema(get_conn)
     alarms = []
     now = datetime.combine(date(2026, 11, 17), time(17, 15), NEW_YORK)
-    report, bars = league.run(get_conn, now, date(2026, 11, 17), fetch_daily=fake_fetch, universe_loader=fake_universe)
-    assert report["started"] and len(report["started"]) == 16
+    report, bars = league.run(get_conn, now, date(2026, 11, 17), fetch_daily=fake_fetch, universe_loader=fake_universe,
+                              fetch_fx_daily=fake_fx_now)
+    assert report["started"] and len(report["started"]) == 18
     accts = [a for a in store.accounts(get_conn) if a["bot_id"] == league.LEAGUE_BOT]
-    assert len(accts) == 16 and all(a["start_equity"] == 100_000 for a in accts)
+    assert len(accts) == 18 and all(a["start_equity"] == 100_000 for a in accts)
     assert all(a["config"]["registration_hash"] for a in accts)
     for a in accts:                                  # every line decided on its first night
         rows = store.decisions(get_conn, a["twin_id"])
         assert rows and not rows[0]["missed"], a["twin_id"]
-        assert abs(sum(rows[-1]["weights"].values()) - 1.0) < 1e-6
+        if a["config"]["family"] != "forex":
+            assert abs(sum(rows[-1]["weights"].values()) - 1.0) < 1e-6
     # The second night runs through the twins job, which replays and values every line.
     now2 = datetime.combine(date(2026, 11, 18), time(17, 15), NEW_YORK)
     from test_twins_job import _platform_tables
     _platform_tables(get_conn)          # no real accounts in this test: the bot twins do not start
     out = job.nightly(now2, get_conn=get_conn, fetch_daily=fake_fetch, universe_loader=fake_universe,
+                      fetch_fx_daily=fake_fx_now,
                       fetch_hourly=lambda pairs, start: {},
                       alarm=lambda *a, **k: alarms.append(a), resolve=lambda *a: None, commit="abc1234")
     assert out.get("error") is None, out
@@ -319,7 +340,8 @@ def test_two_nights_start_every_line_value_it_and_keep_the_chain(tmp_path):
     assert not [a for a in alarms if a[1] in ("twin_replay_failed", "league_failed", "twin_ledger_broken")], alarms
     # Nothing new to say on a re-run of the same night: decisions are not repeated.
     before = {a["twin_id"]: len(store.decisions(get_conn, a["twin_id"])) for a in accts}
-    league.run(get_conn, now2, date(2026, 11, 18), fetch_daily=fake_fetch, universe_loader=fake_universe)
+    league.run(get_conn, now2, date(2026, 11, 18), fetch_daily=fake_fetch, universe_loader=fake_universe,
+               fetch_fx_daily=fake_fx_now)
     assert before == {a["twin_id"]: len(store.decisions(get_conn, a["twin_id"])) for a in accts}
 
 

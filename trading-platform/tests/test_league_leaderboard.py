@@ -52,23 +52,26 @@ def test_luck_check_needs_enough_days_and_uses_the_trial_count():
 
 @needs_pg
 def test_read_from_the_twins_tables_after_two_nights():
-    from test_league import fake_fetch, fake_universe
+    from test_league import fake_fetch, fake_fx_now, fake_universe
 
     get_conn = make_get_conn()
     store.ensure_schema(get_conn)
     for day in (date(2026, 11, 17), date(2026, 11, 18)):
         now = datetime.combine(day, time(17, 15), NEW_YORK)
-        league.run(get_conn, now, day, fetch_daily=fake_fetch, universe_loader=fake_universe)
+        league.run(get_conn, now, day, fetch_daily=fake_fetch, universe_loader=fake_universe,
+                   fetch_fx_daily=fake_fx_now)
     # Value the lines as the twins job would (replay), then read the board.
     from twins import engine, job
     for acct in store.accounts(get_conn):
         rows = store.decisions(get_conn, acct["twin_id"])
         need = {s for r in rows for s in (r["weights"] or {})} | {"SPY"}
-        res = job.replay_twin(get_conn, acct, fake_fetch(sorted(need), date(2024, 1, 1)))
+        from research_harness.league import forex as fx
+        prices = {**fake_fetch(sorted(need), date(2024, 1, 1)), **fx.bars_from_daily_candles(fake_fx_now(fx.PAIRS))}
+        res = job.replay_twin(get_conn, acct, prices)
         store.upsert_equity(get_conn, acct["twin_id"], engine.daily_points(res.curve, acct["bars"]))
     board = lb.read(get_conn)
     assert board["league_version"] == league.LEAGUE_VERSION
-    assert len(board["rows"]) == 16
+    assert len(board["rows"]) == 18
     assert board["luck_rule"]["n_trials"] == 16          # declared up front, not the count running
     spx = next(r for r in board["rows"] if r["id"] == "Y-SPX")
     assert spx["days"] >= 1 and spx["return_pct"] is not None

@@ -47,6 +47,7 @@ class Context:
     calendar: tuple[date, ...]                 # US sessions (SPY's days), ascending
     universe: tuple[str, ...] = ()             # S&P 500 members (stock strategies only)
     sectors: dict[str, str] = field(default_factory=dict)
+    start: date | None = None                  # the shadow's first day (path-dependent rules walk from it)
 
 
 @dataclass(frozen=True)
@@ -60,6 +61,9 @@ class Strategy:
     stop_pct: float | None = None
     uses_universe: bool = False
     history_sessions: int = 260                # sessions of history it needs before day 1
+    max_gross: float = 1.0                     # longs plus shorts, as a share of equity
+    allow_short: bool = False
+    forex: bool = False                        # OANDA daily bars; no T-bill parking (a forex account holds cash)
 
     def __post_init__(self) -> None:
         if self.cadence not in CADENCES:
@@ -69,6 +73,15 @@ class Strategy:
 
 
 # ── small pure helpers shared by the families ────────────────────────────────
+def checked(weights: dict[str, float], max_gross: float) -> dict[str, float]:
+    """Long/short weights (forex): gross at most ``max_gross``; nothing parked."""
+    w = {s: round(float(x), 10) for s, x in weights.items() if abs(x) > 1e-9}
+    gross = sum(abs(x) for x in w.values())
+    if gross > max_gross + 1e-9:
+        raise ValueError(f"gross {gross:.6f} is above {max_gross}")
+    return dict(sorted(w.items()))
+
+
 def with_cash(weights: dict[str, float]) -> dict[str, float]:
     """Weights plus BIL for whatever is not invested. Rejects more than 100%."""
     if any(float(x) < -1e-9 for x in weights.values()):
@@ -159,4 +172,5 @@ def decide(strategy: Strategy, view: HistoryView, ctx: Context, day: date,
         view.today = day
     if not send:
         return None
-    return Call(weights=with_cash(call.weights), state=call.state, note=call.note)
+    weights = checked(call.weights, strategy.max_gross) if strategy.allow_short else with_cash(call.weights)
+    return Call(weights=weights, state=call.state, note=call.note)

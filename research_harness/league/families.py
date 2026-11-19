@@ -29,6 +29,7 @@ from research_harness.league.base import (
     month_sessions,
     sma,
 )
+from research_harness.league import forex as fx
 from research_harness.sleeves import core_v1, xasset_v1
 from research_harness.sleeves.momo_v1 import MIN_CLOSES, momentum_12_1
 
@@ -297,7 +298,8 @@ def _defensive(view: HistoryView, ctx: Context) -> Call | None:
     return Call({n: 1.0 / DEF_TOP for n in names}, state="hold", note={"names": names})
 
 
-# ── the catalogue: 16 shadows (13 share shadows here; 3 forex in the forex PR) + 3 yardsticks
+# ── the catalogue: 3 yardsticks + 15 shadows here; the 16th, FX-COUNCIL, is the Forex
+#    account's mirror twin (TWINS-V1), shown in the league by twins/leaderboard.py
 ATLAS_SYMBOLS = ("SPY", "QQQ", "SSO", "QLD")
 STRATEGIES: tuple[Strategy, ...] = (
     Strategy("Y-SPX", "yardstick", "S&P 500, buy and hold", "once", ("SPY",), _fixed({"SPY": 1.0})),
@@ -325,14 +327,20 @@ STRATEGIES: tuple[Strategy, ...] = (
     Strategy("D-RP", "diversifier", "Risk-balanced shares, bonds, gold", "monthly", RP_LINES, _risk_parity),
     Strategy("ST-DIP", "short_term", "Buy index dips, hold a few days", "once", ("SPY",), _dip),
     Strategy("ST-TOM", "short_term", "Index only around the turn of the month", "once", ("SPY",), _tom),
+    Strategy("FX-BT1", "forex", "Forex trend baseline (FX-BT1, no AI)", "once", fx.PAIRS, fx._fx_bt1,
+             max_gross=fx.GROSS_CAP, allow_short=True, forex=True),
+    Strategy("FX-TREND", "forex", "Simple currency trend", "monthly", fx.PAIRS, fx._fx_trend,
+             max_gross=fx.GROSS_CAP, allow_short=True, forex=True),
 )
 BY_ID = {s.id: s for s in STRATEGIES}
 
 
 def fixed_symbols() -> list[str]:
+    """Share and fund symbols the league needs every night (forex pairs come from OANDA)."""
     out = {"SPY", "BIL"}
     for s in STRATEGIES:
-        out |= set(s.symbols)
+        if not s.forex:
+            out |= set(s.symbols)
     return sorted(out)
 
 

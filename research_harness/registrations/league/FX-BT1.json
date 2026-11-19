@@ -1,0 +1,21 @@
+{
+  "id": "FX-BT1",
+  "status": "FROM ROADMAP (the registered non-AI forex baseline, research_harness/registrations/FX-BT1.json, rules unchanged). How it is run here is Opus's (19 Nov), with the known differences listed under 'stops' and 'fills'.",
+  "registered_at": "PROPOSED 2026-11-19 (Thu) ~18:00 Brisbane by Claude (Opus 5.5). Version 0 = proving run only (not the record). Registered for the record when Markus says yes and LEAGUE_VERSION goes to 1 at the lock (about 12-13 Dec 2026); after that nothing here changes (a change = a new dated strategy).",
+  "source_document": "docs/plans/fund-roadmap-2026-11-17.md Phase 1 (agreed by Markus 17 Nov 2026); code research_harness/league/families.py",
+  "hypothesis": "A fixed trend rule with no AI: the bar the council has to beat.",
+  "candidate": "Forex trend baseline (FX-BT1)",
+  "rules": "Per pair at each close: LONG if close > 100-day average AND 63-day return > 0; SHORT if close < 100-day average AND 63-day return < 0; else FLAT. Exit when the call changes. New entries strongest first by |63-day return| / (ATR14 / close), at most 4 open, each sized so the stop loses 0.5% of equity, total gross at most 2x equity. Code: research_harness/league/forex.py (same order and numbers as kraken-bot/forex_baseline_backtest.py).",
+  "universe": "EUR_USD, USD_JPY, GBP_USD, AUD_USD, USD_CAD, USD_CHF, NZD_USD",
+  "rebalance_day": "any US session close where an entry, exit or stop happens",
+  "stops": "2 x ATR14 from the entry close, fixed at entry. KNOWN DIFFERENCE: the stop is seen when a day's low (long) or high (short) reaches it and the holding is sold at the next open, not at the stop price; entries use the close, not the ask/bid; sizes are kept as shares of equity, so a later decision re-sizes open holdings slightly.",
+  "leverage": "up to 2x gross (longs plus shorts), forex margin",
+  "fills": "decided after each US session close (17:15 New York) on OANDA daily mid candles; filled at the next forex day's open (17:00 New York, the instant after the close the rule read).",
+  "costs": "same shared model as every league line: twins.config.SHARE_COSTS = 0 commission, 2 bps half spread, 3 bps slippage per trade (several times the real major-pair spread: conservative). Overnight financing (interest paid or earned on currency positions) is LEFT OUT, as in the registered FX-BT1 backtest: direction of the bias UNKNOWN.",
+  "data_needed": "OANDA daily mid candles (500 days) for the 7 pairs",
+  "start_equity": "100,000 fake dollars",
+  "window": "forward only: version 1 from the first session after the lock to 31 Dec 2027 (roadmap Phase 2). No backtest stands behind this line in the league.",
+  "candidates_declared": 16,
+  "prior_variants_tried": "0 on this rule (registered before any data, 11 Oct); its own 2006-2026 backtest lost 17.6% (FX-BT1.json original_result)",
+  "pass_bar": "Roadmap Phase 4 (January 2028): passes if, after costs, it matched or beat the S&P 500 (Y-SPX), or came close with a clearly smaller worst fall, AND passes the luck check adjusted for 16 tries (deflated Sharpe: research_harness/harness/overfit.deflated_sharpe with n_trials = 16). The exact 'came close' and 'clearly smaller' numbers are UNKNOWN: Markus to fix them before version 1 starts."
+}

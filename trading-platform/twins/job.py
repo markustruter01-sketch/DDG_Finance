@@ -242,10 +242,15 @@ def share_symbols(get_conn, states) -> list[str]:
         kept = OWNER_KEPT.get(bot_id, frozenset())
         syms |= {canonical_symbol(p.get("symbol")) for p in port["positions"] or []} - kept
     for acct in store.accounts(get_conn):
-        if acct["bars"] == DAILY:
+        if acct["bars"] == DAILY and not _league_forex(acct):    # forex prices come from OANDA, not Alpaca
             for d in store.decisions(get_conn, acct["twin_id"]):
                 syms |= set(d["weights"] or {})
     return sorted(s for s in syms if s)
+
+
+def _league_forex(acct: dict[str, Any]) -> bool:
+    """A Shadow League forex line: daily bars, but OANDA prices (merged in by the league)."""
+    return (acct.get("config") or {}).get("family") == "forex"
 
 
 # ── forex ─────────────────────────────────────────────────────────────────────
@@ -381,13 +386,13 @@ def check_mirror(get_conn, acct, result: engine.Replay) -> float | None:
     return gaps[max(gaps)] if gaps else None
 
 
-def _league(get_conn, now, session, daily, fetch_daily, universe_loader, alarm, resolve):
+def _league(get_conn, now, session, daily, fetch_daily, universe_loader, alarm, resolve, fetch_fx_daily=None):
     """The Shadow League's decisions for tonight. It must never stop the bot twins:
     any failure is one alarm and the night goes on."""
     try:
         from twins import league
         report, league_bars = league.run(get_conn, now, session, fetch_daily=fetch_daily,
-                                         universe_loader=universe_loader)
+                                         universe_loader=universe_loader, fetch_fx_daily=fetch_fx_daily)
         for sym, rows in league_bars.items():     # names first held tonight need prices to replay
             daily.setdefault(sym, rows)
         resolve("league_failed")
@@ -400,7 +405,8 @@ def _league(get_conn, now, session, daily, fetch_daily, universe_loader, alarm, 
 
 def nightly(now: datetime | None = None, *, get_conn=None, fetch_daily=None, fetch_hourly=prices.oanda_hourly,
             alarm: Callable[..., None] = _default_alarm, resolve: Callable[..., None] = _default_resolve,
-            commit: str | None = None, with_league: bool = True, universe_loader=None) -> dict[str, Any]:
+            commit: str | None = None, with_league: bool = True, universe_loader=None,
+            fetch_fx_daily=None) -> dict[str, Any]:
     now = now or datetime.now(timezone.utc)
     get_conn = get_conn or _default_get_conn()
     report: dict[str, Any] = {"at": now.isoformat()}
@@ -417,7 +423,7 @@ def nightly(now: datetime | None = None, *, get_conn=None, fetch_daily=None, fet
         if session == _ny(now).date():
             report["share_close"] = share_close(get_conn, now, daily, session)
             report["league"] = (_league(get_conn, now, session, daily, fetch_daily, universe_loader, alarm,
-                                        resolve) if with_league else "off")
+                                        resolve, fetch_fx_daily) if with_league else "off")
             try:                                  # an OANDA outage must not stop the share twins
                 report["forex_start"] = forex_start(get_conn, now, session, fetch_hourly)
             except Exception as exc:
@@ -455,6 +461,11 @@ def replay_all(get_conn, now, daily, fetch_hourly, alarm, resolve) -> dict[str, 
                 bars = engine.forex_bars(candles)
             else:
                 bars = daily
+                if _league_forex(acct):
+                    need = {s for r in store.decisions(get_conn, tid) for s in (r["weights"] or {})}
+                    if not need <= set(bars):
+                        out[tid] = "no forex prices tonight: last value kept"
+                        continue
             result = replay_twin(get_conn, acct, bars)
             if not result.curve:
                 out[tid] = "no bars yet"

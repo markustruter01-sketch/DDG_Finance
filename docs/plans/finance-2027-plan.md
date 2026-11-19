@@ -96,6 +96,15 @@ MASTER COPY: this file in GitHub. The claude.ai Project doc `claude/finance-2027
 - WAITING ON MARKUS: publish with the US market closed (after 07:00 Brisbane); yes/no on every PROPOSED rule (league registrations, FX-TREND, ALLOCATOR-V1); pass-bar numbers; optional GITHUB_RECORDS_REPO / GITHUB_RECORDS_TOKEN for the monthly copy; and the 18 Nov list (stale alarms, dead bots_state rows, kill switch, heartbeat URLs, backup location).
 - NEXT: front-end reshuffle once Markus has seen the League page live; Phase 3a needs Markus's sources and cost yes first.
 
+### Status 20 Nov 05:50 Brisbane (Opus 5.5): pass bars set
+- MARKUS 20 Nov 05:50 Brisbane agreed the pass-bar numbers Opus proposed (roadmap Phase 4):
+  - "Came close" to the S&P 500 = within 2 percentage points a year of its return, after costs.
+  - "Clearly smaller worst fall" = at least one third smaller than the S&P 500's worst fall over the same period.
+  - The Allocator passes if fund (b) beat fund (a) by at least 1 percentage point a year, after costs.
+  - Luck check (already agreed): deflated Sharpe >= 0.95, at least 60 days, 16 tries.
+- These go into the league and Allocator registration files as version 1 at the lock (no edit to version 0 files).
+- Still to come from Markus: the two heartbeat monitor URLs and the backup location (agreed in principle, not yet given).
+
 ## Not doing
 - Any crypto, on any account or system, full stop (Markus 17 Nov; was "no crypto sleeve", 10 Nov). Coins, pairs and crypto funds. Buys refused in code (PR #117). The last BTC was sold 17 Nov (owner-approved); no crypto is held anywhere.
 - A fourth Alpaca paper account (cap is 3).

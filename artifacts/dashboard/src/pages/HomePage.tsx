@@ -1,8 +1,9 @@
 /**
  * DDG Finance home (Night Glass v5): two screens on one sheet. Overview (the
- * fleet at a glance: summary, the 2027 race, vault, holdings, the four
- * accounts) and Detail (daily returns, fleet equity, the FLEET-V1 and MOMO-V2
- * state). Scrolling past Overview flips the sheet over (components/FlipPages);
+ * fleet at a glance: summary, the 2027 race, the four accounts, and the League
+ * top 5 / Allocator / Record keeping row, approved design 20 Nov 2026) and
+ * Detail (daily returns, fleet equity, the 2027 comparison, vault, holdings,
+ * the FLEET-V1 and MOMO-V2 state). Scrolling past Overview flips the sheet over (components/FlipPages);
  * on phones the two simply stack.
  * All money and return figures are server values (Rule 27); the client only
  * formats them, sums market values for the holdings mix and divides equity by
@@ -28,6 +29,7 @@ import { useBotHistory, type BotDay } from "@/hooks/use-bot-history";
 import { botColor } from "@/lib/bot-identity";
 import { useComparison, useFleetV1State, useHoldings, useMomoV2State, useVaultSummary, type Holdings } from "@/hooks/use-fleet-v1";
 import { ComparisonPanel, FleetAccountPanel, MomoPanel, VaultPanel } from "@/components/FleetV1";
+import { AllocatorCard, LeagueTop, RecordsCard, useLeague } from "@/components/LeagueCards";
 
 // The three accounts in the 2027 comparison. Forex (OANDA, the AI council) gets
 // its own card but stays out of the comparison and the Alpaca-only panels.
@@ -229,6 +231,7 @@ export default function HomePage() {
   const vault = useVaultSummary();
   const holdingsByBot = useHoldings();
   const report = useExportReport();
+  const league = useLeague();
   const [side, setSide] = useState<0 | 1>(0);
   // Running/paused comes from bots_state (same read as Controls), not the static registry.
   const pause = useQuery({
@@ -386,25 +389,20 @@ export default function HomePage() {
               </div>
             </Panel>
           ) : fleetPanel}
-          <ComparisonPanel data={comparison.data} names={names} />
         </div>
 
         <div className="home-right">
-          <div className="pair">
-            <VaultPanel vault={vault.data} names={names} />
-            <Panel title="Holdings mix">
-              {holdings.length ? (
-                <Donut data={holdings} total={holdingsTotal}
-                  center={<><span className="label">Held</span><span className="num-sm">{fmtEq(holdingsTotal)}</span></>} />
-              ) : <Empty>No open holdings.</Empty>}
-            </Panel>
-          </div>
           <div className="engines">
             {engines.length
               ? engines.map((e) => <EngineCard key={e.id} e={e} mktOpen={mktOpen} />)
               : <Empty>{registry.isError ? "Engine list unavailable. Check the trading API." : "Loading engines…"}</Empty>}
           </div>
         </div>
+      </div>
+      <div className="home-bottom">
+        <LeagueTop board={league.data} error={league.isError} />
+        <AllocatorCard board={league.data} />
+        <RecordsCard />
       </div>
       <button className="flip-hint" onClick={() => setSide(1)}>Scroll for detail ↓</button>
     </>
@@ -439,6 +437,16 @@ export default function HomePage() {
           </div>
         </Panel>
         {fleetPanel}
+      </div>
+      <ComparisonPanel data={comparison.data} names={names} />
+      <div className="pair">
+        <VaultPanel vault={vault.data} names={names} />
+        <Panel title="Holdings mix">
+          {holdings.length ? (
+            <Donut data={holdings} total={holdingsTotal}
+              center={<><span className="label">Held</span><span className="num-sm">{fmtEq(holdingsTotal)}</span></>} />
+          ) : <Empty>No open holdings.</Empty>}
+        </Panel>
       </div>
       <div className="pair accounts">
         {fleetV1.data ? fleetV1.data.accounts.map((a) => (

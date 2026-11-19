@@ -48,3 +48,18 @@ async def league_costs(month: str | None = None) -> dict[str, Any]:
     except Exception as exc:
         logger.error(f"league | costs read failed: {type(exc).__name__}: {exc}")
         raise HTTPException(status_code=503, detail="costs unavailable")
+
+
+@league_router.get("/league/records", tags=["League"])
+async def league_records() -> dict[str, Any]:
+    """Home "Record keeping" card: logs intact, last league night, last frozen month, costs, heartbeat."""
+    def read() -> dict[str, Any]:
+        from db.postgres import get_conn
+        from twins import leaderboard
+        return leaderboard.records(get_conn)
+
+    try:
+        return await asyncio.to_thread(read)
+    except Exception as exc:
+        logger.error(f"league | records read failed: {type(exc).__name__}: {exc}")
+        raise HTTPException(status_code=503, detail="records unavailable")

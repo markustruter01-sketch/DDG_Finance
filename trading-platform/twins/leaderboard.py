@@ -143,3 +143,27 @@ def read(get_conn) -> dict[str, Any]:
                           "status": "provisional"},
             "regime": regime,
             "rows": build(lines, n_trials)}
+
+
+def records(get_conn) -> dict[str, Any]:
+    """Record keeping at a glance (Home card): decision logs intact, last league
+    night, last frozen month, trade costs vs the model, outside heartbeat set up."""
+    import os
+    from datetime import date as _date
+
+    from core.slippage_job import MODEL_BPS, summary
+    from twins import store
+
+    accts = store.accounts(get_conn, active_only=False)
+    broken = [a["twin_id"] for a in accts if store.verify_chain(store.decisions(get_conn, a["twin_id"]))]
+    last_run = store.last_change(get_conn, ("league_run",), "league")
+    frozen = store.frozen(get_conn)
+    costs = summary(get_conn, _date.today().replace(day=1))
+    return {
+        "logs": {"lines": len(accts), "broken": broken},
+        "league_last_run": last_run["at"].isoformat() if last_run and last_run.get("at") else None,
+        "last_frozen_month": max((f["month"] for f in frozen), default=None),
+        "costs": {"model_bps": MODEL_BPS, **costs.get("market_fills", {})},
+        "heartbeat": {"runner": bool(os.getenv("HEARTBEAT_URL_RUNNER", "").strip()),
+                      "api": bool(os.getenv("HEARTBEAT_URL_API", "").strip())},
+    }

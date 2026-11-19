@@ -25,7 +25,6 @@ from routes._deps import (
     EXPECTED_JOB_COUNT,
     _commentary_cache,
     _kraken_commentary_cache,
-    _get_forex_engine,
 )
 
 system_router = APIRouter(tags=["System"])

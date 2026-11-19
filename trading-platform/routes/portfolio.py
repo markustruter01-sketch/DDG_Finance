@@ -41,8 +41,6 @@ from routes._deps import (
     _commentary_cache,
     _persist_commentary_caches,
     _load_kraken_journal_trades,
-    _get_forex_engine,
-    _get_forex_db,
 )
 
 portfolio_router = APIRouter()
@@ -604,16 +602,6 @@ async def vault_state() -> dict:
                     )
                     row = cur.fetchone()
                     vaulted_24h += float(row[0] or 0)
-                    try:
-                        cur.execute(
-                            "SELECT COALESCE(SUM(pnl_usd * 0.20), 0.0) FROM forex_trades "
-                            "WHERE pnl_usd > 0 AND exit_time >= %s",
-                            (today_utc,),
-                        )
-                        row2 = cur.fetchone()
-                        vaulted_24h += float(row2[0] or 0)
-                    except Exception:
-                        pass
     except Exception:
         pass
     return {"initialised": True, "vaulted_24h": round(vaulted_24h, 2), **state}
@@ -711,26 +699,9 @@ async def vault_history(days: int = 90) -> dict:
                 """, (cutoff,))
                 kraken_rows = cur.fetchall()
 
-                # Forex contributions per day
-                forex_rows = []
-                try:
-                    cur.execute("""
-                        SELECT DATE(exit_time) AS day,
-                               SUM(pnl_usd * 0.20) AS amount
-                        FROM forex_trades
-                        WHERE pnl_usd > 0 AND exit_time >= %s
-                        GROUP BY DATE(exit_time)
-                    """, (cutoff,))
-                    forex_rows = cur.fetchall()
-                except Exception:
-                    pass
-
         # Merge and aggregate by day
         daily: dict[str, float] = {}
         for row in kraken_rows:
-            day_str = str(row[0])
-            daily[day_str] = daily.get(day_str, 0.0) + float(row[1] or 0)
-        for row in forex_rows:
             day_str = str(row[0])
             daily[day_str] = daily.get(day_str, 0.0) + float(row[1] or 0)
 

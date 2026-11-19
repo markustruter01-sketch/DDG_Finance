@@ -88,6 +88,14 @@ MASTER COPY: this file in GitHub. The claude.ai Project doc `claude/finance-2027
 - WAITING ON MARKUS: (1) merge #128, #129, #130, then #131, and publish with the US market closed; (2) yes/no on the PROPOSED rules in the league registration files (listed in PR #130); (3) pass-bar numbers for "came close" / "clearly smaller worst fall" and the luck-check threshold (provisional 0.95, 60 days); (4) unchanged from 18 Nov: close the 11 stale alarms, delete dead `bots_state` rows, arm the kill switch, two free heartbeat monitor URLs (item 8), where to keep the database dumps (item 8b).
 - UNKNOWN: whether #121, #122, #124, #125, #127 are published (no inside check today).
 
+### Status 20 Nov early morning (Opus 5.5)
+- MERGED by Markus 19 Nov ~18:50 UTC (US market open; not yet published): #128, #129, #130, #132 (leaderboard; #131 had merged into the old branch), #133 (forex lines), #134 (month-end freeze), #135 (execution cost from real fills).
+- OPEN: #136 Allocator in shadow, rules version (regime label, funds (a) equal and (b) rules, limits 40% / 1.5x / 15% fall). AI fund (c) not built: needs Markus's yes on AI cost.
+- The league now has every roadmap line: 4 real accounts, 3 yardsticks, 16 shadows (FX-COUNCIL = the Forex mirror twin), plus the two Allocator funds once #136 merges.
+- New tables (all additive, append-only where marked): twin_month_freeze (append-only), execution_slippage, allocator_labels (append-only). New scheduled job: slippage_daily (17:50 New York, read-only).
+- WAITING ON MARKUS: publish with the US market closed (after 07:00 Brisbane); yes/no on every PROPOSED rule (league registrations, FX-TREND, ALLOCATOR-V1); pass-bar numbers; optional GITHUB_RECORDS_REPO / GITHUB_RECORDS_TOKEN for the monthly copy; and the 18 Nov list (stale alarms, dead bots_state rows, kill switch, heartbeat URLs, backup location).
+- NEXT: front-end reshuffle once Markus has seen the League page live; Phase 3a needs Markus's sources and cost yes first.
+
 ## Not doing
 - Any crypto, on any account or system, full stop (Markus 17 Nov; was "no crypto sleeve", 10 Nov). Coins, pairs and crypto funds. Buys refused in code (PR #117). The last BTC was sold 17 Nov (owner-approved); no crypto is held anywhere.
 - A fourth Alpaca paper account (cap is 3).

@@ -26,3 +26,25 @@ async def league_leaderboard() -> dict[str, Any]:
     except Exception as exc:
         logger.error(f"league | leaderboard read failed: {type(exc).__name__}: {exc}")
         raise HTTPException(status_code=503, detail="leaderboard unavailable")
+
+
+@league_router.get("/league/costs", tags=["League"])
+async def league_costs(month: str | None = None) -> dict[str, Any]:
+    """Measured execution cost of the real fills for a month (default: this month) beside the model."""
+    from datetime import date, datetime, timezone
+
+    try:
+        m = date.fromisoformat(f"{month}-01") if month else datetime.now(timezone.utc).date().replace(day=1)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="month must be YYYY-MM")
+
+    def read() -> dict[str, Any]:
+        from core.slippage_job import summary
+        from db.postgres import get_conn
+        return summary(get_conn, m)
+
+    try:
+        return await asyncio.to_thread(read)
+    except Exception as exc:
+        logger.error(f"league | costs read failed: {type(exc).__name__}: {exc}")
+        raise HTTPException(status_code=503, detail="costs unavailable")

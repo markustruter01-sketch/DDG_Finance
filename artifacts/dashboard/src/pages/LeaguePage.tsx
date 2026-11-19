@@ -16,6 +16,9 @@ type Row = {
 type Board = { league_version: number; note: string; rows: Row[];
   luck_rule: { clear_at_dsr: number; min_days: number; n_trials: number; status: string } };
 
+type Costs = { month: string; model_bps: number;
+  market_fills: { fills: number; median_bps?: number; above_model?: boolean } };
+
 const KIND: Record<Row["kind"], string> = { real: "Real accounts", yardstick: "Yardsticks", shadow: "Shadows" };
 const pct = (v: number | null, signed = false) =>
   v === null ? "—" : `${signed && v > 0 ? "+" : ""}${v.toFixed(2)}%`;
@@ -28,7 +31,13 @@ export default function LeaguePage() {
     queryFn: async () => (await api.get("/league/leaderboard")).data as Board,
     refetchInterval: 15 * 60_000,
   });
+  const costs = useQuery({
+    queryKey: ["league-costs"],
+    queryFn: async () => (await api.get("/league/costs")).data as Costs,
+    refetchInterval: 60 * 60_000,
+  });
   const rows = board.data?.rows ?? [];
+  const mf = costs.data?.market_fills;
   return (
     <Shell>
       <main className="controls">
@@ -74,6 +83,14 @@ export default function LeaguePage() {
             </section>
           );
         })}
+        {costs.data && (
+          <p className="note">
+            Costs, {costs.data.month}: every line is charged {costs.data.model_bps} bps a trade.{" "}
+            {mf && mf.fills && mf.median_bps !== undefined
+              ? `The real accounts' market orders cost a median ${mf.median_bps.toFixed(1)} bps (${mf.fills} fills)${mf.above_model ? " — above the model" : ""}.`
+              : "No real market-order fills measured yet this month."}
+          </p>
+        )}
         {board.data && (
           <p className="note">
             Luck check: deflated Sharpe ratio adjusted for {board.data.luck_rule.n_trials} shadows tried; "clear" at

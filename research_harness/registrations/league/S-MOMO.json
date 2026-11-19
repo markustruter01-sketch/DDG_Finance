@@ -1,0 +1,21 @@
+{
+  "id": "S-MOMO",
+  "status": "FROM ROADMAP ('MOMO-V2 with the brake fixed': read by Opus as MOMO-V2 exactly as it trades today; the brake was checked right on 11 Nov). Markus to confirm the reading.",
+  "registered_at": "PROPOSED 2026-11-19 (Thu) ~18:00 Brisbane by Claude (Opus 5.5). Version 0 = proving run only (not the record). Registered for the record when Markus says yes and LEAGUE_VERSION goes to 1 at the lock (about 12-13 Dec 2026); after that nothing here changes (a change = a new dated strategy).",
+  "source_document": "docs/plans/fund-roadmap-2026-11-17.md Phase 1 (agreed by Markus 17 Nov 2026); code research_harness/league/families.py",
+  "hypothesis": "Stock momentum with a trend brake, on fake money beside the real Momentum account.",
+  "candidate": "Momentum (MOMO-V2)",
+  "rules": "At the first session of each month: today's S&P 500 members, ranked by 12-1 momentum (research_harness/sleeves/momo_v1.momentum_12_1); top 50. Book index = equal-weight average of the 50 names' closes relative to their selection-day close. Trend brake: index below its 100-session average -> all 50 to cash; re-entry only at the next month's first session. s = min(1, 0.15 / 20-session volatility of the index), set at entry. Each name 2% x s.",
+  "universe": "S&P 500 current members (State Street SPY holdings file, iShares IVV fallback; same source as MOMO-V2). Today's list, not point-in-time: a known survivorship tilt, small for a forward-only record.",
+  "rebalance_day": "first session of each month + brake changes",
+  "stops": "20% on every name (engine)",
+  "leverage": "no borrowing: weights add to at most 100% (max_gross 1.0). Effective exposure above 1x only through 2x funds.",
+  "fills": "decision after a session close, filled at the next session's open (twins engine = research_harness/harness/portfolio.simulate)",
+  "costs": "one shared model for every line: twins.config.SHARE_COSTS = 0 commission, 2 bps half spread, 3 bps slippage per trade (estimates; monthly re-measure from the real accounts' fills is a later work order). Gearing only through 2x funds (SSO, QLD), whose borrowing cost is inside their price; no margin. Idle money in BIL (T-bills); plain cash earns 0.",
+  "data_needed": "daily bars of every member, 380+ sessions (Alpaca)",
+  "start_equity": "100,000 fake dollars",
+  "window": "forward only: version 1 from the first session after the lock to 31 Dec 2027 (roadmap Phase 2). No backtest stands behind this line in the league.",
+  "candidates_declared": 16,
+  "prior_variants_tried": "MOMO-V1 research + MOMO-V2 (forward-only); exact count UNKNOWN",
+  "pass_bar": "Roadmap Phase 4 (January 2028): passes if, after costs, it matched or beat the S&P 500 (Y-SPX), or came close with a clearly smaller worst fall, AND passes the luck check adjusted for 16 tries (deflated Sharpe: research_harness/harness/overfit.deflated_sharpe with n_trials = 16). The exact 'came close' and 'clearly smaller' numbers are UNKNOWN: Markus to fix them before version 1 starts."
+}

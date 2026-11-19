@@ -29,7 +29,7 @@ from forex_quant_desk import FOREX_PAIRS  # noqa: E402  (read-only; the register
 REGISTRATION = "TWINS-V1"
 VERSION = 1   # Phase A proving period. The strategy lock (21-22 Nov) starts version 2.
 
-KINDS = ("mirror", "ai", "rules", "baseline_full", "baseline_spy")
+KINDS = ("mirror", "ai", "rules", "baseline_full", "baseline_spy", "shadow", "yardstick")   # last two: Shadow League (twins/league.py)
 DAILY = "alpaca_daily"    # US sessions: a decision after a close fills at the next session's open
 HOURLY = "oanda_h1"       # forex hours: a decision fills at the next hourly bar's open
 

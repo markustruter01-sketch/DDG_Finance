@@ -255,6 +255,15 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
     )
 
     scheduler.add_job(
+        func=_slippage_daily,
+        trigger=CronTrigger(day_of_week="mon-fri", hour=17, minute=50, timezone="America/New_York"),
+        id="slippage_daily",
+        name="Execution cost from real fills (daily, read-only)",
+        replace_existing=True,
+        max_instances=1,
+    )
+
+    scheduler.add_job(
         func=_live_vs_research_daily,
         trigger=CronTrigger(day_of_week="mon-fri", hour=17, minute=40, timezone="America/New_York"),
         id="live_vs_research_daily",
@@ -1041,6 +1050,7 @@ _ALWAYS_ACTIVE_JOBS = {
     "daily_bot_returns_snapshot",
     "live_vs_research_daily",
     "live_vs_research_monthly",
+    "slippage_daily",
 }
 
 
@@ -1415,6 +1425,19 @@ async def _live_vs_research_daily() -> None:
         await asyncio.to_thread(run_daily)
     except Exception as exc:
         logger.error(f"Scheduler | live_vs_research_daily FAILED: {exc}")
+
+
+async def _slippage_daily() -> None:
+    """Roadmap Phase 1 order 3: measured cost of each real fill (core/slippage_job.py). No orders."""
+    if not _is_published_deployment():
+        return
+    try:
+        import asyncio
+        from core.slippage_job import run_daily
+        report = await asyncio.to_thread(run_daily)
+        logger.info(f"Scheduler | slippage_daily: {report}")
+    except Exception as exc:
+        logger.error(f"Scheduler | slippage_daily FAILED: {exc}")
 
 
 async def _live_vs_research_monthly() -> None:

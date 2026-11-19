@@ -43,7 +43,6 @@ from analysis.trade_journal import init_db
 
 from routes._deps import (
     _load_commentary_caches,
-    _get_forex_engine,
 )
 from routes import ALL_ROUTERS
 from routes.bot_registry_route import router as bot_registry_router

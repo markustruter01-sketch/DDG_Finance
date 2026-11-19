@@ -109,9 +109,9 @@ registration, scheduler registration, and startup code:
 
 - **Poseidon statistical arbitrage:** retired. No live implementation is
   registered; backups, task history, and schema compatibility strings remain.
-- **Forex Navigator:** retired. `forex-engine/` and API compatibility routes
-  remain on disk, but startup explicitly prevents its resurrection and no
-  scheduler job invokes it.
+- **Forex Navigator:** retired and deleted (19 Nov 2026): `forex-engine/`,
+  `routes/forex.py` (never registered) and the `_get_forex_*` loaders are gone.
+  The old `forex_trades` / `forex_portfolio` tables do not exist in production.
 - **Old Oracle stock scanner:** retired/replaced. Legacy pipeline and exit
   infrastructure remains, while the active Oracle runner slot uses the
   consolidated ETF strategy above.

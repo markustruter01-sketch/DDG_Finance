@@ -102,45 +102,6 @@ def _get_options_engine():
     return None
 
 
-_FOREX_ENGINE_PATH = os.path.join(_REPO_ROOT, "forex-engine")
-if _FOREX_ENGINE_PATH not in sys.path:
-    sys.path.append(_FOREX_ENGINE_PATH)
-
-_forex_engine_module = None
-def _get_forex_engine():
-    global _forex_engine_module
-    if _forex_engine_module is not None:
-        return _forex_engine_module
-    try:
-        import importlib.util as _ilu3
-        _fx_path = os.path.join(_REPO_ROOT, "forex-engine")
-        if _fx_path not in sys.path:
-            sys.path.insert(0, _fx_path)
-        spec = _ilu3.spec_from_file_location("forex_engine", os.path.join(_fx_path, "forex_engine.py"))
-        mod = _ilu3.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        _forex_engine_module = mod
-        return mod
-    except Exception as exc:
-        logger.warning(f"Forex engine import failed: {exc}")
-        return None
-
-_forex_db_module = None
-def _get_forex_db():
-    global _forex_db_module
-    if _forex_db_module is not None:
-        return _forex_db_module
-    try:
-        import importlib.util as _ilu2
-        _fx_path = os.path.join(_REPO_ROOT, "forex-engine")
-        spec = _ilu2.spec_from_file_location("forex_db", os.path.join(_fx_path, "forex_nav_db.py"))
-        mod = _ilu2.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        _forex_db_module = mod
-        return mod
-    except Exception as exc:
-        logger.warning(f"Forex DB import failed: {exc}")
-        return None
 
 
 def _resolve_bot(bot_id: str | None) -> tuple[str, dict]:

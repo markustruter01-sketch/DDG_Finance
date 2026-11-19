@@ -53,7 +53,7 @@ def days_in_cash(curve_days: list[date], decisions: list[tuple[date, dict[str, f
     n = 0
     for day in curve_days:
         i = bisect.bisect_right(keys, day)
-        if i and set(live[i - 1][1]) <= {CASH}:
+        if i and set(live[i - 1][1]) <= {CASH, "Y-CASH"}:      # T-bills, or an Allocator fund's cash line
             n += 1
     return n
 
@@ -97,7 +97,7 @@ def build(lines: list[dict[str, Any]], n_trials: int) -> list[dict[str, Any]]:
             row["dsr"] = round(dsr, 4)
             row["luck"] = "clear" if dsr >= LUCK_CLEAR else "could be luck"
         out.append(row)
-    order = {"real": 0, "yardstick": 1, "shadow": 2}
+    order = {"real": 0, "yardstick": 1, "shadow": 2, "allocator": 3}
     return sorted(out, key=lambda x: (order.get(x["kind"], 3), -(x["return_pct"] if x["return_pct"] is not None
                                                                    else -1e9)))
 
@@ -133,9 +133,13 @@ def read(get_conn) -> dict[str, Any]:
                 lines.append({"id": COUNCIL_LINE, "name": "Forex AI council (mirror twin)", "kind": "shadow",
                               "family": "forex", "start_equity": acct["start_equity"],
                               "curve": [(r["day"], r["equity"]) for r in rows if r["equity"]], "decisions": decs})
+    from twins import allocator
+    fund_rows, regime = allocator.lines_for_board(get_conn)
+    lines += fund_rows
     n_trials = max(N_TRIALS, sum(1 for ln in lines if ln["kind"] == "shadow"))
     return {"league_version": league.LEAGUE_VERSION,
             "note": ("Version 0 is the proving run, not the record." if league.LEAGUE_VERSION == 0 else ""),
             "luck_rule": {"clear_at_dsr": LUCK_CLEAR, "min_days": MIN_LUCK_DAYS, "n_trials": n_trials,
                           "status": "provisional"},
+            "regime": regime,
             "rows": build(lines, n_trials)}

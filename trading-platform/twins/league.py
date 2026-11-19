@@ -202,6 +202,9 @@ def run(get_conn, now: datetime, session: date, *, fetch_daily=None,
                 sent += 1
             has_decision = True
         report[tid] = {"sessions": len(mine), "decisions": sent}
+    if days and universe:                     # the Allocator's regime label (breadth needs the member list)
+        from twins import allocator
+        report["regime"] = allocator.record_labels(get_conn, view, ctx.universe, days, now)
     if days:
         store.log_change(get_conn, kind="league_run", bot_id=LEAGUE_BOT, source="twins:league",
                          summary=f"league asked {len(todo)} shadows about {len(days)} session(s)",

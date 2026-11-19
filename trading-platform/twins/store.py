@@ -16,6 +16,8 @@ any existing table.
 - twin_month_freeze: APPEND-ONLY. Each twin's figures for a finished month,
   written once on the first night after it ends and never recomputed
   (TWINS-V2 "Record keeping"; twins/month_end.py).
+- allocator_labels: APPEND-ONLY. The Allocator's regime label for each US
+  session, written the night of that session (twins/allocator.py).
 
 Every function takes get_conn (a context manager yielding a psycopg2
 connection), so tests run on a throwaway local Postgres.
@@ -129,6 +131,13 @@ CREATE TABLE IF NOT EXISTS twin_month_freeze (
     PRIMARY KEY (twin_id, month)
 );
 
+CREATE TABLE IF NOT EXISTS allocator_labels (
+    day           DATE PRIMARY KEY,            -- the US session the label is for
+    label         TEXT NOT NULL,               -- calm up / rough up / calm down / rough down
+    measurements  JSONB NOT NULL,
+    recorded_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE OR REPLACE FUNCTION twins_append_only() RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN
     RAISE EXCEPTION '% is append-only', TG_TABLE_NAME;
@@ -136,7 +145,7 @@ END;
 $$;
 """
 
-APPEND_ONLY = ("twin_decisions", "twin_votes", "change_log", "twin_month_freeze")
+APPEND_ONLY = ("twin_decisions", "twin_votes", "change_log", "twin_month_freeze", "allocator_labels")
 _TRIGGERS = "".join(f"""
 DO $$ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = '{t}_append_only') THEN
@@ -382,3 +391,18 @@ def month_activity(get_conn: GetConn, twin_id: str, start: datetime, end: dateti
         last = cur.fetchone()
     return {"decisions": int(decided), "missed": int(missed), "votes": int(votes),
             "ai_cost_usd": float(cost), "last_hash": last[0] if last else None}
+
+
+# ── allocator labels (append-only) ───────────────────────────────────────────
+def record_label(get_conn: GetConn, day: date, label: str, measurements: dict[str, Any], at: datetime) -> bool:
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute("INSERT INTO allocator_labels (day, label, measurements, recorded_at) VALUES (%s, %s, %s, %s) "
+                    "ON CONFLICT (day) DO NOTHING", (day, label, json.dumps(measurements), at))
+        return cur.rowcount == 1
+
+
+def labels(get_conn: GetConn) -> list[dict[str, Any]]:
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute("SELECT day, label, measurements, recorded_at FROM allocator_labels ORDER BY day")
+        return [{"day": d, "label": lab, "measurements": m if isinstance(m, dict) else json.loads(m),
+                 "recorded_at": at} for d, lab, m, at in cur.fetchall()]

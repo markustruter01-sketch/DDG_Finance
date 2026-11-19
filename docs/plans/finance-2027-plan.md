@@ -95,6 +95,7 @@ MASTER COPY: this file in GitHub. The claude.ai Project doc `claude/finance-2027
 - New tables (all additive, append-only where marked): twin_month_freeze (append-only), execution_slippage, allocator_labels (append-only). New scheduled job: slippage_daily (17:50 New York, read-only).
 - WAITING ON MARKUS: publish with the US market closed (after 07:00 Brisbane); yes/no on every PROPOSED rule (league registrations, FX-TREND, ALLOCATOR-V1); pass-bar numbers; optional GITHUB_RECORDS_REPO / GITHUB_RECORDS_TOKEN for the monthly copy; and the 18 Nov list (stale alarms, dead bots_state rows, kill switch, heartbeat URLs, backup location).
 - NEXT: front-end reshuffle once Markus has seen the League page live; Phase 3a needs Markus's sources and cost yes first.
+- MARKUS 20 Nov 05:46 Brisbane: "Yes to proposed rules, the pass bar numbers and the other things." Recorded as: YES to every PROPOSED rule in research_harness/registrations/league/*.json (incl. FX-TREND and ALLOCATOR-V1) and to the provisional luck check (DSR >= 0.95, 60 days). The roadmap's "came close" / "clearly smaller worst fall" still had no numbers proposed, so those were asked again (not filled in).
 
 ## Not doing
 - Any crypto, on any account or system, full stop (Markus 17 Nov; was "no crypto sleeve", 10 Nov). Coins, pairs and crypto funds. Buys refused in code (PR #117). The last BTC was sold 17 Nov (owner-approved); no crypto is held anywhere.

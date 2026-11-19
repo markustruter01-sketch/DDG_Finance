@@ -77,6 +77,17 @@ MASTER COPY: this file in GitHub. The claude.ai Project doc `claude/finance-2027
 - WAITING ON MARKUS: merge #121/#122; yes to close the 11 stale alarms; yes to delete dead `bots_state` rows; arm the kill switch (after #121 is live); two free heartbeat monitor URLs (item 8); where to keep the database backups (item 8b).
 
 
+### Status 19 Nov evening (Opus 5.5)
+- Markus 19 Nov ~16:53 Brisbane: "Clean up the older files and start on phase 0. Build as many of the phases ... as you possibly can until you absolutely need me here to merge things."
+- Phase 0 code items: all built. Items 2, 4, 5, 7 (code part) were merged before today (#116, #120, #121, #122). Today: the rest of item 7, PR #129 (retired Forex Navigator deleted: `forex-engine/`, the never-registered `routes/forex.py`, its loaders, two dead `forex_trades` queries). The display-name table already exists as one source: `core/bot_registry.py` (`display_name`), served by `/bot-registry`, read by the dashboard (VERIFIED: `artifacts/dashboard/src/lib/bot-identity.ts`). Items 8 and 8b need Markus (below).
+- PR #128 (docs only): the 10 Nov plan archived unchanged in `archive/`; this file is now the status log; README points to one source each.
+- PR #130: Shadow League core (Phase 1 orders 1–5): 13 shadows + 3 yardsticks run as twins accounts (`bot_id` "league"), decided nightly by pure strategy functions (`research_harness/league/`), valued by the existing twins replay. One registration file per line (`research_harness/registrations/league/`). Version 0 = proving run, not the record. No orders, no new tables, no new paid service.
+- PR #131 (stacked on #130): leaderboard API `GET /league/leaderboard` + dashboard "League" page (Phase 1 order 7).
+- Tests, local Postgres 16, on the #131 branch: trading-platform 1,138 pass / 1 skip; kraken-bot + sleeve_runtime 293 pass. GitHub tests green on #128, #129, #130 (checked 19 Nov ~17:15 Brisbane); #131 not yet checked when written.
+- NOT BUILT, next: the 3 forex shadows (recommended: FX-COUNCIL = the existing Forex mirror twin; FX-BT1 = TWINS-V2's Forex rules twin, built once on hourly OANDA bars with its ATR stop checked each hour; FX-TREND = a new rule, needs Markus's yes); monthly slippage re-measure from real fills (Phase 1 order 3, second half); month-end freeze + GitHub copy (Phase 2 / TWINS-V2). Phase 3 (Allocator) and 3a (outside views) not started: the guide dates them Jan–Mar 2027 and 3a needs Markus's sources first.
+- WAITING ON MARKUS: (1) merge #128, #129, #130, then #131, and publish with the US market closed; (2) yes/no on the PROPOSED rules in the league registration files (listed in PR #130); (3) pass-bar numbers for "came close" / "clearly smaller worst fall" and the luck-check threshold (provisional 0.95, 60 days); (4) unchanged from 18 Nov: close the 11 stale alarms, delete dead `bots_state` rows, arm the kill switch, two free heartbeat monitor URLs (item 8), where to keep the database dumps (item 8b).
+- UNKNOWN: whether #121, #122, #124, #125, #127 are published (no inside check today).
+
 ## Not doing
 - Any crypto, on any account or system, full stop (Markus 17 Nov; was "no crypto sleeve", 10 Nov). Coins, pairs and crypto funds. Buys refused in code (PR #117). The last BTC was sold 17 Nov (owner-approved); no crypto is held anywhere.
 - A fourth Alpaca paper account (cap is 3).

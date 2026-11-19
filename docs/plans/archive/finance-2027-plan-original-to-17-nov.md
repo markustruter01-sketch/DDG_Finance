@@ -1,0 +1,127 @@
+# SUPERSEDED — the original 2027 plan (10–17 Nov 2026)
+
+Archived 19 Nov 2026 by Claude (Opus 5.5). Text below is unchanged from `docs/plans/finance-2027-plan.md` as it stood on 19 Nov.
+It is replaced by `docs/plans/fund-roadmap-2026-11-17.md` (agreed by Markus 17 Nov 2026 09:17 Brisbane). Do not work from this file:
+the line-up, the 21–22 Nov lock, the 23 Nov record start, the FABLE review roles and Steps 3–4 no longer apply.
+The dated Status entries stay in `finance-2027-plan.md`.
+
+---
+
+# DDG Finance — plan to the 2027 test year
+Written by Claude (Fable 5.2), Tue 10 Nov 2026; last updated Sun 15 Nov ~19:15 Brisbane (twins Phase A live, TWINS-V2 registered, ETH stop fill, weekend alarm fixes). Agreed by Markus 10 Nov.
+Roles: FABLE = diagnosis, strategy, specs, pass bars, reviews. OPUS = coding. MARKUS = decisions and things only he can click.
+Target: strategies locked the weekend of 21–22 Nov, record starts Mon 23 Nov 2026 (needs the 5-clean-day gate first).
+Constraint (Markus 10 Nov): Alpaca paper accounts are capped at 3 and all 3 are in use. No fourth account.
+MASTER COPY: this file in GitHub (quant-terminal `docs/plans/finance-2027-plan.md`). The claude.ai Project doc `claude/finance-2027-plan.md` mirrors it; whoever edits one updates the other in the same session.
+
+## Line-up (agreed 10 Nov; cutover not done)
+| Bot | Account | Strategy | Note |
+|---|---|---|---|
+| 1 Preferred | to decide at cutover | FLEET-V1-C1: geared S&P/Nasdaq trend, up to 1.5x, vol-targeted, cash when trend off | 2021–2026 (spent window): 15.1%/yr vs 14.6%, worst fall −26.8% vs −24.5% |
+| 2 Cowboy | to decide at cutover | GEAR-V1-G4: same idea up to 2x | 2021–Oct 2026: 18.05% vs 15.18%, same worst fall. Lost ~41% in 2000–02 reconstruction |
+| 3 Experiment | spy_qqq_trend | MOMO-V2 stock momentum (about 70%) + geared gold/silver trend sleeve (about 30%). Exact rules and split by FABLE before start | forward-only, no claim from history |
+| 4 Forex | forex_ai | 3-AI vote, risk 0.5%/trade (option A) | scorecard also shows what 2x and 4x would have made; leverage only after 60 trades show an edge |
+- FLEET-V1-F1 (today's Atlas) continues as a no-orders shadow.
+- Nothing has passed a clean test. The 2021–2026 window has been used several times; the paper record is the test.
+- SUPERSEDED 17 Nov (no crypto, full stop; see Status 17 Nov). Was: DECIDED (Markus 10 Nov): the leftover BTC/ETH in jerome_macro STAYS (frozen holding with its stops, about 15% of that account on 10 Nov: BTC ~$7.3k, ETH ~$4.7k of ~$80k). No crypto strategy anywhere else. Reports must show that account's result with and without the crypto line so the strategy's own record is readable.
+
+### Bot 3 detail
+- Stock part: MOMO-V2 (research_harness/explore/MOMO-V2-PLAN.md): top 50 S&P 500 stocks by 12-1 momentum, equal weight, book-level trend and volatility brakes, 20% stops, monthly. Markus 2 Nov: stocks must be in the comparison.
+- State 10 Nov: all cash (BIL/SGOV). bots_state metadata: key=2026-11|out|normal, trend_on=false, index=100, sma100=125.056, vol20=0.563, s=0.266, 50 names. Never bought a stock since 3 Nov; cannot re-enter before the December signal day.
+- ⚠️ TO CHECK (FABLE then OPUS): index 100 vs a 100-day average of 125 and 56% volatility on a 50-stock book look too extreme. Either the momentum names really fell ~20% (S&P fell 4.4% on 5 Nov) or the book index is calculated wrongly (rebase / split-adjusted bars). Recompute by hand from Alpaca bars.
+- Gold/silver sleeve (Markus 10 Nov: no crypto sleeve; leverage on steadier assets instead). Shape only; FABLE fixes the numbers at registration:
+  - Hold gold (and a smaller silver line) only while each is above its own trend; cash (SGOV) otherwise.
+  - Leverage up to 2x while the trend is on and volatility is low, through 2x funds (UGL gold, AGQ silver — availability on Alpaca paper UNVERIFIED) or the plain funds GLD/SLV; no margin borrowing. Same gearbox pattern the engine already runs for G4.
+  - Sized by volatility: silver moves about as much as shares, so it gets a smaller line than gold.
+  - Stop on every holding, set from the asset's own normal daily range, not a fixed tight percentage.
+  - Known history (handoff v9): a permanent commodity sleeve and EMA trend on commodity ETFs failed out-of-sample (experiments 8/9); levering low-volatility ETFs with Alpaca margin at 6.25% interest lost about 20–25% over 2008–2022. This sleeve differs (gold/silver only, trend-gated, no margin interest); it stays an experiment with a pre-set pass bar.
+  - Forex-style leverage is Bot 4's job (OANDA); Alpaca does not trade currencies.
+
+## AI harness (Markus 10 Nov)
+Runs all year as a SHADOW (no orders); decide at end of 2027 whether to switch it on.
+- For every bot decision (buy/sell/rebalance, each stock for Bot 3), the 3-AI council (Forex harness, with news) votes agree / reduce / veto, with reasons.
+- Two records per bot: "bot alone" (real paper account) and "bot + AI" (computed, same costs).
+- Shadow limits: AI can only reduce or skip, never add; at most halve; a vote expires after N days unless renewed; bot rules and stops still apply.
+- Scoring: 5- and 20-day outcome after each reduce/veto vs normal days; year-end return, worst fall, Sharpe for both records.
+- Pass bar and N written by FABLE before the first logged vote. Model versions and training cutoffs recorded; a model/prompt change = new dated version.
+- Cannot be backtested (LLM memory). Verdict may need the full year.
+
+## Record start
+- Current: RUN_START = 2026-11-09 (trading-platform/core/fleet_capital.py, PR #90): oracle 86,919.04; jerome_macro 80,155.66; spy_qqq_trend 99,178.36; forex_ai 99,469.35.
+- Restarts once more at the strategy lock, then never again.
+- Home chart: one point per trading day. Annual return / Sharpe / volatility show from 20 trading days.
+
+## Checklist
+### Step 1 — get trading again: DONE except the last confirmation
+1–4. [x] Diagnosis; stops re-placed by hand; PR #89 stop safety (reviewed, one bug fixed, merged, published 9 Nov 22:41 UTC); PR #90 run start (published 10 Nov 03:04 UTC). Post-checks clean.
+   Incident summary (9 Nov 15:13 UTC): Atlas partial sells of SPY/QQQ cancelled the stops and the re-arm failed 4 times (likely Alpaca's open-orders list still showing the cancelled stops); kill switch paused all bots 15:46 UTC; paused bots never ran so nothing re-armed; Atlas V2 false ledger mismatch (wrong table); SGOV close failed on float rounding.
+5. [x] Markus reset the kill switch 10 Nov 07:23 UTC (17:23 Brisbane). [ ] FABLE confirms all four bots cycle (check scheduled 08:23 UTC) and after the US open (14:30 UTC): reconciliation clean, stops in place.
+6. [x] Forex first 3-AI vote logged for 9 Nov: all three members, 7 decisions, no errors, no orders (bots were paused).
+
+### Step 2 — reliability (10–20 Nov). OPUS builds, FABLE specs and reviews
+7. FABLE: audit the whole order path; write the "must never happen" list (position without a stop >60 s; order while paused; dev process touching the live DB; publish with open non-protective orders).
+8. OPUS: separate Finance's dev workspace from the production database (dev DATABASE_URL = production NEON: restarting the dev API runs startup SQL on live data). Until fixed every Replit sync prompt must say DO NOT RESTART WORKFLOWS.
+   [built: PR #92] Workspace sessions read-only via PGOPTIONS in [userenv.development]; API skips schema setup, runner exits when read-only. After the sync, restart workspace workflows once to pick it up; then check SHOW transaction_read_only = on and that production still writes.
+9. OPUS: rehearsal before live, WITHOUT a new account (3-account cap):
+   a. Until the 23 Nov start: Bot 3's account (spy_qqq_trend) is all cash and idle, and its record restarts on 23 Nov anyway. Use it as the rehearsal account: bot paused during a rehearsal, tiny orders (1 share), own client-order-id prefix and a separate ledger tag so nothing mixes with strategy rows, everything closed and reconciled clean at the end. Scenario script prints pass/fail: buy, top-up, partial sell, full close, stop re-arm, 2x-fund buy (UGL/AGQ check).
+   b. After the start: no live-account rehearsals; new code is proven on the fake broker (10) and replay (11) first, then goes live on ONE bot for a session before the others.
+   [built: PR #94, stacked on #93] kraken-bot/rehearsal.py. Run: Momentum paused, market open, `PGOPTIONS= python3 kraken-bot/rehearsal.py --live`. Answers UGL/AGQ availability. Not run yet.
+10. OPUS: broker-quirk tests — a fake broker that misbehaves (open-orders list lagging a cancel, rejected order, partial fill, 429 rate limit, feed drop, price gap through a stop) and tests that every holding ends up protected or alarmed.
+   [built: PR #93] 10 quirk tests pass. Found and fixed: stop-free buys (DBC/GLD/UUP) were missing from the trades journal. Found, not fixed: buy_market client ids not bot-tagged.
+11. OPUS: replay test — run a recorded real market day (bars + the day's orders) through each bot's cycle offline.
+   [built: PR #93] 9 Nov Atlas replay: old code reproduces the incident; fixed code protected at 0/5/300 s cancel lag.
+12. OPUS + FABLE: live-versus-research check — a monthly report comparing each bot's actual holdings with what the research code says for the same days; includes the price-feed difference (live falls back to IEX bars).
+   [built: PR #96] Daily row per account (Alpaca feed vs Yahoo, same registered rules), monthly Discord summary on the 1st, GET /fleet/live-check. MOMO selection from ~500 names not re-run. FABLE: confirm the flag thresholds (0.5% close, 2 pt weight, 1% index, 5% name).
+13. OPUS: alarms — auto-resolve stale rows so a new alarm means something (4 unresolved on 10 Nov; keep it there); daily automatic health check pushed to Discord; keep deployment logs >24 h; fix the 2 tests failing on main (test_forex_ai_registration four-bots, test_invariants cycle_freshness all-paused); bots_state status/paused mismatch after a kill-switch reset.
+   [built: PR #91] All six parts. Still open after publish, need a decision (FABLE + MARKUS): daily_return_portfolio_stale (1) and fleet_v1_c1_rebalance (1, the ETH "frozen" note; recurs monthly while BTC/ETH sit in that account: downgrade to warning or resolve by hand).
+13b. OPUS (Markus 10 Nov): Home page bot cards show what each bot holds, in plain words, so the strategy can be read off the card:
+   - A compact "Holds" line or mini bar per card: each asset group as % of that account's equity, largest first, e.g. "S&P 500 28% · Nasdaq 19% · Commodities 4% · Dollar 13% · Cash 36%". Leveraged funds say so ("S&P 500 2x 40%"). Percentages are of account equity and sum to 100% (cash/T-bills and vault shown as their own items; crypto as its own item on jerome_macro).
+   - Forex card: each open pair with direction and size as % of account (e.g. "EUR/USD short 39%"), plus gross exposure.
+   - One short rule line under the name (what it does and its limit, e.g. "S&P + Nasdaq trend, up to 1.5x"), taken from the bot registry: one source, no second list in the front end.
+   - Data from live positions already served to the Home page (no new broker calls); symbol -> group map in one place on the server.
+   - Must still fit Overview on one screen at 1366x768 and 1600x900 with no scrolling; check phone.
+   [built: PR #95] Checked at 1366x768, 1600x900, phone (mock data). The card bottoms were already cut off on main at both sizes; short cards now drop the mini chart/meter/stats so Holds shows.
+14. FABLE: check the Momentum book index (Bot 3 detail above); OPUS fixes if wrong.
+15. FABLE: re-check two older open items — the dashboard bundle holding the trading-API secret (K1), and drawdown limits being record-only (ENFORCE_DRAWDOWN_LIMITS). Decide with Markus.
+16. Gate: 5 trading days with no incident (sessions Tue 10, Wed 11, Thu 12, Fri 13, Mon 16 Nov) before any strategy change. Front-end-only changes (13b) may publish during the gate, market closed, with the usual pre/post checks.
+
+### Step 2 status (Wed 11 Nov 07:30 Brisbane): items 8–13b LIVE
+- Reviewed by FABLE, merged (PRs #91–#97), published 10 Nov 21:12 UTC (workspace c28586d = main 97086b5). Pre- and post-checks clean: same holdings and stops, reconciliation clean, all four bots cycled 21:13 UTC.
+- Review fixes: #93 test helper could have deleted live ledger rows if run in the workspace (guard now starts before any test loads); log copy connection leak; live check treated missing research data as agreement; rehearsal rows now counted by invariants.
+- Alarm clean-up (Markus 11 Nov: "alarms need to mean something"):
+  - Forex weekly audit "off schema": FALSE (JSONB does not keep key order). Fixed; audit on live data now returns 0 findings.
+  - ETH "frozen" on Atlas V2: expected (owner-kept BTC/ETH). No longer alarms; any other untouched holding still does.
+  - daily_return_portfolio_stale, would_trip, bot_paused_ledger_mismatch, close_failed: now clear themselves; all cleared by the first resolver run.
+  - "Bots stale" after a reset: fixed (counts from the resume).
+  - One-off resolve of the 6 weekly_audit rows + row 10138 (owner-approved production write, 11 Nov).
+- New: workspace database sessions are read-only (verified live: SHOW transaction_read_only = on; a deliberate write needs the `PGOPTIONS=` prefix). 30-day log copy `runtime_log` (verified filling). Daily health message 08:40 Brisbane. Live-vs-research daily row 17:40 New York. Home cards show rule + Holds. Outside heartbeat (PR #97): inert until Markus adds secrets HEARTBEAT_URL_RUNNER / HEARTBEAT_URL_API (healthchecks.io or similar).
+- Replit sync facts: git remote is `gh`; use a normal merge (never fast-forward-only); report to .local/claude_reports/NAME.txt and read it with read_app_file.
+- Fix list found during publish: (a) one failed broker read raises invariant alarm rows at once (2 rows at 21:04 UTC; should need two in a row); (b) standing_invariants logs every PASS line at WARNING while any check fails (log noise); (c) buy_market client ids not bot-tagged; (d) four dead bots_state rows (bot2_spy_qqq, depeg_hunter, forex_gump, kraken_trend).
+- Not run: rehearsal (#94). Needs Momentum paused + market open; `PGOPTIONS= python3 kraken-bot/rehearsal.py --live`.
+
+### Morning checks (11 Nov, read 02:17 UTC)
+- Open alarms: 0 (the 264 "no open alarms" rows cleared on their own). First daily health message sent 22:40 UTC: "✅ All good".
+- Live vs research, first day (10 Nov): Atlas and Atlas V2 agree exactly (same votes, exposure and weights on Alpaca SIP and Yahoo; largest close gap IEF 0.34%). Momentum agrees (index 105.52 vs 105.51, average 124.55 vs 124.56); one flag: TGT close 0.7% apart.
+- ITEM 14 CLOSED, not a bug. The Momentum book index is right: both feeds give the same numbers, and per-name check (Alpaca bars, 11 Nov) shows the 50 names had a median +102% 12-1 return then a median −27% in the month before selection; 31 of 50 fell more than 20%. The trend brake kept Bot 3 in cash as designed. For registration (item 17): the list is heavily one theme (memory, storage, chip equipment: SNDK, INTC, STX, WDC, MU, LRCX, AMAT, KLAC...); consider a sector cap.
+- Found: engine deadlock at 22:14 UTC + latent cross-account ledger repair → PR #98 (open, needs review; publish market closed).
+- Noise: the old Navigator forex engine's routes still query missing tables (forex_trades, forex_portfolio) when the dashboard polls them: retire.
+
+### Agency queue (Markus 11 Nov: "Go" + "deliver it as close to perfect as you can")
+1. Momentum book index check (item 14) using the first live-vs-research rows.
+2. Order-path audit + "must never happen" tests (item 7).
+3. Rehearsal run (🔴 real 1-share paper orders).
+4. Clean-up: fix list (a)–(d).
+5. Decisions with Markus: trading-API secret in the dashboard bundle (K1); ENFORCE_DRAWDOWN_LIMITS.
+6. Strategy lock registrations (item 17) before 21–22 Nov.
+7. Public Finance page on ddg.limited (Markus 11 Nov 07:06): performance, holdings, strategy paper incl. failed tests, how the platform works; trading platform stays private, data flows out only via the existing hourly push. Open question: public record from 23 Nov (labelled pre-launch) or 1 Jan 2027.
+
+
+### Step 3 — lock strategies (weekend 21–22 Nov, market closed)
+17. FABLE: registration + pass bar for Bots 1–4 and for the AI shadow, written before the start; exact Bot 3 rules (stock / gold-silver split, trend rule, gearing, stop width).
+18. OPUS: cutover rehearsed per 9a first, then live (one account F1 -> G4, F1 shadow, labels Bot 1/2/3/4, gold/silver sleeve on Bot 3), Forex 2x/4x "what if" columns, AI shadow harness. FABLE reviews before it goes live.
+
+### Step 4 — run (from Mon 23 Nov if the gate and Step 3 are met)
+19. No rule changes until 31 Dec 2027; any change is a new dated version reported separately.
+20. FABLE monthly review: every number, good or bad, bot alone vs bot + AI, live vs research, Bot 1 with and without its crypto line.
+21. Real money only after 90 clean paper days and measured costs.
+

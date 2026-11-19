@@ -1,0 +1,21 @@
+{
+  "id": "T-2X",
+  "status": "FROM ROADMAP; cap rule PROPOSED (GEAR-V1-G4 is a different 2x rule already registered; this line changes only the ceiling of the Atlas rule)",
+  "registered_at": "PROPOSED 2026-11-19 (Thu) ~18:00 Brisbane by Claude (Opus 5.5). Version 0 = proving run only (not the record). Registered for the record when Markus says yes and LEAGUE_VERSION goes to 1 at the lock (about 12-13 Dec 2026); after that nothing here changes (a change = a new dated strategy).",
+  "source_document": "docs/plans/fund-roadmap-2026-11-17.md Phase 1 (agreed by Markus 17 Nov 2026); code research_harness/league/families.py",
+  "hypothesis": "Does more gearing pay after its costs and deeper falls?",
+  "candidate": "Atlas trend rule at 2x",
+  "rules": "As T-15X with ceiling 2.0. At E = 2 the whole invested part is in 2x funds.",
+  "universe": "SPY, QQQ, SSO, QLD (+ BIL)",
+  "rebalance_day": "first session of each month + vote changes",
+  "stops": "20% on every holding (engine)",
+  "leverage": "no borrowing: weights add to at most 100% (max_gross 1.0). Effective exposure above 1x only through 2x funds.",
+  "fills": "decision after a session close, filled at the next session's open (twins engine = research_harness/harness/portfolio.simulate)",
+  "costs": "one shared model for every line: twins.config.SHARE_COSTS = 0 commission, 2 bps half spread, 3 bps slippage per trade (estimates; monthly re-measure from the real accounts' fills is a later work order). Gearing only through 2x funds (SSO, QLD), whose borrowing cost is inside their price; no margin. Idle money in BIL (T-bills); plain cash earns 0.",
+  "data_needed": "as T-15X",
+  "start_equity": "100,000 fake dollars",
+  "window": "forward only: version 1 from the first session after the lock to 31 Dec 2027 (roadmap Phase 2). No backtest stands behind this line in the league.",
+  "candidates_declared": 16,
+  "prior_variants_tried": "UNKNOWN exact count (FLEET-V1, GEAR-V1/V2 research)",
+  "pass_bar": "Roadmap Phase 4 (January 2028): passes if, after costs, it matched or beat the S&P 500 (Y-SPX), or came close with a clearly smaller worst fall, AND passes the luck check adjusted for 16 tries (deflated Sharpe: research_harness/harness/overfit.deflated_sharpe with n_trials = 16). The exact 'came close' and 'clearly smaller' numbers are UNKNOWN: Markus to fix them before version 1 starts."
+}

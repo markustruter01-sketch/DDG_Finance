@@ -381,9 +381,26 @@ def check_mirror(get_conn, acct, result: engine.Replay) -> float | None:
     return gaps[max(gaps)] if gaps else None
 
 
+def _league(get_conn, now, session, daily, fetch_daily, universe_loader, alarm, resolve):
+    """The Shadow League's decisions for tonight. It must never stop the bot twins:
+    any failure is one alarm and the night goes on."""
+    try:
+        from twins import league
+        report, league_bars = league.run(get_conn, now, session, fetch_daily=fetch_daily,
+                                         universe_loader=universe_loader)
+        for sym, rows in league_bars.items():     # names first held tonight need prices to replay
+            daily.setdefault(sym, rows)
+        resolve("league_failed")
+        return report
+    except Exception as exc:
+        logger.exception("league nightly failed")
+        alarm("error", "league_failed", f"Shadow League nightly failed: {type(exc).__name__}: {str(exc)[:200]}")
+        return f"failed: {type(exc).__name__}"
+
+
 def nightly(now: datetime | None = None, *, get_conn=None, fetch_daily=None, fetch_hourly=prices.oanda_hourly,
             alarm: Callable[..., None] = _default_alarm, resolve: Callable[..., None] = _default_resolve,
-            commit: str | None = None) -> dict[str, Any]:
+            commit: str | None = None, with_league: bool = True, universe_loader=None) -> dict[str, Any]:
     now = now or datetime.now(timezone.utc)
     get_conn = get_conn or _default_get_conn()
     report: dict[str, Any] = {"at": now.isoformat()}
@@ -399,6 +416,8 @@ def nightly(now: datetime | None = None, *, get_conn=None, fetch_daily=None, fet
         report["session"] = session.isoformat()
         if session == _ny(now).date():
             report["share_close"] = share_close(get_conn, now, daily, session)
+            report["league"] = (_league(get_conn, now, session, daily, fetch_daily, universe_loader, alarm,
+                                        resolve) if with_league else "off")
             try:                                  # an OANDA outage must not stop the share twins
                 report["forex_start"] = forex_start(get_conn, now, session, fetch_hourly)
             except Exception as exc:

@@ -49,7 +49,7 @@ def _weight(value) -> float:
 
 
 def _table(rows: list[list], *, ticker_col: str, name_col: str, weight_col: str,
-           asset_col: str | None = None) -> list[Row]:
+           asset_col: str | None = None, sector_col: str | None = None) -> list[Row]:
     """Rows after the header line that holds the named columns."""
     header_at = next((i for i, r in enumerate(rows)
                       if r and ticker_col in [str(c).strip() for c in r]
@@ -59,14 +59,18 @@ def _table(rows: list[list], *, ticker_col: str, name_col: str, weight_col: str,
     head = [str(c).strip() for c in rows[header_at]]
     ti, ni, wi = head.index(ticker_col), head.index(name_col), head.index(weight_col)
     ai = head.index(asset_col) if asset_col and asset_col in head else None
+    si = head.index(sector_col) if sector_col and sector_col in head else None
     out = []
     for r in rows[header_at + 1:]:
         if len(r) <= max(ti, ni, wi):
             continue
         if ai is not None and str(r[ai]).strip().lower() != "equity":
             continue
-        out.append({"ticker": str(r[ti] or "").strip().upper(), "name": str(r[ni] or "").strip(),
-                    "weight": _weight(r[wi])})
+        row = {"ticker": str(r[ti] or "").strip().upper(), "name": str(r[ni] or "").strip(),
+               "weight": _weight(r[wi])}
+        if si is not None and len(r) > si:
+            row["sector"] = str(r[si] or "").strip()
+        out.append(row)
     return out
 
 
@@ -76,12 +80,13 @@ def parse_ssga_xlsx(content: bytes) -> list[Row]:
     wb = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
     ws = wb.worksheets[0]
     rows = [list(r) for r in ws.iter_rows(values_only=True)]
-    return _table(rows, ticker_col="Ticker", name_col="Name", weight_col="Weight")
+    return _table(rows, ticker_col="Ticker", name_col="Name", weight_col="Weight", sector_col="Sector")
 
 
 def parse_ivv_csv(text: str) -> list[Row]:
     rows = list(csv.reader(io.StringIO(text)))
-    out = _table(rows, ticker_col="Ticker", name_col="Name", weight_col="Weight (%)", asset_col="Asset Class")
+    out = _table(rows, ticker_col="Ticker", name_col="Name", weight_col="Weight (%)", asset_col="Asset Class",
+                 sector_col="Sector")
     for r in out:
         r["ticker"] = IVV_TICKER_FIX.get(r["ticker"], r["ticker"])
     return out
@@ -99,17 +104,31 @@ def members(rows: list[Row]) -> list[str]:
     return sorted(r["ticker"] for r in best.values())
 
 
-def load_sp500(http_get: Callable[[str], bytes]) -> tuple[list[str], str]:
-    """(tickers, source). Tries SSGA, then IVV; raises UniverseUnavailable."""
+def sectors(rows: list[Row], tickers: list[str]) -> dict[str, str]:
+    """Each member's sector as the holdings file states it ('' if the file has none).
+    Used by the Shadow League's sector cap; MOMO-V2 does not read it."""
+    by_ticker = {r["ticker"]: r.get("sector", "") for r in rows}
+    return {t: by_ticker.get(t, "") for t in tickers}
+
+
+def load_sp500_rows(http_get: Callable[[str], bytes]) -> tuple[list[str], list[Row], str]:
+    """(tickers, raw rows, source). Tries SSGA, then IVV; raises UniverseUnavailable."""
     errors = []
     for source, url, parse in (("ssga_spy", SSGA_URL, parse_ssga_xlsx),
                                ("ishares_ivv", IVV_URL, lambda b: parse_ivv_csv(b.decode("utf-8-sig")))):
         try:
-            tickers = members(parse(http_get(url)))
+            rows = parse(http_get(url))
+            tickers = members(rows)
         except Exception as exc:                     # any failure moves to the next source
             errors.append(f"{source}: {type(exc).__name__}: {exc}"[:200])
             continue
         if len(tickers) >= MIN_MEMBERS:
-            return tickers, source
+            return tickers, rows, source
         errors.append(f"{source}: only {len(tickers)} members")
     raise UniverseUnavailable("; ".join(errors))
+
+
+def load_sp500(http_get: Callable[[str], bytes]) -> tuple[list[str], str]:
+    """(tickers, source). Tries SSGA, then IVV; raises UniverseUnavailable."""
+    tickers, _rows, source = load_sp500_rows(http_get)
+    return tickers, source

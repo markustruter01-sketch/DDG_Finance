@@ -81,6 +81,17 @@ Read the roadmap's Phase 3a first. Build in this order, one pull request each. N
 9. **Registration:** hash and date the source list, card format, decay number and council prompt before fund (c) starts in April 2027. Changing any of them later is a new dated version.
 Proof for the phase: 20 days of cards with no missed day; every fund (c) council note cites its views; the limits test is green.
 
+## Front-end work orders (designs approved by Markus 20 Nov 2026 06:06 Brisbane)
+Approved mock-up (2 PC screens, 4 iPhone screens, Night Glass v5 unchanged): https://claude.ai/artifact/JKWUEVj1QSBgY6pNCrWhVH. One PR each, tests and `tsc` green, front end only, published with the US market closed.
+1. **PC:** nav Home · League · Forex · Research (Bench renamed) · Controls · Paper. Home keeps hero, chart and account cards and adds three bottom cards: League top 5, Allocator (a) vs (b) with tonight's mood, Record keeping (decision logs, month frozen, trade costs vs model, outside monitor). League page: family filter, one table for every line, detail panel for the picked line (chart vs S&P 500, rule in plain words, pass bar).
+2. **Phone (Apple Human Interface Guidelines):** bottom tab bar Home · League · Forex · More; large titles; touch targets 44 pt or more; grouped lists that push a detail screen with Back; League filters as a scrolling chip row; Pause/Resume only on Controls behind a confirm sheet.
+3. **Public Finance view on ddg.limited (Markus 20 Nov 06:06):** on ddg.limited's Finance section, a visitor picks **PC view** or **Phone view**; a full-screen pop-up opens showing the Finance app as it looks on that device — a **visual, read-only** copy: no controls, no buttons that act, nothing that can pause, resume or change anything.
+   - Build it in DDG-Control (`artifacts/ddg-control/site/`), not by exposing the Finance dashboard: the Finance dashboard bundle holds the trading-API secret (K1, status 13 Nov) and must never be made public.
+   - Data: only what Finance already pushes to DDG Control each hour (`/api/inbound/fleet`), plus any new league/Allocator fields added to that push in the same PR (figures only: no keys, no account numbers, no order ids). No call from the public page to the Finance API.
+   - Same Night Glass look and the same layouts as items 1 and 2: PC view in a desktop-shaped frame, phone view in a phone-shaped frame (no fake status bar). Close button, Escape key, and focus trapped inside the pop-up while open (accessibility).
+   - Wording: paper money, not financial advice, not open to outside money; before 1 Jan 2027 it says the public record starts then (Markus 12 Nov). Markus approves the words before publish.
+   - Done when: both views open from ddg.limited/finance on a phone and a PC, show the latest pushed figures, and an outside check confirms the public page makes no request to the Finance API.
+
 ## Phases 4 and 5
 Do not start them. In January 2028 produce the scorecard exactly as the roadmap's Phase 4 defines it, including the case "nothing passed". Real money is Markus's decision alone.
 

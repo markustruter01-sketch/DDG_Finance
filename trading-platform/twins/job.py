@@ -433,12 +433,26 @@ def nightly(now: datetime | None = None, *, get_conn=None, fetch_daily=None, fet
             report["share_close"] = "no US session today"
         report["twins"] = replay_all(get_conn, now, daily, fetch_hourly, alarm, resolve)
         report["chains"] = verify_all(get_conn, alarm)
+        report["month_end"] = _month_end(get_conn, now, report["twins"], alarm, resolve)
         resolve("twin_job_failed")
     except Exception as exc:
         logger.exception("twins nightly failed")
         alarm("error", "twin_job_failed", f"twins nightly failed: {type(exc).__name__}: {str(exc)[:200]}")
         report["error"] = f"{type(exc).__name__}: {str(exc)[:200]}"
     return report
+
+
+def _month_end(get_conn, now, replayed: dict[str, Any], alarm, resolve) -> Any:
+    """Freeze finished months (only for twins valued tonight), check drift, copy off-site.
+    Its failure is one alarm; it never stops the night."""
+    try:
+        from twins import month_end
+        ok = {tid for tid, r in replayed.items() if isinstance(r, dict)}
+        return month_end.run(get_conn, now, alarm, resolve, only=ok)
+    except Exception as exc:
+        logger.exception("month-end step failed")
+        alarm("error", "twin_month_end_failed", f"month-end step failed: {type(exc).__name__}: {str(exc)[:200]}")
+        return f"failed: {type(exc).__name__}"
 
 
 def replay_all(get_conn, now, daily, fetch_hourly, alarm, resolve) -> dict[str, Any]:

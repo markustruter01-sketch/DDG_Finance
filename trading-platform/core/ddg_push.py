@@ -29,7 +29,7 @@ _DETAIL_INSTRUMENTS = {
     "spy_qqq_trend": ["SGOV"],
     # FLEET-V1-C1: the equity core's four ETFs; idle cash parked in SGOV.
     "jerome_macro": ["SPY", "QQQ", "SSO", "QLD", "SGOV"],
-    # Forex AI is paused and has no executable trading universe.
+    # Forex AI trades OANDA pairs, not Alpaca instruments: nothing to list here.
     "forex_ai": [],
 }
 _DETAIL_BROKER_TIMEOUT_SECONDS = 10.0

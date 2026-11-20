@@ -211,11 +211,10 @@ function EngineCard({ e, mktOpen }: { e: Engine; mktOpen: boolean }) {
 }
 
 // ── Page ─────────────────────────────────────────────────────────────────────
-const HOLDING_GROUPS = ["Stocks & ETFs", "Crypto", "Cash park (SGOV)", "Vault (BIL, VOO)"] as const;
+const HOLDING_GROUPS = ["Stocks & ETFs", "Cash park (SGOV)", "Vault (BIL, VOO)"] as const;
 function holdingGroup(p: LivePos): (typeof HOLDING_GROUPS)[number] {
   if (p.symbol === "SGOV") return "Cash park (SGOV)";
   if (p.symbol === "BIL" || p.symbol === "VOO") return "Vault (BIL, VOO)";
-  if (/USD$/.test(p.symbol)) return "Crypto";
   return "Stocks & ETFs";
 }
 

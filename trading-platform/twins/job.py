@@ -389,7 +389,8 @@ def check_mirror(get_conn, acct, result: engine.Replay) -> float | None:
     return gaps[max(gaps)] if gaps else None
 
 
-def _league(get_conn, now, session, daily, fetch_daily, universe_loader, alarm, resolve, fetch_fx_daily=None):
+def _league(get_conn, now, session, daily, fetch_daily, universe_loader, alarm, resolve, fetch_fx_daily=None,
+            history=None):
     """The Shadow League's decisions for tonight. It must never stop the bot twins:
     any failure is one alarm and the night goes on."""
     try:
@@ -398,12 +399,37 @@ def _league(get_conn, now, session, daily, fetch_daily, universe_loader, alarm, 
                                          universe_loader=universe_loader, fetch_fx_daily=fetch_fx_daily)
         for sym, rows in league_bars.items():     # names first held tonight need prices to replay
             daily.setdefault(sym, rows)
+        if history is not None:                   # long history for the AI twins' packs
+            history.update(league_bars)
         resolve("league_failed")
         return report
     except Exception as exc:
         logger.exception("league nightly failed")
         alarm("error", "league_failed", f"Shadow League nightly failed: {type(exc).__name__}: {str(exc)[:200]}")
         return f"failed: {type(exc).__name__}"
+
+
+def _ai(get_conn, now, session, history, call, alarm, resolve) -> Any:
+    """Tonight's AI twin votes (AU6). Never stops the night: a failure is one alarm."""
+    if not history:
+        return "skipped: no price history from the league tonight"
+    try:
+        from twins import ai_council
+        report = ai_council.run(get_conn, now, session, history, call=call or None,
+                                start_equity=lambda bot: _bot_equity(get_conn, bot))
+        resolve("ai_twins_failed")
+        return report
+    except Exception as exc:
+        logger.exception("ai twins nightly failed")
+        alarm("error", "ai_twins_failed", f"AI twins nightly failed: {type(exc).__name__}: {str(exc)[:200]}")
+        return f"failed: {type(exc).__name__}"
+
+
+def _bot_equity(get_conn, bot_id: str) -> float | None:
+    """The bot's real balance at tonight's close, as its mirror twin recorded it."""
+    rows = store.equity_rows(get_conn, f"{bot_id}:mirror:v{config.VERSION}")
+    vals = [r["ref_equity"] for r in rows if r.get("ref_equity")]
+    return float(vals[-1]) if vals else None
 
 
 def _fx_rates(get_conn, now, record, alarm, resolve) -> Any:
@@ -424,10 +450,12 @@ def _fx_rates(get_conn, now, record, alarm, resolve) -> Any:
 def nightly(now: datetime | None = None, *, get_conn=None, fetch_daily=None, fetch_hourly=prices.oanda_hourly,
             alarm: Callable[..., None] = _default_alarm, resolve: Callable[..., None] = _default_resolve,
             commit: str | None = None, with_league: bool = True, universe_loader=None,
-            fetch_fx_daily=None, record_fx_rates: Callable[..., int] | None = None) -> dict[str, Any]:
+            fetch_fx_daily=None, record_fx_rates: Callable[..., int] | None = None,
+            ai_call: Callable[..., Any] | None | bool = None) -> dict[str, Any]:
     now = now or datetime.now(timezone.utc)
     get_conn = get_conn or _default_get_conn()
     report: dict[str, Any] = {"at": now.isoformat()}
+    history: dict[str, list[dict[str, Any]]] = {}       # the league's long price history, for the AI packs
     try:
         _ensure_schema(get_conn)
         report["changes"] = capture_changes(get_conn, now, commit)
@@ -441,7 +469,7 @@ def nightly(now: datetime | None = None, *, get_conn=None, fetch_daily=None, fet
         if session == _ny(now).date():
             report["share_close"] = share_close(get_conn, now, daily, session)
             report["league"] = (_league(get_conn, now, session, daily, fetch_daily, universe_loader, alarm,
-                                        resolve, fetch_fx_daily) if with_league else "off")
+                                        resolve, fetch_fx_daily, history) if with_league else "off")
             try:                                  # an OANDA outage must not stop the share twins
                 report["forex_start"] = forex_start(get_conn, now, session, fetch_hourly)
             except Exception as exc:
@@ -454,6 +482,9 @@ def nightly(now: datetime | None = None, *, get_conn=None, fetch_daily=None, fet
         report["chains"] = verify_all(get_conn, alarm)
         report["month_end"] = _month_end(get_conn, now, report["twins"], alarm, resolve)
         report["allocator"] = _allocator(get_conn, now, alarm) if with_league else "off"
+        # Last: the AI twins' votes (model calls can take minutes; tonight's values are already stored).
+        report["ai"] = (_ai(get_conn, now, session, history, ai_call, alarm, resolve)
+                        if with_league and ai_call is not False and session == _ny(now).date() else "off")
         resolve("twin_job_failed")
     except Exception as exc:
         logger.exception("twins nightly failed")
@@ -517,6 +548,10 @@ def replay_all(get_conn, now, daily, fetch_hourly, alarm, resolve) -> dict[str, 
             if not result.curve:
                 out[tid] = "no bars yet"
                 continue
+            if acct["kind"] in ("ai", "ai_veto"):                   # AI cost, charged monthly (AU6)
+                from twins import ai_council
+                result = replace(result, curve=ai_council.charge(result.curve,
+                                                                 store.ai_monthly_costs(get_conn, tid)))
             fin = None
             if acct["bars"] == HOURLY or _league_forex(acct):      # forex: overnight financing (AU5)
                 if rates is None:
@@ -563,6 +598,7 @@ def hourly(now: datetime | None = None, *, get_conn=None, fetch_hourly=prices.oa
     now = now or datetime.now(timezone.utc)
     get_conn = get_conn or _default_get_conn()
     report: dict[str, Any] = {"at": now.isoformat()}
+    history: dict[str, list[dict[str, Any]]] = {}       # the league's long price history, for the AI packs
     try:
         _ensure_schema(get_conn)
         report["changes"] = capture_changes(get_conn, now, commit)

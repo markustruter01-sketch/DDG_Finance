@@ -327,7 +327,7 @@ def test_two_nights_start_every_line_value_it_and_keep_the_chain(tmp_path):
     now2 = datetime.combine(date(2026, 11, 18), time(17, 15), NEW_YORK)
     from test_twins_job import _platform_tables
     _platform_tables(get_conn)          # no real accounts in this test: the bot twins do not start
-    out = job.nightly(now2, record_fx_rates=lambda g, n: 0, get_conn=get_conn, fetch_daily=fake_fetch, universe_loader=fake_universe,
+    out = job.nightly(now2, record_fx_rates=lambda g, n: 0, ai_call=False, get_conn=get_conn, fetch_daily=fake_fetch, universe_loader=fake_universe,
                       fetch_fx_daily=fake_fx_now,
                       fetch_hourly=lambda pairs, start: {},
                       alarm=lambda *a, **k: alarms.append(a), resolve=lambda *a: None, commit="abc1234")

@@ -8,6 +8,7 @@ import { useFleetData } from "@/hooks/useFleetData";
 const NAV = [
   { path: "/", label: "Home" },
   { path: "/league", label: "League" },
+  { path: "/me", label: "Me vs bots" },
   { path: "/forex", label: "Forex" },
   { path: "/bench", label: "Research" },
   { path: "/controls", label: "Controls" },

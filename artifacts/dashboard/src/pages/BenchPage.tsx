@@ -427,11 +427,31 @@ export default function BenchPage() {
           <span className="label">Cannot start research or place orders</span>
         </div>
 
-        {fleetRecord.data ? <FleetRecordPanel record={fleetRecord.data} /> : fleetRecord.isError ? (
-          <section className="glass panel" role="alert">
-            <Status tone="problem" word="FLEET-V1 record unavailable" />
-          </section>
-        ) : null}
+        {catalog && (() => {
+          // Overview first (approved design 20 Nov): the record in five numbers, then the newest verdicts.
+          const counted = experiments.filter(isCounted);
+          const n = (o: string) => counted.filter((e) => e.outcome.trim().toLowerCase() === o).length;
+          const newest = [...counted].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 6);
+          return (<>
+            <section className="glass panel league-kpis" aria-label="Research at a glance">
+              <div className="stat"><span className="label">Tests on the record</span><span className="num-sm">{counted.length}</span><span className="small">{notCountedExperiments} more not counted</span></div>
+              <div className="stat"><span className="label">Passed</span><span className="num-sm gain">{n("pass")}</span><span className="small">their pre-set bar</span></div>
+              <div className="stat"><span className="label">Failed</span><span className="num-sm loss">{n("fail")}</span><span className="small">kept, never hidden</span></div>
+              <div className="stat"><span className="label">Still open</span><span className="num-sm">{n("pending")}</span><span className="small">waiting for data</span></div>
+              <div className="stat"><span className="label">Exploration runs</span><span className="num-sm">{runs.length}</span><span className="small">not evidence on their own</span></div>
+            </section>
+            {newest.length > 0 && (
+              <section className="glass panel" aria-label="Newest verdicts">
+                <div className="panel-head"><h2>Newest verdicts</h2><span className="label">newest first</span></div>
+                <table className="ng"><tbody>{newest.map((e) => (
+                  <tr key={String(e.id)}><td style={{ width: 110 }}><Status tone={outcomeTone(e.outcome.trim().toLowerCase())} word={outcomeLabel(e.outcome.trim().toLowerCase())} /></td>
+                    <td>{e.family}<div className="note">{e.hypothesis}</div></td><td className="small">{formatDate(e.created_at)}</td></tr>
+                ))}</tbody></table>
+              </section>
+            )}
+            <div className="fold">detail</div>
+          </>);
+        })()}
 
         {error ? (
           <section className="glass panel" role="alert" data-testid="status-bench-error">
@@ -689,6 +709,11 @@ export default function BenchPage() {
               <span>Helium snapshot {formatDate(catalog.snapshot_as_of)}{catalog.harness_as_of ? ` · latest registered test ${formatDate(catalog.harness_as_of)}` : ""}</span>
             </p>
           </>
+        ) : null}
+        {fleetRecord.data ? <FleetRecordPanel record={fleetRecord.data} /> : fleetRecord.isError ? (
+          <section className="glass panel" role="alert">
+            <Status tone="problem" word="FLEET-V1 record unavailable" />
+          </section>
         ) : null}
       </main>
     </Shell>

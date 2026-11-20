@@ -21,6 +21,7 @@ from .forex_council_log import forex_council_log_router
 from .connections import connections_router
 from .league import league_router
 from .human import human_router
+from .predictions import predictions_router
 
 ALL_ROUTERS = [
     system_router,
@@ -46,4 +47,5 @@ ALL_ROUTERS = [
     connections_router,
     league_router,
     human_router,
+    predictions_router,
 ]

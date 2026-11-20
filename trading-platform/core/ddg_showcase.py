@@ -25,7 +25,7 @@ SHOWCASE_PATHS = [
     "/fleet/equity", "/market-state", "/status/summary", "/positions/live", "/claude-report",
     "/fleet/entry-windows", "/runner/status", "/bots/pause-state", "/fleet-v1/state", "/fleet-v1/record",
     "/momo-v2/state", "/fleet/comparison", "/vault/per-bot/summary", "/fleet/holdings", "/bot-registry",
-    "/fleet/equity-history", "/fleet/bot-history?days=90",
+    "/fleet/equity-history", "/fleet/bot-history?days=90", "/league/leaderboard", "/league/records",
 ]
 LOCAL_API = os.environ.get("SHOWCASE_LOCAL_API", "http://127.0.0.1:8000") + os.environ.get("API_PREFIX", "/trading-api").rstrip("/")
 

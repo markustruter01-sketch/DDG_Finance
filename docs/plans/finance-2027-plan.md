@@ -105,6 +105,21 @@ MASTER COPY: this file in GitHub. The claude.ai Project doc `claude/finance-2027
 - These go into the league and Allocator registration files as version 1 at the lock (no edit to version 0 files).
 - Still to come from Markus: the two heartbeat monitor URLs and the backup location (agreed in principle, not yet given).
 
+### Status 20 Nov midday Brisbane (Opus 5.5): first league night, audit orders, publishes
+- First league night (19 Nov NY close, read-only check): 18 league accounts started and valued; Allocator first label "rough down"; 8 real fills measured for costs. Two faults found and fixed:
+  - S-MOMO-CAP made no decision: SSGA's Sector column was "-" for all 500 members. Fix #145 (sectors from the iShares IVV file; a missed night with a reason if none). UNKNOWN until 20 Nov night: whether IVV gives real sectors from Replit.
+  - forex_ai mirror twin failed nightly since 17 Nov (OANDA HTTP 400): it asked for "CHF_USD". Fix #142.
+- Audit orders done: AU1 #141 (Forex in the comparison), AU3 #143 (stale text), AU4 #144 (AI impact route removed), AU5 #148 (overnight financing in forex twins; Markus chose option A 20 Nov 11:32), AU9 #149 (dumps to F:\Backups\DDG-Finance on Markus's PC, removed from the repo; history not rewritten). Front end: #146 (gains green, losses amber), #147 (League v2).
+- Published 20 Nov 11:42 and 12:01 Brisbane, US market closed, read-only pre and post checks: holdings and stops unchanged, 8/8 positions covered by stops, reconciliation clean, runner handover normal.
+- MARKUS 20 Nov 12:34 Brisbane agreed all recommendations:
+  - AU6 yes: build the AI twins of Atlas, Atlas V2, Momentum (TWINS-V2 Phase B) and an "AI may reduce or skip" twin of T-15X, S-MOMO-CAP, D-XTREND. No orders, no new account. Register before the lock (12-13 Dec).
+  - AU7 yes: Forex lines pass on return above zero after costs AND above FX-BT1; diversifiers judged by what they add to the equal-money fund. Goes into the version 1 files at the lock.
+  - AU8 yes: pin dated model ids for the council at the lock as a new council version; a free model ending mid-year = a new dated version.
+  - AU10 yes: delete bots_state rows bot2_spy_qqq and forex_gump (row-count guard 2).
+  - Kill switch stays report-only until the per-bot version is built and proven.
+- Still from Markus: UptimeRobot heartbeat URL for the runner.
+- Next (Opus): Forex, Research and Controls page redesigns; phone tab bar and Home card carousel; ddg.limited public PC/phone view; AU6 build.
+
 ## Not doing
 - Any crypto, on any account or system, full stop (Markus 17 Nov; was "no crypto sleeve", 10 Nov). Coins, pairs and crypto funds. Buys refused in code (PR #117). The last BTC was sold 17 Nov (owner-approved); no crypto is held anywhere.
 - A fourth Alpaca paper account (cap is 3).

@@ -255,8 +255,10 @@ def _league_forex(acct: dict[str, Any]) -> bool:
 
 # ── forex ─────────────────────────────────────────────────────────────────────
 def _pair_of(sym: str) -> str:
-    base, quote = sym.split("_")
-    return sym if quote == "USD" else f"{quote}_{base}"     # JPY_USD -> USD_JPY
+    """The OANDA pair behind a simulator symbol: CHF_USD -> USD_CHF, EUR_USD -> EUR_USD.
+    Every symbol is X_USD, so the direction comes from the registered pair list."""
+    from research_harness.league.forex import PAIRS
+    return {engine.synthetic(p): p for p in PAIRS}[sym]
 
 
 def _mids(candles: dict[str, list[dict[str, Any]]]) -> dict[str, float]:

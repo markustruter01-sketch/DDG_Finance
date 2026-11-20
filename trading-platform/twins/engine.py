@@ -199,7 +199,8 @@ def half_spread_bps(candles: list[dict[str, Any]]) -> float:
 
 def forex_costs(spread_bps: dict[str, float]) -> SymbolCosts:
     """Measured half spread per instrument; OANDA charges no commission.
-    Financing (overnight interest) and slippage beyond the spread are left out."""
+    Slippage beyond the spread is left out. Overnight financing is not in the
+    simulator: twins/financing.py adds it to forex twins after the replay (AU5)."""
     return SymbolCosts(per_trade_bps={synthetic(p): v for p, v in spread_bps.items()},
                        sell_fee_bps=0.0, short_borrow_bps_yr=0.0, financing_spread_bps_yr=0.0,
                        omitted=("slippage", "financing"))

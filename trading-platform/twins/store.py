@@ -138,6 +138,16 @@ CREATE TABLE IF NOT EXISTS allocator_labels (
     recorded_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS twin_fx_financing (
+    day           DATE NOT NULL,               -- New York date the rates were read (after the 17:00 roll)
+    pair          TEXT NOT NULL,               -- OANDA pair, e.g. USD_CHF
+    long_rate     DOUBLE PRECISION NOT NULL,   -- yearly rate on a long position (negative = paid)
+    short_rate    DOUBLE PRECISION NOT NULL,   -- yearly rate on a short position
+    days_charged  JSONB NOT NULL,              -- weekday -> days charged at that day's 17:00 roll
+    recorded_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (day, pair)
+);
+
 CREATE OR REPLACE FUNCTION twins_append_only() RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN
     RAISE EXCEPTION '% is append-only', TG_TABLE_NAME;
@@ -145,7 +155,8 @@ END;
 $$;
 """
 
-APPEND_ONLY = ("twin_decisions", "twin_votes", "change_log", "twin_month_freeze", "allocator_labels")
+APPEND_ONLY = ("twin_decisions", "twin_votes", "change_log", "twin_month_freeze", "allocator_labels",
+               "twin_fx_financing")
 _TRIGGERS = "".join(f"""
 DO $$ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = '{t}_append_only') THEN
@@ -406,3 +417,21 @@ def labels(get_conn: GetConn) -> list[dict[str, Any]]:
         cur.execute("SELECT day, label, measurements, recorded_at FROM allocator_labels ORDER BY day")
         return [{"day": d, "label": lab, "measurements": m if isinstance(m, dict) else json.loads(m),
                  "recorded_at": at} for d, lab, m, at in cur.fetchall()]
+
+
+def record_fx_rates(get_conn: GetConn, day: date, rows: list[dict[str, Any]]) -> int:
+    """Store one day's OANDA financing rates; a pair already stored for that day is kept."""
+    n = 0
+    with get_conn() as conn, conn.cursor() as cur:
+        for r in rows:
+            cur.execute("INSERT INTO twin_fx_financing (day, pair, long_rate, short_rate, days_charged) "
+                        "VALUES (%s, %s, %s, %s, %s) ON CONFLICT (day, pair) DO NOTHING",
+                        (day, r["pair"], r["long_rate"], r["short_rate"], json.dumps(r["days_charged"])))
+            n += cur.rowcount
+    return n
+
+
+def fx_rates(get_conn: GetConn) -> list[dict[str, Any]]:
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute("SELECT day, pair, long_rate, short_rate, days_charged FROM twin_fx_financing ORDER BY day, pair")
+        return [dict(zip(("day", "pair", "long_rate", "short_rate", "days_charged"), r)) for r in cur.fetchall()]

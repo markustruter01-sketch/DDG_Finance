@@ -110,7 +110,8 @@ def _night(get_conn, day, alarms, commit="abc1234"):
     FX_NOW["t"] = ny(day, 17, 15)
     return job.nightly(ny(day, 17, 15), get_conn=get_conn, fetch_daily=fetch_daily, fetch_hourly=fetch_hourly,
                        alarm=alarms.alarm, resolve=alarms.resolve, commit=commit,
-                       with_league=False)   # the league has its own tests (test_league.py)
+                       with_league=False,   # the league has its own tests (test_league.py)
+                       record_fx_rates=lambda get_conn, now: 0)   # financing: test_twins_financing.py
 
 
 def _hour(get_conn, day, alarms):

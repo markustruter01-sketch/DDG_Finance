@@ -19,6 +19,7 @@ Writes: the twin tables only. Orders: none, ever.
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import datetime, time, timedelta, timezone
 from typing import Any, Callable
 
@@ -405,10 +406,25 @@ def _league(get_conn, now, session, daily, fetch_daily, universe_loader, alarm, 
         return f"failed: {type(exc).__name__}"
 
 
+def _fx_rates(get_conn, now, record, alarm, resolve) -> Any:
+    """Tonight's OANDA financing rates for the forex twins (AU5). A failed read
+    leaves the next roll uncharged and raises an alarm; it never stops the night."""
+    from twins import financing
+    try:
+        added = (record or financing.read_and_record)(get_conn, now)
+        resolve("fx_financing_unread")
+        return {"rows_added": added}
+    except Exception as exc:
+        alarm("warning", "fx_financing_unread",
+              f"OANDA financing rates not read tonight ({type(exc).__name__}: {str(exc)[:150]}): the forex "
+              f"pretend accounts carry no financing for the next roll.", FOREX_BOT)
+        return f"failed: {type(exc).__name__}"
+
+
 def nightly(now: datetime | None = None, *, get_conn=None, fetch_daily=None, fetch_hourly=prices.oanda_hourly,
             alarm: Callable[..., None] = _default_alarm, resolve: Callable[..., None] = _default_resolve,
             commit: str | None = None, with_league: bool = True, universe_loader=None,
-            fetch_fx_daily=None) -> dict[str, Any]:
+            fetch_fx_daily=None, record_fx_rates: Callable[..., int] | None = None) -> dict[str, Any]:
     now = now or datetime.now(timezone.utc)
     get_conn = get_conn or _default_get_conn()
     report: dict[str, Any] = {"at": now.isoformat()}
@@ -433,6 +449,7 @@ def nightly(now: datetime | None = None, *, get_conn=None, fetch_daily=None, fet
                 report["forex_start"] = f"failed: {type(exc).__name__}"
         else:
             report["share_close"] = "no US session today"
+        report["fx_rates"] = _fx_rates(get_conn, now, record_fx_rates, alarm, resolve)
         report["twins"] = replay_all(get_conn, now, daily, fetch_hourly, alarm, resolve)
         report["chains"] = verify_all(get_conn, alarm)
         report["month_end"] = _month_end(get_conn, now, report["twins"], alarm, resolve)
@@ -473,8 +490,10 @@ def replay_all(get_conn, now, daily, fetch_hourly, alarm, resolve) -> dict[str, 
     """Replay every twin; one alarm per failed twin and per drifting mirror.
     The degradation log resolves by type for all bots at once, so a type is
     resolved only on a night when it applies to no twin."""
+    from twins import financing
     out: dict[str, Any] = {}
     failed, drifting = 0, 0
+    rates = None
     for acct in store.accounts(get_conn):
         tid = acct["twin_id"]
         try:
@@ -498,10 +517,17 @@ def replay_all(get_conn, now, daily, fetch_hourly, alarm, resolve) -> dict[str, 
             if not result.curve:
                 out[tid] = "no bars yet"
                 continue
+            fin = None
+            if acct["bars"] == HOURLY or _league_forex(acct):      # forex: overnight financing (AU5)
+                if rates is None:
+                    rates = store.fx_rates(get_conn)
+                curve, fin = financing.apply(result.curve, result.fills, bars, acct["bars"], rates)
+                result = replace(result, curve=curve)
             store.upsert_equity(get_conn, tid, engine.daily_points(result.curve, acct["bars"]))
             store.upsert_fills(get_conn, tid, result.fills)
             gap = check_mirror(get_conn, acct, result) if acct["kind"] == "mirror" else None
-            out[tid] = {"equity": round(result.curve[-1][1], 2), "fills": len(result.fills), "gap_pp": gap}
+            out[tid] = {"equity": round(result.curve[-1][1], 2), "fills": len(result.fills), "gap_pp": gap,
+                        **({"financing": fin} if fin else {})}
             if gap is not None and abs(gap) > config.MIRROR_GUARD_PP:
                 drifting += 1
                 alarm("error", "twin_mirror_drift",

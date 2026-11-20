@@ -377,7 +377,38 @@ def test_load_universe_takes_sectors_from_ivv_when_ssga_has_none(monkeypatch):
     def no_ivv(url):
         raise OSError("down")
     tickers, sectors, source = league.load_universe(no_ivv)
-    assert source == "ssga_spy" and not any(sectors.values())     # kept empty, not invented
+    assert source == "ssga_spy; no sectors (ishares_ivv OSError, wikipedia OSError)"
+    assert not any(sectors.values())                                   # kept empty, not invented
+
+
+def test_load_universe_falls_back_to_wikipedia_when_ivv_returns_a_web_page(monkeypatch):
+    # 20 Nov 2026: the IVV link returned a page with no CSV in it, and the label still said "ishares_ivv".
+    import sleeve_runtime.sp500_universe as su
+
+    names = ["AAPL", "BRK.B", "XOM", "JPM"]
+    monkeypatch.setattr(su, "load_sp500_rows",
+                        lambda get: (names, [{"ticker": n, "sector": "-"} for n in names], "ssga_spy"))
+    wiki = ('<table class="wikitable" id="constituents"><tbody>'
+            '<tr><th>Symbol</th><th>Security</th><th>GICS Sector</th><th>GICS Sub-Industry</th></tr>'
+            '<tr><td><a href="#">AAPL</a></td><td>Apple Inc.</td><td>Information Technology</td><td>x</td></tr>'
+            '<tr><td><a href="#">BRK.B</a></td><td>Berkshire Hathaway</td><td>Financials</td><td>x</td></tr>'
+            '<tr><td>XOM</td><td>ExxonMobil</td><td>Energy</td><td>x</td></tr>'
+            '<tr><td>JPM</td><td>JPMorgan Chase</td><td>Financials</td><td>x</td></tr>'
+            '</tbody></table><table id="changes"><tr><th>Symbol</th><th>GICS Sector</th></tr>'
+            '<tr><td>OLD</td><td>Energy</td></tr></table>')
+    page = lambda url: (wiki if url == su.WIKI_SP500_URL else '<html>productTicker: "ivv",</html>').encode()
+    tickers, sectors, source = league.load_universe(page)
+    assert source == "ssga_spy; sectors from wikipedia"
+    assert sectors == {"AAPL": "Information Technology", "BRK.B": "Financials", "XOM": "Energy", "JPM": "Financials"}
+
+
+def test_wikipedia_parser_ignores_other_tables_and_non_gics_values():
+    import sleeve_runtime.sp500_universe as su
+    html = ('<table id="constituents"><tr><th>Symbol</th><th>GICS Sector</th></tr>'
+            '<tr><td>BF-B</td><td>Consumer Staples</td></tr><tr><td>ZZZ</td><td>Not a sector</td></tr></table>'
+            '<table id="other"><tr><th>Symbol</th><th>GICS Sector</th></tr><tr><td>Q</td><td>Energy</td></tr></table>')
+    assert su.parse_wikipedia_sectors(html) == {"BF.B": "Consumer Staples"}
+    assert su.parse_wikipedia_sectors("<html>no table</html>") == {}
 
 
 @needs_pg

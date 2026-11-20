@@ -16,12 +16,18 @@ from __future__ import annotations
 import csv
 import io
 import re
+from html.parser import HTMLParser
 from typing import Callable
 
 SSGA_URL = ("https://www.ssga.com/us/en/intermediary/etfs/library-content/products/fund-data/"
             "etfs/us/holdings-daily-us-en-spy.xlsx")
 IVV_URL = ("https://www.ishares.com/us/products/239726/ishares-core-sp-500-etf/1467271812596.ajax"
            "?fileType=csv&fileName=IVV_holdings&dataType=fund")
+# Sectors only (the Shadow League's sector cap), tried when the holdings files carry none:
+# 20 Nov 2026 SSGA wrote "-" in every Sector cell and the IVV link returned a web page, not a CSV.
+WIKI_SP500_URL = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+GICS_SECTORS = {"Communication Services", "Consumer Discretionary", "Consumer Staples", "Energy", "Financials",
+                "Health Care", "Industrials", "Information Technology", "Materials", "Real Estate", "Utilities"}
 NO_SECTOR = {"", "-", "--", "—", "N/A"}   # placeholders, not sectors
 MIN_SECTOR_SHARE = 0.9                  # below this, the sector list is treated as unavailable
 MIN_MEMBERS = 450                      # the index has ~503 lines; fewer means a broken file
@@ -123,6 +129,58 @@ def load_ivv_sectors(http_get: Callable[[str], bytes],
                      tickers: list[str]) -> dict[str, str]:
     """Sectors for ``tickers`` from the iShares IVV holdings file."""
     return sectors(parse_ivv_csv(http_get(IVV_URL).decode("utf-8-sig")), tickers)
+
+
+class _WikiTable(HTMLParser):
+    """Cells of the table with id="constituents" (Symbol, Security, GICS Sector, ...)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.rows: list[list[str]] = []
+        self._depth = 0          # >0 while inside the constituents table
+        self._cell: list[str] | None = None
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "table" and (self._depth or dict(attrs).get("id") == "constituents"):
+            self._depth += 1
+        elif self._depth == 1 and tag == "tr":
+            self.rows.append([])
+        elif self._depth == 1 and tag in ("td", "th"):
+            self._cell = []
+
+    def handle_endtag(self, tag):
+        if tag == "table" and self._depth:
+            self._depth -= 1
+        elif self._depth == 1 and tag in ("td", "th") and self._cell is not None and self.rows:
+            self.rows[-1].append(" ".join("".join(self._cell).split()))
+            self._cell = None
+
+    def handle_data(self, data):
+        if self._cell is not None:
+            self._cell.append(data)
+
+
+def parse_wikipedia_sectors(html: str) -> dict[str, str]:
+    """{ticker: GICS sector} from Wikipedia's S&P 500 list. Tickers in Alpaca's dot form (BRK.B).
+    Only the 11 GICS sector names are kept; anything else counts as no sector."""
+    p = _WikiTable()
+    p.feed(html)
+    if not p.rows:
+        return {}
+    head = p.rows[0]
+    if "Symbol" not in head or "GICS Sector" not in head:
+        return {}
+    i_sym, i_sec = head.index("Symbol"), head.index("GICS Sector")
+    out = {}
+    for r in p.rows[1:]:
+        if len(r) > max(i_sym, i_sec) and r[i_sec] in GICS_SECTORS:
+            out[r[i_sym].replace("-", ".").strip()] = r[i_sec]
+    return out
+
+
+def load_wikipedia_sectors(http_get: Callable[[str], bytes], tickers: list[str]) -> dict[str, str]:
+    by_ticker = parse_wikipedia_sectors(http_get(WIKI_SP500_URL).decode("utf-8", "replace"))
+    return {t: by_ticker.get(t, "") for t in tickers}
 
 
 def load_sp500_rows(http_get: Callable[[str], bytes]) -> tuple[list[str], list[Row], str]:

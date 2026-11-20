@@ -1,4 +1,4 @@
-"""The 2027 comparison: the three paper accounts and the S&P 500 on the same days.
+"""The 2027 comparison: the four paper accounts (Forex included, audit AU1 20 Nov) and the S&P 500 on the same days.
 
 GET /fleet/comparison returns, from the run start (core.fleet_capital.RUN_START):
 - `rows`: per common day, each account's return since the first common day and
@@ -27,7 +27,7 @@ comparison_router = APIRouter()
 
 from core.fleet_capital import RUN_START, START_EQUITY
 
-ACCOUNTS = ("oracle", "spy_qqq_trend", "jerome_macro")
+ACCOUNTS = ("oracle", "spy_qqq_trend", "jerome_macro", "forex_ai")
 FLEET = tuple(START_EQUITY)
 CUTOVER = RUN_START
 MIN_SHARPE_DAYS = 20

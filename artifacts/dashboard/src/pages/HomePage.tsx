@@ -7,8 +7,8 @@
  * on phones the two simply stack.
  * All money and return figures are server values (Rule 27); the client only
  * formats them, sums market values for the holdings mix and divides equity by
- * fleet equity for allocation shares. Three paper accounts are compared to
- * the end of 2027 (Atlas: FLEET-V1-F1, Atlas V2: FLEET-V1-C1, Momentum: MOMO-V2); the race
+ * fleet equity for allocation shares. Four paper accounts are compared to
+ * the end of 2027 (Atlas: FLEET-V1-F1, Atlas V2: FLEET-V1-C1, Momentum: MOMO-V2, Forex: the AI council); the race
  * chart and the comparison table come from /fleet/comparison, the vault card
  * from /vault/per-bot/summary.
  */
@@ -31,10 +31,9 @@ import { useComparison, useFleetV1State, useHoldings, useMomoV2State, useVaultSu
 import { ComparisonPanel, FleetAccountPanel, MomoPanel, VaultPanel } from "@/components/FleetV1";
 import { AllocatorCard, LeagueTop, RecordsCard, useLeague } from "@/components/LeagueCards";
 
-// The three accounts in the 2027 comparison. Forex (OANDA, the AI council) gets
-// its own card but stays out of the comparison and the Alpaca-only panels.
-const ACCOUNTS = ["oracle", "spy_qqq_trend", "jerome_macro"] as const;
-const CARDS: readonly string[] = [...ACCOUNTS, "forex_ai"];
+// The four accounts in the 2027 comparison and the return-by-account chart
+// (Forex included since the 20 Nov audit, AU1).
+const ACCOUNTS = ["oracle", "spy_qqq_trend", "jerome_macro", "forex_ai"] as const;
 
 // Chart colours = the brand four (same values as styles/night-glass/tokens.css).
 // Each account has its own colour (lib/bot-identity BOT_COLORS). Only losses get a
@@ -242,7 +241,7 @@ export default function HomePage() {
 
   const engines: Engine[] = useMemo(() => {
     const bots = (registry.data?.bots ?? [])
-      .filter((b) => b.status !== "retired" && CARDS.includes(b.id))
+      .filter((b) => b.status !== "retired" && (ACCOUNTS as readonly string[]).includes(b.id))
       .sort((a, b) => a.display_order - b.display_order);
     return bots.map((b) => ({
       id: b.id,

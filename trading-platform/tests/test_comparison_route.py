@@ -43,3 +43,16 @@ def test_fleet_sums_all_four_accounts_and_waits_for_forex():
     fleet = race_view(equity, spy, "2026-11-06")["fleet"]
     assert fleet["return"] == pytest.approx(-0.01) and fleet["worst_fall"] == pytest.approx(99 / 110 - 1)
     assert fleet["annual"] is None and fleet["volatility"] is None    # only from 20 days
+
+
+def test_forex_is_a_line_in_the_comparison_on_the_same_days():
+    from routes.comparison import ACCOUNTS, race_view
+
+    assert "forex_ai" in ACCOUNTS
+    days = ["2026-11-09", "2026-11-10", "2026-11-11"]
+    equity = {b: dict(zip(days, [100.0, 101.0, 102.0])) for b in ("oracle", "spy_qqq_trend", "jerome_macro")}
+    equity["forex_ai"] = {"2026-11-09": 100.0, "2026-11-11": 104.0}          # no close on the 10th
+    out = race_view(equity, dict(zip(days, [500.0, 505.0, 510.0])), "2026-11-09")
+    assert [r["date"] for r in out["rows"]] == ["2026-11-09", "2026-11-11"]    # same days for every line
+    assert out["rows"][-1]["forex_ai"] == 0.04
+    assert out["accounts"]["forex_ai"]["return"] == 0.04

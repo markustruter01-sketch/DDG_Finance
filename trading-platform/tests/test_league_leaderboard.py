@@ -100,3 +100,23 @@ def test_records_card_reads_logs_freeze_costs_and_heartbeat(monkeypatch):
     assert r["league_last_run"] is not None and r["last_frozen_month"] is None
     assert r["costs"]["model_bps"] == 5.0 and r["costs"]["fills"] == 0
     assert r["heartbeat"] == {"runner": True, "api": False}           # whether it is set, never the URL
+
+
+@needs_pg
+def test_real_accounts_on_the_board_match_home():
+    # 21 Nov: the board showed Atlas V2 +7.93% (its mirror's share-book balance, which jumped when the last
+    # crypto was sold for cash) while Home showed -5.6% since the 9 Nov start. Both now use the same numbers.
+    from core.fleet_capital import START_EQUITY
+    get_conn = make_get_conn()
+    store.ensure_schema(get_conn)
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute("DROP TABLE IF EXISTS bot_daily_returns")
+        cur.execute("CREATE TABLE bot_daily_returns (bot_id TEXT, date DATE, equity_close DOUBLE PRECISION, source TEXT)")
+        cur.execute("INSERT INTO bot_daily_returns VALUES ('jerome_macro', '2026-11-08', 1, NULL), "
+                    "('jerome_macro', '2026-11-18', 76681.29, NULL), ('jerome_macro', '2026-11-19', 75638.36, NULL), "
+                    "('jerome_macro', '2026-11-20', 1, 'portfolio_with_vault_exclusion')")
+    assert lb.real_closes(get_conn, "jerome_macro") == [(date(2026, 11, 18), 76681.29), (date(2026, 11, 19), 75638.36)]
+    line = {"id": "jerome_macro", "name": "Atlas V2", "kind": "real", "family": "real account",
+            "start_equity": START_EQUITY["jerome_macro"], "curve": lb.real_closes(get_conn, "jerome_macro")}
+    row = lb.build([line], 16)[0]
+    assert row["return_pct"] == round(100 * (75638.36 / START_EQUITY["jerome_macro"] - 1), 2) < 0

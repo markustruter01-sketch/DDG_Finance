@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
+import { Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api } from "@/hooks/use-trading-client";
 import { Shell, Status } from "@/components/Shell";
 
@@ -74,6 +75,68 @@ function ScoreTable({ title, rows, names }: { title: string; rows: Record<string
       </table>
     </div>
   );
+}
+
+
+// Overview first (approved design 20 Nov): the account, the question this page
+// answers (is the AI beating the same rules without AI?), and what is open now.
+type BoardRow = { id: string; name: string; return_pct: number | null; worst_fall_pct: number | null; curve: [string, number][] };
+type OpenTrades = { nav: number; balance: number; margin_used: number;
+  open: { pair: string; side: string; units: number; entry: number | null; stop: number | null; unrealized_usd: number | null }[] };
+const LINES = [{ id: "forex_ai", name: "AI council (real account)", color: "var(--ng-gain, #2fb768)" },
+  { id: "FX-BT1", name: "FX-BT1 · same rules, no AI", color: "rgba(255,255,255,0.75)" },
+  { id: "FX-TREND", name: "Simple trend", color: "rgba(255,255,255,0.4)" }];
+const tone = (v: number | null | undefined) => (v == null || v === 0 ? "" : v > 0 ? "gain" : "loss");
+
+function ForexOverview() {
+  const board = useQuery({ queryKey: ["league-leaderboard"], queryFn: async () => (await api.get("/league/leaderboard")).data as { rows: BoardRow[] } });
+  const open = useQuery({ queryKey: ["forex-open"], queryFn: async () => (await api.get("/forex/open")).data as OpenTrades, refetchInterval: 5 * 60_000 });
+  const rows = Object.fromEntries((board.data?.rows ?? []).map((r) => [r.id, r]));
+  const me = rows.forex_ai, bt1 = rows["FX-BT1"];
+  const gap = me?.return_pct != null && bt1?.return_pct != null ? me.return_pct - bt1.return_pct : null;
+  const days = new Map<string, Record<string, number | string>>();
+  for (const l of LINES) for (const [d, v] of rows[l.id]?.curve ?? []) days.set(d, { ...(days.get(d) ?? { d }), [l.id]: v });
+  const data = [...days.values()].sort((a, b) => String(a.d).localeCompare(String(b.d)));
+  const o = open.data;
+  return (<>
+    <section className="glass panel league-kpis" aria-label="Forex at a glance">
+      <div className="stat"><span className="label">Account value</span><span className="num-sm">{o ? `$${o.nav.toLocaleString("en-AU", { maximumFractionDigits: 0 })}` : "—"}</span><span className="small">OANDA practice, now</span></div>
+      <div className="stat"><span className="label">Return since start</span><span className={`num-sm ${tone(me?.return_pct)}`}>{me?.return_pct == null ? "—" : signed(me.return_pct)}</span><span className="small">after costs</span></div>
+      <div className="stat"><span className="label">vs no-AI rules</span><span className={`num-sm ${tone(gap)}`}>{gap == null ? "—" : `${gap > 0 ? "+" : ""}${gap.toFixed(2)} pts`}</span><span className="small">against FX-BT1</span></div>
+      <div className="stat"><span className="label">Worst fall</span><span className="num-sm">{me?.worst_fall_pct == null ? "—" : `${me.worst_fall_pct.toFixed(2)}%`}</span><span className="small">since start</span></div>
+      <div className="stat"><span className="label">Open trades</span><span className="num-sm">{o ? o.open.length : "—"}</span><span className="small">{o ? `$${o.margin_used.toLocaleString("en-AU", { maximumFractionDigits: 0 })} margin used` : "OANDA unreadable"}</span></div>
+    </section>
+    <div className="me-two" style={{ gridTemplateColumns: "minmax(0, 2fr) minmax(0, 1fr)" }}>
+      <section className="glass panel" aria-label="Does the AI add anything">
+        <div className="panel-head"><h2>Does the AI add anything?</h2><span className="label">return since start, same costs</span></div>
+        <div style={{ height: 240 }}>
+          {data.length < 2 ? <div className="empty">Not enough days to draw yet.</div> : (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+                <XAxis dataKey="d" tick={{ fill: "rgba(255,255,255,0.62)", fontSize: 11 }} minTickGap={40} />
+                <YAxis tick={{ fill: "rgba(255,255,255,0.62)", fontSize: 11 }} width={44} unit="%" />
+                <Tooltip contentStyle={{ background: "#141518", border: "1px solid rgba(255,255,255,0.1)" }} formatter={(v: number) => `${v.toFixed(2)}%`} />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                {LINES.map((l) => <Line key={l.id} dataKey={l.id} name={l.name} stroke={l.color} strokeWidth={l.id === "forex_ai" ? 2 : 1.4} dot={false} connectNulls />)}
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </section>
+      <section className="glass panel" aria-label="Open now">
+        <div className="panel-head"><h2>Open now</h2><span className="label">straight from OANDA</span></div>
+        {open.isError && <Status tone="problem" word="OANDA unreadable" />}
+        {o && !o.open.length && <div className="empty">No open trades.</div>}
+        {o && o.open.length > 0 && (
+          <table className="ng"><tbody>{o.open.map((t) => (
+            <tr key={t.pair}><td>{t.pair.replace("_", "/")}<div className="note">{t.side} · {t.units.toLocaleString("en-AU")} units{t.stop ? ` · stop ${t.stop}` : " · no stop"}</div></td>
+              <td><span className={tone(t.unrealized_usd)}>{t.unrealized_usd == null ? "—" : `${t.unrealized_usd > 0 ? "+" : t.unrealized_usd < 0 ? "−" : ""}$${Math.abs(t.unrealized_usd).toFixed(0)}`}</span></td></tr>
+          ))}</tbody></table>
+        )}
+      </section>
+    </div>
+    <div className="fold">detail</div>
+  </>);
 }
 
 // Three panels side by side: AI record, strategy record, predictions. A dash = not enough days yet.
@@ -226,13 +289,15 @@ export default function ForexPage() {
             <RefreshCw size={15} aria-hidden="true" /> {days.isFetching ? "Refreshing" : "Refresh"}
           </button>
         </div>
-        <p className="small" style={{ margin: 0 }}>
+        <p className="small" style={{ margin: 0 }}>Three AIs vote every New York trading day on 7 US-dollar pairs. Practice money on OANDA.</p>
+
+        <ForexOverview />
+        <p className="small" style={{ margin: 0 }} aria-label="How the council works">
           Every New York trading day, three AIs each read the prices and the day's central-bank and world news, and on
           their own pick a direction and strategy for every currency pair, say why it beat the others and predict how
           the trade will play out. Then they vote: 3-0 trades full size, 2-1 half size, a three-way split stays out.
           Rules then size every trade and attach a stop. Paper money on the OANDA practice account.
         </p>
-
         <ScorecardPanels />
 
         <div className="forex-days">

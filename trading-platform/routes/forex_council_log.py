@@ -11,6 +11,7 @@ scorecard computed from the ledger plus OANDA daily candles.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import sys
 import time
@@ -155,3 +156,29 @@ async def forex_council_scorecard():
     card = {**card, "computed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
     _scorecard_cache.update(at=time.time(), card=card)
     return card
+
+
+@forex_council_log_router.get("/forex/open", tags=["Forex council"])
+async def forex_open() -> dict[str, Any]:
+    """The Forex account's balance and open trades straight from OANDA (read-only GETs)."""
+    def read() -> dict[str, Any]:
+        from core.oanda_client import OandaClient
+        with OandaClient() as client:
+            summary = client.account_summary()
+            trades = client.open_trades()
+        out = []
+        for t in trades:
+            units = float(t.get("currentUnits") or 0)
+            stop = (t.get("stopLossOrder") or {}).get("price")
+            out.append({"pair": t.get("instrument"), "side": "buy" if units > 0 else "sell", "units": abs(units),
+                        "entry": float(t["price"]) if t.get("price") else None,
+                        "stop": float(stop) if stop else None,
+                        "unrealized_usd": float(t["unrealizedPL"]) if t.get("unrealizedPL") else None,
+                        "opened": t.get("openTime")})
+        return {"currency": summary["currency"], "balance": float(summary["balance"]), "nav": float(summary["nav"]),
+                "margin_used": float(summary["margin_used"]), "open": out}
+    try:
+        return await asyncio.to_thread(read)
+    except Exception as exc:
+        logger.warning(f"forex | open trades unreadable: {type(exc).__name__}: {exc}")
+        raise HTTPException(status_code=502, detail="OANDA unreadable")

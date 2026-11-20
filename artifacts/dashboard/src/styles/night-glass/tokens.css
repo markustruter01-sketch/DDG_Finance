@@ -19,6 +19,8 @@
   --ng-violet: #a78bfa;
   --ng-amber: #f5a524;
   --ng-problem: var(--ng-amber);
+  --ng-gain: #2fb768;      /* gains: a darker, crisper green than Atlas V2's mint (Markus 20 Nov) */
+  --ng-loss: var(--ng-amber);
   --ng-sans: Geist, system-ui, sans-serif;
   --ng-mono: 'Geist Mono', ui-monospace, monospace;
   /* The one landscape photo: full on home pages, blurred "dusk" at the top of every other page. */

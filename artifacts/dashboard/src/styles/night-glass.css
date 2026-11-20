@@ -57,13 +57,14 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .num-sm { font-size: 20px; font-weight: 300; line-height: 1.15; font-variant-numeric: tabular-nums; }
 .empty { display: grid; place-items: center; min-height: 64px; padding: 8px; text-align: center; font-size: 12.5px; color: var(--ng-text-3); }
 
-/* Number block: mono label above, light number below; a 2 px line under the
-   number marks a loss (amber); gains stay plain (Markus 31 Oct: Mint is Bullion's
-   colour here). Text stays white. */
+/* Number block: mono label above, light number below. Gains are green, losses
+   amber with a 2 px line under them (Markus 20 Nov: "about 10% more colour"; the
+   green is darker than Atlas V2's mint so the two never read as the same). */
 .stat { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .stat .label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gain, .loss { display: inline-block; padding-bottom: 3px; border-bottom: 2px solid transparent; }
-.loss { border-bottom-color: var(--ng-problem); }
+.gain { color: var(--ng-gain); }
+.loss { color: var(--ng-loss); border-bottom-color: var(--ng-loss); }
 
 /* ── Status: always a dot plus a word ──────────────────────────────────── */
 .status { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; white-space: nowrap; }

@@ -77,6 +77,34 @@ function TopBar({ actions }: { actions?: ReactNode }) {
   );
 }
 
+// Phone (760 px and narrower, approved design 20 Nov, Apple HIG tab bar): the top
+// pill navigation is hidden and these tabs sit at the bottom; "More" opens a
+// sheet with the rest. Labels under icons, 44 pt targets, safe-area padding.
+const TABS = [NAV[0], NAV[1], { ...NAV[2], label: "Me" }, NAV[3]];
+const MORE = [...NAV.slice(4)];
+
+function TabBar() {
+  const [location] = useLocation();
+  const [open, setOpen] = useState(false);
+  const active = (p: string) => (p === "/" ? location === "/" || location === "" : location.startsWith(p));
+  const moreActive = MORE.some((n) => active(n.path));
+  return (<>
+    {open && (
+      <div className="sheet-backdrop" onClick={() => setOpen(false)}>
+        <nav className="sheet glass" aria-label="More pages" onClick={(e) => e.stopPropagation()}>
+          {MORE.map((n) => <Link key={n.path} href={n.path} onClick={() => setOpen(false)} aria-current={active(n.path) ? "page" : undefined}>{n.label}</Link>)}
+          <a href={`${import.meta.env.BASE_URL}paper.html`} target="_blank" rel="noopener">Paper</a>
+          <button className="btn" onClick={() => setOpen(false)}>Close</button>
+        </nav>
+      </div>
+    )}
+    <nav className="tabbar glass" aria-label="Main">
+      {TABS.map((n) => <Link key={n.path} href={n.path} aria-current={active(n.path) ? "page" : undefined}>{n.label}</Link>)}
+      <button aria-expanded={open} aria-current={moreActive ? "page" : undefined} onClick={() => setOpen((v) => !v)}>More</button>
+    </nav>
+  </>);
+}
+
 export function Shell({ home = false, fit = false, actions, children }: {
   home?: boolean; fit?: boolean; actions?: ReactNode; children: ReactNode;
 }) {
@@ -86,6 +114,7 @@ export function Shell({ home = false, fit = false, actions, children }: {
         <TopBar actions={actions} />
         {children}
       </div>
+      <TabBar />
     </div>
   );
 }

@@ -392,7 +392,8 @@ export default function HomePage() {
         <div className="home-right">
           <div className="engines">
             {engines.length
-              ? engines.map((e) => <EngineCard key={e.id} e={e} mktOpen={mktOpen} />)
+              ? [...engines].sort((a, b) => (b.slice?.pnl_pct ?? -1e9) - (a.slice?.pnl_pct ?? -1e9))   // best first (Markus 20 Nov)
+                  .map((e) => <EngineCard key={e.id} e={e} mktOpen={mktOpen} />)
               : <Empty>{registry.isError ? "Engine list unavailable. Check the trading API." : "Loading engines…"}</Empty>}
           </div>
         </div>

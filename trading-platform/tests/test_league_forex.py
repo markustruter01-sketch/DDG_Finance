@@ -223,3 +223,14 @@ def test_the_council_line_is_the_forex_mirror_on_the_board():
     rows = {r["id"]: r for r in lb.read(get_conn)["rows"]}
     assert rows["FX-COUNCIL"]["kind"] == "shadow" and rows["FX-COUNCIL"]["return_pct"] == 1.0   # engine value
     assert rows["forex_ai"]["kind"] == "real" and rows["forex_ai"]["equity"] == 100_900.0     # real value
+
+
+def test_currency_cap_cuts_the_trade_that_would_pile_onto_one_currency():
+    # 21 Nov: all four FX-BT1 trades were long the US dollar. With the cap at 1.5x, a fourth dollar-long
+    # trade only gets what is left of the dollar's room.
+    pos = {"EUR_USD": {"dir": "short", "w": 0.6}, "AUD_USD": {"dir": "short", "w": 0.5}}   # +1.1 USD
+    assert fx.currency_exposure(pos) == {"EUR": -0.6, "USD": 1.1, "AUD": -0.5}
+    assert fx.capped_size(pos, "USD_CHF", "long", 0.7, 1.5) == pytest.approx(0.4)          # USD room 0.4
+    assert fx.capped_size(pos, "USD_JPY", "short", 0.7, 1.5) == pytest.approx(0.7)         # a dollar short: fine
+    full = dict(pos, NZD_USD={"dir": "short", "w": 0.4})                                    # USD now at 1.5
+    assert fx.capped_size(full, "USD_CAD", "long", 0.3, 1.5) == 0.0

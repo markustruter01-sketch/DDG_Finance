@@ -330,6 +330,8 @@ STRATEGIES: tuple[Strategy, ...] = (
     Strategy("ST-TOM", "short_term", "Index only around the turn of the month", "once", ("SPY",), _tom),
     Strategy("FX-BT1", "forex", "Forex trend baseline (FX-BT1, no AI)", "once", fx.PAIRS, fx._fx_bt1,
              max_gross=fx.GROSS_CAP, allow_short=True, forex=True),
+    Strategy("FX-BT1-CAP", "forex", "FX-BT1 with a one-currency cap", "once", fx.PAIRS, fx._fx_bt1_cap,
+             max_gross=fx.GROSS_CAP, allow_short=True, forex=True),
     Strategy("FX-TREND", "forex", "Simple currency trend", "monthly", fx.PAIRS, fx._fx_trend,
              max_gross=fx.GROSS_CAP, allow_short=True, forex=True),
 )

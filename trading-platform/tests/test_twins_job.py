@@ -253,3 +253,15 @@ def test_mirror_gap_uses_the_value_recorded_on_the_day_so_a_dividend_counts_once
     assert job.check_mirror(get_conn, acct, None) == 0.0          # after the pay date: no gap left
     gaps = {r["day"]: r["gap_pp"] for r in store.equity_rows(get_conn, tid)}
     assert gaps == {D0: None, D1: 0.0, D2: 1.0, D3: 0.0}          # open only between ex-date and pay date
+
+
+def test_simulator_symbols_map_back_to_real_oanda_pairs():
+    # 17-19 Nov: the Forex twin asked OANDA for "CHF_USD" (no such pair, HTTP 400).
+    from research_harness.league.forex import PAIRS
+    from twins import engine
+    from twins.job import _pair_of
+
+    assert _pair_of("CHF_USD") == "USD_CHF"
+    assert _pair_of("JPY_USD") == "USD_JPY"
+    assert _pair_of("EUR_USD") == "EUR_USD"
+    assert sorted(_pair_of(engine.synthetic(p)) for p in PAIRS) == sorted(PAIRS)

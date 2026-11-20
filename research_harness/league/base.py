@@ -60,6 +60,7 @@ class Strategy:
     target: Callable[[HistoryView, Context], Call | None]
     stop_pct: float | None = None
     uses_universe: bool = False
+    uses_sectors: bool = False                 # needs a real sector for most members (else a missed night)
     history_sessions: int = 260                # sessions of history it needs before day 1
     max_gross: float = 1.0                     # longs plus shorts, as a share of equity
     allow_short: bool = False

@@ -442,3 +442,27 @@ table.ng input { width: 7em; }
 @media (max-width: 900px) { .ticket { grid-template-columns: 1fr; } }
 .me-two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 12px; }
 @media (max-width: 900px) { .me-two { grid-template-columns: 1fr; } }
+
+/* ── Phone (approved design 20 Nov): bottom tab bar, swipeable account cards ─ */
+.tabbar, .sheet-backdrop { display: none; }
+@media (max-width: 760px) {
+  .topbar .nav { display: none; }
+  .ng-wrap { padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
+  .tabbar { display: flex; position: fixed; z-index: 50; left: 8px; right: 8px; bottom: calc(8px + env(safe-area-inset-bottom));
+    padding: 4px; border-radius: 18px; gap: 2px; }
+  .tabbar a, .tabbar button { all: unset; flex: 1; display: flex; align-items: center; justify-content: center;
+    min-height: 48px; border-radius: 14px; font-size: 13px; color: var(--ng-text-2); cursor: pointer; }
+  .tabbar [aria-current='page'] { background: rgba(255,255,255,0.12); color: var(--ng-text); }
+  .tabbar a:focus-visible, .tabbar button:focus-visible { outline: 2px solid var(--ng-ice); }
+  .sheet-backdrop { display: block; position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,0.45); }
+  .sheet { position: absolute; left: 8px; right: 8px; bottom: calc(8px + env(safe-area-inset-bottom));
+    display: flex; flex-direction: column; gap: 4px; padding: 10px; border-radius: 20px; }
+  .sheet a { display: flex; align-items: center; min-height: 48px; padding: 0 16px; border-radius: 12px; font-size: 17px; color: var(--ng-text); }
+  .sheet a[aria-current='page'] { background: rgba(255,255,255,0.10); }
+  .sheet .btn { margin-top: 6px; justify-content: center; min-height: 48px; }
+  /* Account cards: one card nearly full width, the next one peeking; swipe sideways. */
+  .engines, .home-right .engines { display: flex; grid-template-columns: none; overflow-x: auto; scroll-snap-type: x mandatory;
+    gap: 10px; margin: 0 -14px; padding: 0 14px 6px; scrollbar-width: none; }
+  .engines::-webkit-scrollbar { display: none; }
+  .engines > * { flex: 0 0 86%; scroll-snap-align: center; }
+}

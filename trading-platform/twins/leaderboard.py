@@ -47,7 +47,7 @@ def daily_returns(curve: list[tuple[date, float]]) -> list[float]:
 
 
 def days_in_cash(curve_days: list[date], decisions: list[tuple[date, dict[str, float] | None]]) -> int | None:
-    live = sorted((d, w) for d, w in decisions if w is not None)
+    live = sorted(((d, w) for d, w in decisions if w is not None), key=lambda x: x[0])   # same day: keep order
     if not live:
         return None
     keys = [d for d, _ in live]
@@ -100,7 +100,7 @@ def build(lines: list[dict[str, Any]], n_trials: int) -> list[dict[str, Any]]:
             row["dsr"] = round(dsr, 4)
             row["luck"] = "clear" if dsr >= LUCK_CLEAR else "could be luck"
         out.append(row)
-    order = {"real": 0, "yardstick": 1, "shadow": 2, "allocator": 3}
+    order = {"human": 0, "real": 1, "yardstick": 2, "ai": 3, "shadow": 4, "allocator": 5}
     return sorted(out, key=lambda x: (order.get(x["kind"], 3), -(x["return_pct"] if x["return_pct"] is not None
                                                                    else -1e9)))
 
@@ -136,6 +136,7 @@ def read(get_conn) -> dict[str, Any]:
                 lines.append({"id": COUNCIL_LINE, "name": "Forex AI council (mirror twin)", "kind": "shadow",
                               "family": "forex", "start_equity": acct["start_equity"],
                               "curve": [(r["day"], r["equity"]) for r in rows if r["equity"]], "decisions": decs})
+    lines += _ai_and_human(get_conn)
     from twins import allocator
     fund_rows, regime = allocator.lines_for_board(get_conn)
     lines += fund_rows
@@ -146,6 +147,32 @@ def read(get_conn) -> dict[str, Any]:
                           "status": "provisional"},
             "regime": regime,
             "rows": build(lines, n_trials)}
+
+
+def _ai_and_human(get_conn) -> list[dict[str, Any]]:
+    """The AI twins (current version) and Markus's own account (newest version)."""
+    from core.bot_registry import display_name
+    from twins import ai_council, engine, human, store
+    from twins.config import DAILY
+
+    want = {t.twin_id: t for t in ai_council.twins()}
+    accts = store.accounts(get_conn)
+    mine = sorted((a for a in accts if a["bot_id"] == human.HUMAN_BOT), key=lambda a: a["version"])[-1:]
+    out = []
+    for acct in [a for a in accts if a["twin_id"] in want] + mine:
+        rows = store.equity_rows(get_conn, acct["twin_id"])
+        decs = [(engine.step_of(r["step_at"], DAILY), r["weights"]) for r in store.decisions(get_conn, acct["twin_id"])]
+        if acct["kind"] == "human":
+            line = {"id": "HUMAN", "name": "Markus" + (" (practice)" if acct["version"] == 0 else ""),
+                    "kind": "human", "family": "human"}
+        else:
+            tw = want[acct["twin_id"]]
+            name = (f"{display_name(tw.base)} with AI" if tw.kind == "ai"
+                    else f"{tw.base}, AI may cut or skip")
+            line = {"id": f"AI-{tw.base}", "name": name, "kind": "ai", "family": "ai"}
+        out.append({**line, "start_equity": acct["start_equity"],
+                    "curve": [(r["day"], r["equity"]) for r in rows if r["equity"]], "decisions": decs})
+    return out
 
 
 def records(get_conn) -> dict[str, Any]:

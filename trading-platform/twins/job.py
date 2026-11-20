@@ -246,7 +246,9 @@ def share_symbols(get_conn, states) -> list[str]:
         if acct["bars"] == DAILY and not _league_forex(acct):    # forex prices come from OANDA, not Alpaca
             for d in store.decisions(get_conn, acct["twin_id"]):
                 syms |= set(d["weights"] or {})
-    return sorted(s for s in syms if s)
+    from research_harness.league.forex import PAIRS
+    fx = {engine.synthetic(p) for p in PAIRS} | set(PAIRS)       # currencies: OANDA prices, never Alpaca
+    return sorted(s for s in syms if s and s not in fx)
 
 
 def _league_forex(acct: dict[str, Any]) -> bool:
@@ -539,7 +541,7 @@ def replay_all(get_conn, now, daily, fetch_hourly, alarm, resolve) -> dict[str, 
                 bars = engine.forex_bars(candles)
             else:
                 bars = daily
-                if _league_forex(acct):
+                if _league_forex(acct) or acct["kind"] == "human":
                     need = {s for r in store.decisions(get_conn, tid) for s in (r["weights"] or {})}
                     if not need <= set(bars):
                         out[tid] = "no forex prices tonight: last value kept"
@@ -553,7 +555,7 @@ def replay_all(get_conn, now, daily, fetch_hourly, alarm, resolve) -> dict[str, 
                 result = replace(result, curve=ai_council.charge(result.curve,
                                                                  store.ai_monthly_costs(get_conn, tid)))
             fin = None
-            if acct["bars"] == HOURLY or _league_forex(acct):      # forex: overnight financing (AU5)
+            if acct["bars"] == HOURLY or _league_forex(acct) or acct["kind"] == "human":   # forex financing (AU5)
                 if rates is None:
                     rates = store.fx_rates(get_conn)
                 curve, fin = financing.apply(result.curve, result.fills, bars, acct["bars"], rates)

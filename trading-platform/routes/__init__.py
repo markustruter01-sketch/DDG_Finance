@@ -20,6 +20,7 @@ from .comparison import comparison_router
 from .forex_council_log import forex_council_log_router
 from .connections import connections_router
 from .league import league_router
+from .human import human_router
 
 ALL_ROUTERS = [
     system_router,
@@ -44,4 +45,5 @@ ALL_ROUTERS = [
     forex_council_log_router,
     connections_router,
     league_router,
+    human_router,
 ]

@@ -107,7 +107,7 @@ def ensure_accounts(get_conn, session: date, registrations: dict[str, dict[str, 
                "max_gross": strategy.max_gross, "allow_short": strategy.allow_short,
                "stop_pct": strategy.stop_pct,
                "costs": "twins.config.SHARE_COSTS (0 commission, 2 bps half spread, 3 bps slippage); "
-                        + ("forex financing (overnight interest) left out, as in FX-BT1" if strategy.forex else
+                        + ("OANDA overnight financing charged at each 17:00 roll (twins/financing.py, rates read nightly from 20 Nov 2026)" if strategy.forex else
                            "2x funds carry their own borrowing cost in their price; idle money in BIL")}
         if store.create_account(get_conn, twin_id=tid, bot_id=LEAGUE_BOT, kind=kind_of(strategy),
                                 version=LEAGUE_VERSION, bars=DAILY, start_at=step_at,

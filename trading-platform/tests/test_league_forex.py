@@ -162,7 +162,7 @@ def test_forex_lines_start_trade_short_and_never_ask_alpaca_for_currencies():
     trend = store.decisions(get_conn, league.twin_id("FX-TREND"))[-1]["weights"]
     assert any(w < 0 for w in trend.values()) and "BIL" not in trend
     nxt = date(2026, 10, 12)
-    out = job.nightly(datetime.combine(nxt, time(17, 15), NEW_YORK), get_conn=get_conn, fetch_daily=alpaca,
+    out = job.nightly(datetime.combine(nxt, time(17, 15), NEW_YORK), record_fx_rates=lambda g, n: 0, get_conn=get_conn, fetch_daily=alpaca,
                       universe_loader=fake_universe, fetch_fx_daily=lambda pairs: fake_fx_ext(pairs, nxt),
                       fetch_hourly=lambda pairs, start: {}, alarm=lambda *a, **k: None,
                       resolve=lambda *a: None, commit="abc1234")

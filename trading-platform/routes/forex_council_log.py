@@ -7,6 +7,7 @@ scorecard computed from the ledger plus OANDA daily candles.
 - GET /forex-council/days                 newest days first: status and final calls
 - GET /forex-council/day/{trading_day}    one day in full: news, both members, decider, trades
 - GET /forex-council/scorecard            hit rate and average move per AI and per strategy
+- GET /forex-council/costs                what the council's AI calls cost, per month (list prices)
 """
 
 from __future__ import annotations
@@ -135,6 +136,33 @@ async def forex_council_day(trading_day: date):
         raise HTTPException(status_code=404, detail="No council record for that day")
     d, s, r, sha = rows[0]
     return day_detail(d, s, _record(r), sha, _reports([d]).get(d))
+
+
+def council_costs(rows: list[tuple]) -> list[dict[str, Any]]:
+    """Each month's AI cost of the real council, from the token counts the ledger already keeps.
+
+    Prices come from twins.ai_council.PRICES (one list for the whole platform). A call with no
+    token counts, or a model with no listed price, is counted as "unpriced", never as $0.
+    """
+    from twins.ai_council import cost_usd
+    months: dict[str, dict[str, Any]] = {}
+    for trading_day, record in rows:
+        m = months.setdefault(trading_day.strftime("%Y-%m"), {"month": trading_day.strftime("%Y-%m"),
+                                                              "usd": 0.0, "calls": 0, "unpriced": 0})
+        for call in _record(record).get("calls") or []:
+            m["calls"] += 1
+            c = cost_usd(call.get("model", ""), call.get("usage"))
+            if c is None:
+                m["unpriced"] += 1
+            else:
+                m["usd"] = round(m["usd"] + c, 6)
+    return sorted(months.values(), key=lambda m: m["month"], reverse=True)
+
+
+@forex_council_log_router.get("/forex-council/costs")
+async def forex_council_costs():
+    rows = await asyncio.to_thread(_rows, "SELECT trading_day, record FROM forex_decision_ledger ORDER BY trading_day")
+    return {"months": council_costs(rows), "prices": "list prices; a free tier would make some calls cheaper"}
 
 
 @forex_council_log_router.get("/forex-council/scorecard")

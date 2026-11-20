@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/hooks/use-trading-client";
 import { Shell, Status } from "@/components/Shell";
+import { returnSince, type Curve } from "@/lib/curves";
 
 // Me vs the machines (Markus, 20 Nov 2026). Markus's own pretend account
 // (twins/human.py) and the 2027 predictions (twins/predictions.py). Overview
@@ -16,7 +17,7 @@ type Trade = { id: number; at: string; fills_after: string; asset: string; side:
 type Account = { version: number; twin_id: string; label: string; start_at: string; start_equity: number;
   equity: number | null; valued_day: string | null; target: { asset: string; percent: number }[]; trades: Trade[] };
 type AccountView = { accounts: Account[]; rules: { start_equity: number; max_gross_pct: number; record_year: number; min_reason: number } };
-type Row = { id: string; name: string; kind: string; family: string | null; return_pct: number | null };
+type Row = { id: string; name: string; kind: string; family: string | null; return_pct: number | null; curve: Curve };
 type MarketF = { direction: "up" | "flat" | "down"; change_pct: number };
 type Entry = { id: number; author: string; model: string | null; thesis: string; filed_at: string; versions: number;
   forecasts: { markets: Record<string, MarketF>; macro: Record<string, number> } };
@@ -34,8 +35,10 @@ const err = (e: unknown) => {
   return typeof d === "string" ? d : e instanceof Error ? e.message : "Request failed";
 };
 
-function group(rows: Row[], pick: (r: Row) => boolean) {
-  const vals = rows.filter(pick).map((r) => r.return_pct).filter((v): v is number => v != null);
+// Everyone is measured from the same day: the first day Markus's account has a value (front-end audit 21 Nov:
+// the real bots start 9 Nov, the league 19 Nov, the AI copies later, so their own "since start" don't compare).
+function group(rows: Row[], pick: (r: Row) => boolean, from: string | null) {
+  const vals = rows.filter(pick).map((r) => (from ? returnSince(r.curve, from) : null)).filter((v): v is number => v != null);
   if (!vals.length) return { best: null, avg: null, n: 0 };
   return { best: Math.max(...vals), avg: vals.reduce((a, b) => a + b, 0) / vals.length, n: vals.length };
 }
@@ -144,10 +147,14 @@ export default function MePage() {
   const shown = accounts.find((a) => a.version === tab) ?? accounts[accounts.length - 1];
   const rows = board.data?.rows ?? [];
   const me = rows.find((r) => r.kind === "human");
-  const ai = useMemo(() => group(rows, (r) => r.kind === "ai" || AI_REAL.has(r.id)), [rows]);
-  const rules = useMemo(() => group(rows, (r) => r.kind === "shadow" && r.family !== "forex" || RULE_REAL.has(r.id)), [rows]);
+  const from = me?.curve?.[0]?.[0] ?? null;          // my first valued day
+  const ai = useMemo(() => group(rows, (r) => r.kind === "ai" || AI_REAL.has(r.id), from), [rows, from]);
+  const rules = useMemo(() => group(rows, (r) => r.kind === "shadow" && r.family !== "forex" || RULE_REAL.has(r.id), from), [rows, from]);
   const spx = rows.find((r) => r.id === "Y-SPX");
+  const spxR = spx && from ? returnSince(spx.curve, from) : null;
   const myReturn = shown?.equity != null ? 100 * (shown.equity / shown.start_equity - 1) : null;
+  const myR = me && from ? returnSince(me.curve, from) : null;
+  const ranked = rows.map((r) => (from ? returnSince(r.curve, from) : null)).filter((v): v is number => v != null);
   const p = preds.data;
   const mine = p?.entries.find((e) => e.author === "Markus");
 
@@ -163,10 +170,10 @@ export default function MePage() {
 
         <section className="glass panel league-kpis" aria-label="Head to head">
           <div className="stat"><span className="label">Me{shown ? ` · ${shown.label}` : ""}</span><span className={`num-sm ${tone(myReturn)}`}>{pct(myReturn)}</span><span className="small">{money(shown?.equity ?? shown?.start_equity)} {shown?.valued_day ? `on ${shown.valued_day}` : "· not valued yet"}</span></div>
-          <div className="stat"><span className="label">AI council</span><span className={`num-sm ${tone(ai.best)}`}>{pct(ai.best)}</span><span className="small">best of {ai.n} · average {pct(ai.avg)}</span></div>
-          <div className="stat"><span className="label">Rule bots</span><span className={`num-sm ${tone(rules.best)}`}>{pct(rules.best)}</span><span className="small">best of {rules.n} · average {pct(rules.avg)}</span></div>
-          <div className="stat"><span className="label">S&amp;P 500</span><span className={`num-sm ${tone(spx?.return_pct)}`}>{pct(spx?.return_pct)}</span><span className="small">buy and hold, same costs</span></div>
-          <div className="stat"><span className="label">My rank</span><span className="num-sm">{me?.return_pct != null ? `${rows.filter((r) => (r.return_pct ?? -1e9) > me.return_pct!).length + 1} of ${rows.filter((r) => r.return_pct != null).length}` : "—"}</span><span className="small">every line on the board</span></div>
+          <div className="stat"><span className="label">AI council</span><span className={`num-sm ${tone(ai.best)}`}>{pct(ai.best)}</span><span className="small">best of {ai.n} · average {pct(ai.avg)} · since {from ?? "—"}</span></div>
+          <div className="stat"><span className="label">Rule bots</span><span className={`num-sm ${tone(rules.best)}`}>{pct(rules.best)}</span><span className="small">best of {rules.n} · average {pct(rules.avg)} · since {from ?? "—"}</span></div>
+          <div className="stat"><span className="label">S&amp;P 500</span><span className={`num-sm ${tone(spxR)}`}>{pct(spxR)}</span><span className="small">buy and hold, same costs, since {from ?? "—"}</span></div>
+          <div className="stat"><span className="label">My rank</span><span className="num-sm">{myR != null ? `${ranked.filter((v) => v > myR).length + 1} of ${ranked.length}` : "—"}</span><span className="small">every line on the board, same days</span></div>
         </section>
 
         {accounts.length > 1 && (

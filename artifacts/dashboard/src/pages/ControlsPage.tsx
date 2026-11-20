@@ -257,6 +257,54 @@ function Connections() {
   );
 }
 
+
+type Alarm = { id: number; error_type: string; message: string; ts?: string; created_at?: string; severity?: string; bot_id?: string | null };
+
+/** Overview first (approved design 20 Nov): what needs Markus, in order of urgency, then the counts. */
+function NeedsYou({ state }: { state: PauseState }) {
+  const alarms = useQuery({
+    queryKey: ["unresolved-alarms"],
+    queryFn: async () => (await api.get("/system/degradations", { params: { hours: 24 * 30, unresolved_only: true, limit: 50 } })).data as { events: Alarm[] },
+    refetchInterval: 60_000,
+  });
+  const links = useQuery({
+    queryKey: ["connections"],
+    queryFn: async () => (await api.get("/connections")).data as { links: Link[] },
+    refetchInterval: 60_000,
+  });
+  const open = alarms.data?.events ?? [];
+  const failing = (links.data?.links ?? []).filter((l) => l.state === "failing");
+  const paused = state.bots.filter((b) => b.paused !== false);
+  const items: { tone: "problem" | "late"; text: string }[] = [
+    ...(state.kill_switch_tripped ? [{ tone: "problem" as const, text: "Emergency stop has tripped" }] : []),
+    ...failing.map((l) => ({ tone: "problem" as const, text: `${l.name} is failing${l.last_error ? `: ${l.last_error}` : ""}` })),
+    ...(open.length ? [{ tone: "problem" as const, text: `${open.length} alarm${open.length > 1 ? "s" : ""} open · newest: ${open[0].message}` }] : []),
+    ...paused.map((b) => ({ tone: "late" as const, text: `${b.bot_id} is ${b.paused === null ? "unknown (treated as paused)" : "paused"}${b.pause_reason ? `: ${b.pause_reason}` : ""}` })),
+  ];
+  return (<>
+    <section className="glass panel league-kpis" aria-label="Controls at a glance">
+      <div className="stat"><span className="label">Bots running</span><span className="num-sm">{state.bots.length - paused.length} / {state.bots.length}</span><span className="small">{paused.length ? `${paused.length} paused` : "none paused"}</span></div>
+      <div className="stat"><span className="label">Emergency stop</span><span className={`num-sm ${state.kill_switch_tripped ? "loss" : ""}`}>{state.kill_switch_tripped ? "Tripped" : "Not tripped"}</span><span className="small">manual button below</span></div>
+      <div className="stat"><span className="label">Open alarms</span><span className={`num-sm ${open.length ? "loss" : ""}`}>{alarms.isError ? "—" : open.length}</span><span className="small">last 30 days, unresolved</span></div>
+      <div className="stat"><span className="label">Connections</span><span className={`num-sm ${failing.length ? "loss" : ""}`}>{links.data ? `${links.data.links.length - failing.length} / ${links.data.links.length}` : "—"}</span><span className="small">working</span></div>
+    </section>
+    <section className="glass panel" aria-label="Needs you" style={items.length ? { borderColor: "rgba(245,165,36,0.45)" } : undefined}>
+      <div className="panel-head"><h2>Needs you</h2><span className="label">most urgent first</span></div>
+      {!items.length ? <div className="empty">Nothing needs you right now.</div> : (
+        <ul className="list">{items.map((x, i) => <li key={i}><Status tone={x.tone} word={x.text} /></li>)}</ul>
+      )}
+      {open.length > 0 && (
+        <details style={{ marginTop: 8 }}><summary className="small" style={{ cursor: "pointer" }}>Every open alarm</summary>
+          <table className="ng"><tbody>{open.map((a) => (
+            <tr key={a.id}><td className="small">{(a.ts ?? a.created_at ?? "").slice(0, 16).replace("T", " ")}</td><td>{a.error_type}<div className="note">{a.message}</div></td></tr>
+          ))}</tbody></table>
+        </details>
+      )}
+    </section>
+    <div className="fold">detail</div>
+  </>);
+}
+
 export default function ControlsPage() {
   const state = useQuery({
     queryKey: PAUSE_KEY,
@@ -283,6 +331,7 @@ export default function ControlsPage() {
         )}
         {state.data && (
           <>
+            <NeedsYou state={state.data} />
             <section className="glass panel" aria-label="Bots">
               <div className="panel-head"><h2>Bots</h2><span className="label">{state.data.bots.length} bots</span></div>
               <ul className="list">{state.data.bots.map((row) => <BotRow key={row.bot_id} row={row} />)}</ul>

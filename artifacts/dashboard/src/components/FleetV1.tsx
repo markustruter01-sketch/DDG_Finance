@@ -231,7 +231,7 @@ export function ComparisonPanel({ data, names }: { data: Comparison | undefined;
         <span className="label">verdict 31 Dec 2027</span>
       </div>
       {!data || data.days < 2 ? (
-        <div className="note">Starts with the first two closes after cutover ({data?.since ?? "3 Nov 2026"}).</div>
+        <div className="note">Starts with the first two closes after cutover ({data?.since ?? "9 Nov 2026"}).</div>
       ) : (
         <div className="table-scroll">
           <table className="ng">

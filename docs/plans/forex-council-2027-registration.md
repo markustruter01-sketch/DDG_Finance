@@ -15,6 +15,7 @@ Once confirmed, nothing below changes; any change is a new dated version reporte
 
 ## Period
 - Start: the 6 Nov 2026 New York close (software restart; no broker reset). Start NAV: $99,586.58 (bot_daily_returns, 6 Nov). Single source in code: trading-platform/core/fleet_capital.py.
+- Note 20 Nov 2026 (audit AU3; the line above is left as registered): two start points exist and both are kept. The council's own record (this registration) starts at the 6 Nov close, $99,586.58. The four-account 2027 comparison and the fleet figures start at RUN_START = the 9 Nov session, $99,469.35 for Forex (trading-platform/core/fleet_capital.py, the one code source for that start). fleet_capital.py does not hold the 6 Nov figure; the line above is wrong on that point.
 - First report: 30 Jun 2027 (report only, no pass/fail). Verdict: 31 Dec 2027.
 
 ## Measured (all reported, good or bad)

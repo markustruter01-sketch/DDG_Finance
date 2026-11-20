@@ -5,33 +5,33 @@ dashboard, and a separately hosted Python runner. Static code and workflow
 configuration establish registration and wiring; they do not by themselves prove
 that a runner process is currently deployed or running.
 
-## Current Alpaca paper bots
+## Current accounts (updated 20 Nov 2026, audit AU3)
 
-The executable fleet is the three-tuple registration in
-`kraken-bot/runner.py`, not the historical names still present in compatibility
-code:
+Four paper accounts, registered in `kraken-bot/runner.py`. No crypto on any
+account or system (owner, 17 Nov 2026; buys refused in code). Start balances and
+the run start (9 Nov 2026) are in `trading-platform/core/fleet_capital.py`.
 
-1. **`oracle`** — Global ETF Trend. It is wired to
-   `kraken-bot/asia_trend_strategy.py:run_asia_cycle`. The current profile calls
-   this `etf_trend_global` and covers SPY/QQQ plus Asia-Pacific and emerging-market
-   ETFs. The module uses the shared EMA50/200 trend engine, scale-outs, trailing
-   stops, and exit management. Its configured runner interval is one hour.
-2. **`spy_qqq_trend`** — the canonical ID whose legacy profile key is
-   `bot2_spy_qqq`. It is wired to
-   `kraken-bot/bot2_momentum_strategy.py:run_bot2_cycle`. The current module is a
-   single-stock 12-1 momentum strategy using a 252-session lookback, a
-   liquidity-screened universe, top-20 equal weighting, and monthly rebalancing.
-   It is paused in both the profile and the strategy module.
-3. **`jerome_macro`** — Jerome hard-assets sleeve. It is wired to
-   `kraken-bot/bot3_hard_assets_strategy.py:run_bot3_cycle` and covers BTC/USD,
-   ETH/USD, GLD, and SLV, with vault symbols BIL and VOO. The profile and module
-   currently set this bot as unpaused, but its actual execution still depends on
-   runner mode, database pause alignment, and lock checks.
+1. **`oracle` (Atlas)** — Alpaca paper. Runner slot
+   `asia_trend_strategy.run_asia_cycle`; with the profile flag
+   `FLEET_SLEEVE_LIVE` it runs FLEET-V1-F1 (`sleeve_runtime/fleet_live.py`): the
+   geared S&P/Nasdaq trend core plus a cross-asset sleeve. The module's own
+   header still describes the old Asia ETF strategy; the flag decides.
+2. **`jerome_macro` (Atlas V2)** — Alpaca paper.
+   `bullion_strategy.run_bullion_cycle` runs FLEET-V1-C1: the same trend core
+   without the cross-asset sleeve. Planned to become the Defensive stocks
+   strategy at the strategy lock (about 12-13 Dec 2026).
+3. **`spy_qqq_trend` (Momentum)** — Alpaca paper.
+   `momo_strategy.run_momo_account_cycle` runs MOMO-V2
+   (`sleeve_runtime/momo_live.py`): 50 S&P 500 members by 12-1 momentum, with
+   brakes on the book.
+4. **`forex_ai` (Forex)** — OANDA practice account.
+   `forex_ai_strategy.run_forex_cycle`: a three-AI council on seven US-dollar
+   pairs (`docs/plans/forex-council-2027-registration.md`).
 
-All three profiles use Alpaca's paper endpoint. The runner defaults to
-read-only mode unless explicitly configured otherwise. The runner's current
-checked-in registration is evidence of code wiring, not evidence of live order
-execution.
+Around them, with no orders: the pretend-account engine (`trading-platform/twins/`),
+the Shadow League of 15 strategies plus 3 yardsticks
+(`research_harness/league/`), and the Allocator (`research_harness/league/allocator.py`).
+The runner registration is evidence of code wiring, not of live order execution.
 
 # Verified architecture
 
@@ -75,8 +75,8 @@ reserve sweep.
 ## Dashboard, health, and alerts
 
 The current frontend is the React/Vite application in `artifacts/dashboard`.
-It routes the home, streaming, research-bench, and system-health surfaces and
-uses the API server artifact. The checked-in repository does not establish that
+It routes Home (`/`), League (`/league`), Forex (`/forex`), Research
+(`/bench`) and Controls (`/controls`), and uses the API server artifact. The checked-in repository does not establish that
 the dashboard workflow is currently running.
 
 `GET /system/health-architecture` is implemented in

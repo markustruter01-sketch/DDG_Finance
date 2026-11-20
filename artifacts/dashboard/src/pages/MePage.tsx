@@ -57,7 +57,7 @@ function TradeTicket({ catalog, onDone }: { catalog: Catalog; onDone: () => void
   });
   const valid = klass?.assets.some((a) => a.symbol === asset) && reason.trim().length >= 10;
   return (
-    <section className="glass panel" aria-label="Place a trade">
+    <section className="glass panel me-ticket" aria-label="Place a trade">
       <div className="panel-head"><h2>Place a trade</h2><span className="label">sets how much of the account one asset is · fills at the next US open</span></div>
       <div className="ticket">
         <label className="field"><span className="label">Asset class</span>
@@ -181,10 +181,10 @@ export default function MePage() {
             {accounts.map((a) => <button key={a.version} className={`chip${shown?.version === a.version ? " on" : ""}`} onClick={() => setTab(a.version)}>{a.label}</button>)}
           </div>
         )}
+        <div className="me-grid">
         {catalog.data && <TradeTicket catalog={catalog.data} onDone={() => undefined} />}
 
-        <div className="me-two">
-          <section className="glass panel" aria-label="What I hold">
+          <section className="glass panel me-hold" aria-label="What I hold">
             <div className="panel-head"><h2>What I hold</h2><span className="label">target after the next open · rest in T-bills</span></div>
             {!shown?.target.length ? <div className="empty">Nothing yet: all in T-bills.</div> : (
               <table className="ng"><tbody>{shown.target.map((h) => (
@@ -192,7 +192,7 @@ export default function MePage() {
               ))}</tbody></table>
             )}
           </section>
-          <section className="glass panel" aria-label="Trade log">
+          <section className="glass panel me-log" aria-label="Trade log">
             <div className="panel-head"><h2>Trade log</h2><span className="label">newest first · every reason kept</span></div>
             {!shown?.trades.length ? <div className="empty">No trades yet.</div> : (
               <div className="table-scroll" style={{ maxHeight: 320 }}><table className="ng"><tbody>{shown.trades.map((t) => (
@@ -204,7 +204,7 @@ export default function MePage() {
         </div>
 
         <div className="fold">2027 predictions</div>
-        {p && (<>
+        {p && (<div className="split">
           <section className="glass panel" aria-label="Predictions side by side">
             <div className="panel-head"><h2>Who calls {p.year} best?</h2>
               <span className="label">{p.locked ? "locked" : `locks ${new Date(p.lock_at).toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short" })} Brisbane`} · scored Jan {p.year + 1}</span></div>
@@ -237,7 +237,7 @@ export default function MePage() {
               smaller average miss; the three US numbers by average miss, from FRED. Predictions don't bind anyone's trades.</p>
           </section>
           {!p.locked && <PredictionForm p={p} mine={mine} key={mine?.id ?? "new"} />}
-        </>)}
+        </div>)}
       </main>
     </Shell>
   );

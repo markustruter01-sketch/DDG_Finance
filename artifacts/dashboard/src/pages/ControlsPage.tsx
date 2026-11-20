@@ -332,13 +332,19 @@ export default function ControlsPage() {
         {state.data && (
           <>
             <NeedsYou state={state.data} />
-            <section className="glass panel" aria-label="Bots">
-              <div className="panel-head"><h2>Bots</h2><span className="label">{state.data.bots.length} bots</span></div>
-              <ul className="list">{state.data.bots.map((row) => <BotRow key={row.bot_id} row={row} />)}</ul>
-            </section>
-            <Connections />
-            <DrawdownLimits />
-            <EmergencyStop tripped={state.data.kill_switch_tripped} />
+            <div className="split">
+              <div className="split-col">
+                <section className="glass panel" aria-label="Bots">
+                  <div className="panel-head"><h2>Bots</h2><span className="label">{state.data.bots.length} bots</span></div>
+                  <ul className="list">{state.data.bots.map((row) => <BotRow key={row.bot_id} row={row} />)}</ul>
+                </section>
+                <EmergencyStop tripped={state.data.kill_switch_tripped} />
+              </div>
+              <div className="split-col">
+                <Connections />
+                <DrawdownLimits />
+              </div>
+            </div>
           </>
         )}
       </main>

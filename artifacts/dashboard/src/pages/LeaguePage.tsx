@@ -177,7 +177,8 @@ export default function LeaguePage() {
             <div className="stat"><span className="label">Market mood</span><span className="num-sm">{board.data.regime ?? "—"}</span><span className="small">Allocator, tonight</span></div>
           </section>
 
-          <section className="glass panel" aria-label="Every shadow at a glance">
+          <div className="lg-grid">
+          <section className="glass panel lg-glance" aria-label="Every shadow at a glance">
             <div className="panel-head"><h2>All {shadows.length} at a glance</h2>
               <span className="label">line vs S&amp;P 500 (dashed) · same scale in every box · best first</span></div>
             <div className="multiples">
@@ -191,7 +192,7 @@ export default function LeaguePage() {
             </div>
           </section>
 
-          <section className="glass panel league-road" aria-label="Road to the verdict">
+          <section className="glass panel league-road lg-road" aria-label="Road to the verdict">
             <div className="stat"><span className="label">Days of record</span><span className="num-sm">{board.data.league_version === 0 ? 0 : recordDays} / {RECORD_DAYS}</span><span className="small">{board.data.league_version === 0 ? "trial run: not counted" : "to the Jan 2028 verdict"}</span></div>
             <div className="stat"><span className="label">Ahead so far</span><span className="num-sm">{ahead}</span></div>
             <div className="stat"><span className="label">Behind so far</span><span className="num-sm">{valued.length - ahead}</span></div>
@@ -199,8 +200,8 @@ export default function LeaguePage() {
               a worst fall at least a third smaller; and pass the luck check. Judged once, in January 2028.</p>
           </section>
 
-          <div className="fold">detail</div>
-          <section className="glass panel" aria-label="Every line, ranked">
+          {pickedRow && <div className="lg-detail"><Detail row={pickedRow} spxRow={spxRow} /></div>}
+          <section className="glass panel lg-table" aria-label="Every line, ranked">
             <div className="panel-head"><h2>Every line, ranked</h2><span className="label">filter by family · click a column to sort · pick a row</span></div>
             <div className="chips" role="group" aria-label="Filter by family">
               {FILTERS.map((f) => (
@@ -234,7 +235,7 @@ export default function LeaguePage() {
               </table>
             </div>
           </section>
-          {pickedRow && <Detail row={pickedRow} spxRow={spxRow} />}
+          </div>
 
           {costs.data && (
             <p className="note">

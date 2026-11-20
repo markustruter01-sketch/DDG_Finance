@@ -215,6 +215,11 @@ def test_the_council_line_is_the_forex_mirror_on_the_board():
                                                          (date(2026, 11, 18), 101_000.0, 1.0)])
     for d, real in ((date(2026, 11, 17), 100_400.0), (date(2026, 11, 18), 100_900.0)):
         store.record_ref(get_conn, "forex_ai:mirror:v1", d, real, start)
+    with get_conn() as conn, conn.cursor() as cur:       # Home's daily closes, which the board's real row uses
+        cur.execute("DROP TABLE IF EXISTS bot_daily_returns")
+        cur.execute("CREATE TABLE bot_daily_returns (bot_id TEXT, date DATE, equity_close DOUBLE PRECISION, source TEXT)")
+        cur.execute("INSERT INTO bot_daily_returns VALUES ('forex_ai', '2026-11-17', 100400, NULL), "
+                    "('forex_ai', '2026-11-18', 100900, NULL), ('forex_ai', '2026-11-01', 1, NULL)")
     rows = {r["id"]: r for r in lb.read(get_conn)["rows"]}
     assert rows["FX-COUNCIL"]["kind"] == "shadow" and rows["FX-COUNCIL"]["return_pct"] == 1.0   # engine value
     assert rows["forex_ai"]["kind"] == "real" and rows["forex_ai"]["equity"] == 100_900.0     # real value

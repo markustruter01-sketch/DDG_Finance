@@ -24,6 +24,7 @@ import bisect
 from datetime import date
 from typing import Any
 
+from core.fleet_capital import RUN_START, bot_starting_capital
 from research_harness.harness.overfit import deflated_sharpe, sharpe_per_period, variance
 from research_harness.league.base import CASH
 
@@ -127,9 +128,13 @@ def read(get_conn) -> dict[str, Any]:
                           "curve": [(r["day"], r["equity"]) for r in rows], "decisions": decs})
         elif acct["kind"] == "mirror" and acct["bot_id"] in REAL_BOTS:
             rows = store.equity_rows(get_conn, acct["twin_id"])
+            # The real account on the board = the same numbers as Home (21 Nov fix): each day's closing
+            # balance (bot_daily_returns) against its start balance on RUN_START (core/fleet_capital.py).
+            # The mirror twin's own reference balances measure the share book only, so they jumped when
+            # Atlas V2's last crypto was sold for cash on 17 Nov and showed +7.9% while Home showed -5.6%.
             lines.append({"id": acct["bot_id"], "name": display_name(acct["bot_id"]), "kind": "real",
-                          "family": "real account", "start_equity": None,
-                          "curve": [(r["day"], r["ref_equity"]) for r in rows if r["ref_equity"]]})
+                          "family": "real account", "start_equity": bot_starting_capital(acct["bot_id"]),
+                          "curve": real_closes(get_conn, acct["bot_id"])})
             if acct["bot_id"] == COUNCIL_BOT:      # the council's shadow line = its mirror, engine-valued
                 decs = [(r["step_at"].astimezone(engine.NEW_YORK).date(), r["weights"])
                         for r in store.decisions(get_conn, acct["twin_id"]) if not r["missed"]]
@@ -147,6 +152,15 @@ def read(get_conn) -> dict[str, Any]:
                           "status": "provisional"},
             "regime": regime,
             "rows": build(lines, n_trials)}
+
+
+def real_closes(get_conn, bot_id: str) -> list[tuple[date, float]]:
+    """A real account's closing balance each day from RUN_START, as Home reads it (/fleet/bot-history)."""
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute("SELECT date, equity_close FROM bot_daily_returns WHERE bot_id = %s AND date >= %s "
+                    "AND equity_close IS NOT NULL AND COALESCE(source, '') <> 'portfolio_with_vault_exclusion' "
+                    "ORDER BY date", (bot_id, RUN_START))
+        return [(d, float(v)) for d, v in cur.fetchall()]
 
 
 def _ai_and_human(get_conn) -> list[dict[str, Any]]:

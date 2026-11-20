@@ -11,6 +11,7 @@ Columns:
   the decision log, so a day a stop emptied a holding is not counted (shadows);
   real accounts: not computed (null);
 - gap to the S&P 500: the line's return minus Y-SPX's over the same days;
+- curve: [day, return % since start] for every valued day (League page charts);
 - luck check: deflated Sharpe ratio adjusted for the number of shadows tried
   (research_harness/harness/overfit.deflated_sharpe). "clear" at DSR >= 0.95,
   "could be luck" below, "too few days" under MIN_LUCK_DAYS. The 0.95 and the
@@ -72,14 +73,16 @@ def build(lines: list[dict[str, Any]], n_trials: int) -> list[dict[str, Any]]:
         row: dict[str, Any] = {k: ln[k] for k in ("id", "name", "kind", "family")}
         row.update(days=len(curve), first_day=curve[0][0].isoformat() if curve else None,
                    last_day=curve[-1][0].isoformat() if curve else None, equity=None, return_pct=None,
-                   worst_fall_pct=None, days_in_cash=None, gap_to_spx_pp=None, luck=None, dsr=None)
+                   worst_fall_pct=None, days_in_cash=None, gap_to_spx_pp=None, luck=None, dsr=None,
+                   curve=[])
         if not curve:
             out.append(row)
             continue
         base = ln.get("start_equity") or curve[0][1]
         ret = curve[-1][1] / base - 1
         row.update(equity=round(curve[-1][1], 2), return_pct=round(100 * ret, 2),
-                   worst_fall_pct=round(100 * worst_fall([base] + [v for _, v in curve]), 2))
+                   worst_fall_pct=round(100 * worst_fall([base] + [v for _, v in curve]), 2),
+                   curve=[[d.isoformat(), round(100 * (v / base - 1), 3)] for d, v in curve])
         if ln["kind"] != "real":
             row["days_in_cash"] = days_in_cash([d for d, _ in curve], ln.get("decisions") or [])
         same = [(d, spx_by_day[d]) for d, _ in curve if d in spx_by_day]

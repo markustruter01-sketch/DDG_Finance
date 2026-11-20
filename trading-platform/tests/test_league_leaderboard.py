@@ -36,6 +36,8 @@ def test_figures_by_hand():
     a = rows["oracle"]
     assert a["return_pct"] == 5.0 and a["worst_fall_pct"] == -5.0 and a["days_in_cash"] is None
     assert rows["Y-SPX"]["gap_to_spx_pp"] is None
+    assert t["curve"] == [["2026-11-16", 0.0], ["2026-11-17", 10.0], ["2026-11-18", -1.0], ["2026-11-19", 5.0]]
+    assert a["curve"][-1] == ["2026-11-19", 5.0]           # real accounts: from their first value
     assert [r["kind"] for r in lb.build(lines, 13)] == ["real", "yardstick", "shadow"]
 
 

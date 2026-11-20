@@ -4,6 +4,7 @@ import { RefreshCw } from "lucide-react";
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api } from "@/hooks/use-trading-client";
 import { Shell, Status } from "@/components/Shell";
+import { rebase, sharedStart } from "@/lib/curves";
 
 // Shadow League (roadmap Phase 1), approved design 20 Nov: overview first on one
 // screen (headline numbers, every shadow as a small chart on the same scale, the
@@ -69,8 +70,10 @@ function Spark({ row, spx, lo, hi }: { row: Row; spx: Map<string, number>; lo: n
 }
 
 function Detail({ row, spxRow }: { row: Row; spxRow: Row | undefined }) {
-  const spx = new Map(spxRow?.curve ?? []);
-  const data = row.curve.map(([d, v]) => ({ d, line: v, spx: spx.get(d) ?? null }));
+  // Both lines from the first day they share, so the S&P dashes start at 0% with the line (21 Nov audit).
+  const from = spxRow ? sharedStart(row.curve, spxRow.curve) : row.curve[0]?.[0] ?? null;
+  const spx = new Map(from && spxRow ? rebase(spxRow.curve, from) : []);
+  const data = (from ? rebase(row.curve, from) : []).map(([d, v]) => ({ d, line: v, spx: spx.get(d) ?? null }));
   return (
     <section className="glass panel" aria-label={`${row.name} detail`}>
       <div className="panel-head"><h2>{row.name}</h2><span className="label">{FAMILY[row.family ?? ""] ?? row.family} · {row.id}</span></div>

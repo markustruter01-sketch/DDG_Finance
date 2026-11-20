@@ -4,6 +4,7 @@ import { RefreshCw } from "lucide-react";
 import { Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api } from "@/hooks/use-trading-client";
 import { Shell, Status } from "@/components/Shell";
+import { rebase, returnSince, sharedStart } from "@/lib/curves";
 
 // The Forex AI council's record: every day's news, each AI's call and strategy,
 // the final decision and why, and how each AI and each strategy has scored.
@@ -93,22 +94,25 @@ function ForexOverview() {
   const open = useQuery({ queryKey: ["forex-open"], queryFn: async () => (await api.get("/forex/open")).data as OpenTrades, refetchInterval: 5 * 60_000 });
   const rows = Object.fromEntries((board.data?.rows ?? []).map((r) => [r.id, r]));
   const me = rows.forex_ai, bt1 = rows["FX-BT1"];
-  const gap = me?.return_pct != null && bt1?.return_pct != null ? me.return_pct - bt1.return_pct : null;
+  // Compared only over the days both lines have (the real account starts 9 Nov, FX-BT1 on 19 Nov).
+  const from = me && bt1 ? sharedStart(me.curve, bt1.curve) : null;
+  const meR = from && me ? returnSince(me.curve, from) : null, btR = from && bt1 ? returnSince(bt1.curve, from) : null;
+  const gap = meR != null && btR != null ? meR - btR : null;
   const days = new Map<string, Record<string, number | string>>();
-  for (const l of LINES) for (const [d, v] of rows[l.id]?.curve ?? []) days.set(d, { ...(days.get(d) ?? { d }), [l.id]: v });
+  for (const l of LINES) for (const [d, v] of from ? rebase(rows[l.id]?.curve ?? [], from) : []) days.set(d, { ...(days.get(d) ?? { d }), [l.id]: v });
   const data = [...days.values()].sort((a, b) => String(a.d).localeCompare(String(b.d)));
   const o = open.data;
   return (<>
     <section className="glass panel league-kpis" aria-label="Forex at a glance">
       <div className="stat"><span className="label">Account value</span><span className="num-sm">{o ? `$${o.nav.toLocaleString("en-AU", { maximumFractionDigits: 0 })}` : "—"}</span><span className="small">OANDA practice, now</span></div>
-      <div className="stat"><span className="label">Return since start</span><span className={`num-sm ${tone(me?.return_pct)}`}>{me?.return_pct == null ? "—" : signed(me.return_pct)}</span><span className="small">after costs</span></div>
-      <div className="stat"><span className="label">vs no-AI rules</span><span className={`num-sm ${tone(gap)}`}>{gap == null ? "—" : `${gap > 0 ? "+" : ""}${gap.toFixed(2)} pts`}</span><span className="small">against FX-BT1</span></div>
+      <div className="stat"><span className="label">Return since start</span><span className={`num-sm ${tone(me?.return_pct)}`}>{me?.return_pct == null ? "—" : signed(me.return_pct)}</span><span className="small">since 9 Nov, after costs</span></div>
+      <div className="stat"><span className="label">vs no-AI rules</span><span className={`num-sm ${tone(gap)}`}>{gap == null ? "—" : `${gap > 0 ? "+" : ""}${gap.toFixed(2)} pts`}</span><span className="small">against FX-BT1, since {from ?? "—"}</span></div>
       <div className="stat"><span className="label">Worst fall</span><span className="num-sm">{me?.worst_fall_pct == null ? "—" : `${me.worst_fall_pct.toFixed(2)}%`}</span><span className="small">since start</span></div>
       <div className="stat"><span className="label">Open trades</span><span className="num-sm">{o ? o.open.length : "—"}</span><span className="small">{o ? `$${o.margin_used.toLocaleString("en-AU", { maximumFractionDigits: 0 })} margin used` : "OANDA unreadable"}</span></div>
     </section>
     <div className="me-two" style={{ gridTemplateColumns: "minmax(0, 2fr) minmax(0, 1fr)" }}>
       <section className="glass panel" aria-label="Does the AI add anything">
-        <div className="panel-head"><h2>Does the AI add anything?</h2><span className="label">return since start, same costs</span></div>
+        <div className="panel-head"><h2>Does the AI add anything?</h2><span className="label">return since {from ?? "—"} (first shared day), same costs</span></div>
         <div style={{ height: 240 }}>
           {data.length < 2 ? <div className="empty">Not enough days to draw yet.</div> : (
             <ResponsiveContainer width="100%" height="100%">

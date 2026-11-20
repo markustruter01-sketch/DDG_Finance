@@ -247,3 +247,19 @@ def test_a_stopped_name_stays_out_at_a_midmonth_resize():
     assert eng.pos.get(victim, 0) == 0                                  # not re-bought before December
     held = [s for s in st2["names"] if eng.pos.get(s, 0) >= 1]
     assert len(held) == 49
+
+
+def test_placeholder_sectors_count_as_missing():
+    # 20 Nov 2026: SSGA's Sector column held "-" for all 500 members.
+    rows = [{"ticker": "AAPL", "sector": "-"}, {"ticker": "MSFT", "sector": "Information Technology"}]
+    by = su.sectors(rows, ["AAPL", "MSFT", "XOM"])
+    assert by == {"AAPL": "", "MSFT": "Information Technology", "XOM": ""}
+    assert su.sector_share(by) == 1 / 3 and su.sector_share({}) == 0.0
+
+
+def test_ivv_sectors_for_given_members():
+    text = ('Ticker,Name,Sector,Asset Class,Market Value,Weight (%)\n'
+            'AAPL,APPLE INC,Information Technology,Equity,1,7.0\n'
+            'BRKB,BERKSHIRE HATHAWAY INC CLASS B,Financials,Equity,1,1.7\n')
+    got = su.load_ivv_sectors(lambda url: text.encode() if url == su.IVV_URL else b"", ["AAPL", "BRK.B", "XOM"])
+    assert got == {"AAPL": "Information Technology", "BRK.B": "Financials", "XOM": ""}

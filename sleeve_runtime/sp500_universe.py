@@ -22,6 +22,8 @@ SSGA_URL = ("https://www.ssga.com/us/en/intermediary/etfs/library-content/produc
             "etfs/us/holdings-daily-us-en-spy.xlsx")
 IVV_URL = ("https://www.ishares.com/us/products/239726/ishares-core-sp-500-etf/1467271812596.ajax"
            "?fileType=csv&fileName=IVV_holdings&dataType=fund")
+NO_SECTOR = {"", "-", "--", "—", "N/A"}   # placeholders, not sectors
+MIN_SECTOR_SHARE = 0.9                  # below this, the sector list is treated as unavailable
 MIN_MEMBERS = 450                      # the index has ~503 lines; fewer means a broken file
 TICKER_RE = re.compile(r"^[A-Z]{1,5}(\.[A-Z])?$")
 # iShares writes share-class tickers without the dot; Alpaca uses the dot form.
@@ -108,7 +110,19 @@ def sectors(rows: list[Row], tickers: list[str]) -> dict[str, str]:
     """Each member's sector as the holdings file states it ('' if the file has none).
     Used by the Shadow League's sector cap; MOMO-V2 does not read it."""
     by_ticker = {r["ticker"]: r.get("sector", "") for r in rows}
-    return {t: by_ticker.get(t, "") for t in tickers}
+    out = {t: by_ticker.get(t, "") for t in tickers}
+    return {t: ("" if s in NO_SECTOR else s) for t, s in out.items()}   # SSGA writes "-" in every row
+
+
+def sector_share(by_ticker: dict[str, str]) -> float:
+    """Share of members with a real sector (0 when there are none)."""
+    return sum(1 for s in by_ticker.values() if s) / len(by_ticker) if by_ticker else 0.0
+
+
+def load_ivv_sectors(http_get: Callable[[str], bytes],
+                     tickers: list[str]) -> dict[str, str]:
+    """Sectors for ``tickers`` from the iShares IVV holdings file."""
+    return sectors(parse_ivv_csv(http_get(IVV_URL).decode("utf-8-sig")), tickers)
 
 
 def load_sp500_rows(http_get: Callable[[str], bytes]) -> tuple[list[str], list[Row], str]:

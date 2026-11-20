@@ -360,3 +360,39 @@ def test_no_member_list_is_a_missed_decision_for_stock_lines_only():
         rows = store.decisions(get_conn, league.twin_id(sid))
         assert rows and all(r["missed"] for r in rows)
     assert not store.decisions(get_conn, league.twin_id("Y-SPX"))[0]["missed"]
+
+
+def test_load_universe_takes_sectors_from_ivv_when_ssga_has_none(monkeypatch):
+    import sleeve_runtime.sp500_universe as su
+
+    names = [f"N{i:03d}" for i in range(10)]
+    monkeypatch.setattr(su, "load_sp500_rows",
+                        lambda get: (names, [{"ticker": n, "sector": "-"} for n in names], "ssga_spy"))
+    ivv = "Ticker,Name,Sector,Asset Class,Market Value,Weight (%)\n" + "".join(
+        f"{n},CO {n},Sector{i % 3},Equity,1,1\n" for i, n in enumerate(names))
+    tickers, sectors, source = league.load_universe(lambda url: ivv.encode())
+    assert tickers == tuple(names) and source == "ssga_spy; sectors from ishares_ivv"
+    assert sectors["N004"] == "Sector1" and all(sectors.values())
+
+    def no_ivv(url):
+        raise OSError("down")
+    tickers, sectors, source = league.load_universe(no_ivv)
+    assert source == "ssga_spy" and not any(sectors.values())     # kept empty, not invented
+
+
+@needs_pg
+def test_sector_cap_line_misses_the_night_without_a_sector_list():
+    get_conn = make_get_conn()
+    store.ensure_schema(get_conn)
+    now = datetime.combine(date(2026, 11, 17), time(17, 15), NEW_YORK)
+
+    def no_sectors():
+        names, _, src = fake_universe()
+        return names, {n: "" for n in names}, src
+    report, _ = league.run(get_conn, now, date(2026, 11, 17), fetch_daily=fake_fetch, universe_loader=no_sectors,
+                           fetch_fx_daily=fake_fx_now)
+    cap = store.decisions(get_conn, league.twin_id("S-MOMO-CAP"))
+    assert cap and all(r["missed"] for r in cap)
+    assert report[league.twin_id("S-MOMO-CAP")].endswith("S&P 500 sector list unavailable")
+    momo = store.decisions(get_conn, league.twin_id("S-MOMO"))
+    assert momo and not momo[0]["missed"]                       # the uncapped line is unaffected

@@ -78,10 +78,17 @@ def _http_get(url: str) -> bytes:
 
 def load_universe(http_get: Callable[[str], bytes] = _http_get) -> tuple[tuple[str, ...], dict[str, str], str]:
     """S&P 500 members and their sectors (same source as MOMO-V2)."""
-    from sleeve_runtime.sp500_universe import load_sp500_rows, sectors
+    from sleeve_runtime.sp500_universe import (MIN_SECTOR_SHARE, load_ivv_sectors, load_sp500_rows,
+                                               sector_share, sectors)
 
     tickers, rows, source = load_sp500_rows(http_get)
-    return tuple(tickers), sectors(rows, tickers), source
+    by_ticker = sectors(rows, tickers)
+    if sector_share(by_ticker) < MIN_SECTOR_SHARE:      # 20 Nov: SSGA's Sector column is "-" in every row
+        try:
+            by_ticker, source = load_ivv_sectors(http_get, tickers), f"{source}; sectors from ishares_ivv"
+        except Exception as exc:
+            logger.warning(f"league | IVV sector list unavailable: {type(exc).__name__}: {exc}")
+    return tuple(tickers), by_ticker, source
 
 
 def ensure_accounts(get_conn, session: date, registrations: dict[str, dict[str, Any]]) -> list[str]:
@@ -172,6 +179,8 @@ def run(get_conn, now: datetime, session: date, *, fetch_daily=None,
     calendar = tuple(b["day"] for b in bars.get("SPY", []))
     ctx = base.Context(calendar=calendar, universe=tuple(s for s in universe if s in bars), sectors=sectors)
     view = HistoryView(bars)
+    from sleeve_runtime.sp500_universe import MIN_SECTOR_SHARE, sector_share
+    sectors_ok = sector_share({s: sectors.get(s, "") for s in ctx.universe}) >= MIN_SECTOR_SHARE
 
     days, skipped = run_days(calendar, last_run, session)
     if skipped:
@@ -183,6 +192,7 @@ def run(get_conn, now: datetime, session: date, *, fetch_daily=None,
         mine = [d for d in days if d >= start]
         rows = store.decisions(get_conn, tid)
         why_not = ("S&P 500 member list unavailable" if strategy.uses_universe and not ctx.universe else
+                   "S&P 500 sector list unavailable" if strategy.uses_sectors and not sectors_ok else
                    "OANDA daily candles unavailable" if strategy.forex and not fx_ok else None)
         if why_not:
             for d in mine:

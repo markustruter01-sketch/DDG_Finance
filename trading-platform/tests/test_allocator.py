@@ -86,7 +86,7 @@ def test_labels_written_once_and_the_funds_show_on_the_board():
     _platform_tables(get_conn)
     alarms = []
     for day in LIVE_CAL[-3:]:
-        job.nightly(datetime.combine(day, time(17, 15), NEW_YORK), record_fx_rates=lambda g, n: 0, get_conn=get_conn, fetch_daily=fake_fetch,
+        job.nightly(datetime.combine(day, time(17, 15), NEW_YORK), record_fx_rates=lambda g, n: 0, ai_call=False, get_conn=get_conn, fetch_daily=fake_fetch,
                     universe_loader=fake_universe, fetch_fx_daily=fake_fx_now, fetch_hourly=lambda p, s: {},
                     alarm=lambda *a, **k: alarms.append(a), resolve=lambda *a: None, commit="abc1234")
     labs = store.labels(get_conn)

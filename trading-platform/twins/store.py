@@ -435,3 +435,30 @@ def fx_rates(get_conn: GetConn) -> list[dict[str, Any]]:
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute("SELECT day, pair, long_rate, short_rate, days_charged FROM twin_fx_financing ORDER BY day, pair")
         return [dict(zip(("day", "pair", "long_rate", "short_rate", "days_charged"), r)) for r in cur.fetchall()]
+
+
+def append_vote(get_conn: GetConn, *, twin_id: str, decision_id: int | None, role: str, model_requested: str,
+                model_returned: str | None, prompt: str, inputs: dict[str, Any], reply: str | None,
+                cost_usd: float | None, latency_ms: int | None) -> None:
+    """One AI model call (append-only)."""
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute("INSERT INTO twin_votes (twin_id, decision_id, role, model_requested, model_returned, prompt, "
+                    "inputs, reply, cost_usd, latency_ms) VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s)",
+                    (twin_id, decision_id, role, model_requested, model_returned, prompt,
+                     json.dumps(inputs, sort_keys=True, default=str), reply, cost_usd, latency_ms))
+
+
+def ai_cost_since(get_conn: GetConn, since: date, twin_ids: list[str]) -> float:
+    """AI cost in US dollars of these twins' votes on or after ``since`` (UTC midnight)."""
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute("SELECT COALESCE(SUM(cost_usd), 0) FROM twin_votes WHERE twin_id = ANY(%s) AND created_at >= %s",
+                    (twin_ids, datetime.combine(since, datetime.min.time(), timezone.utc)))
+        return float(cur.fetchone()[0])
+
+
+def ai_monthly_costs(get_conn: GetConn, twin_id: str) -> dict[date, float]:
+    """Each calendar month's AI cost for one twin, keyed by the month's first day (UTC)."""
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute("SELECT date_trunc('month', created_at AT TIME ZONE 'UTC')::date, SUM(cost_usd) FROM twin_votes "
+                    "WHERE twin_id = %s AND cost_usd IS NOT NULL GROUP BY 1", (twin_id,))
+        return {m: float(c) for m, c in cur.fetchall()}

@@ -23,6 +23,7 @@ def test_importing_every_twin_module_loads_no_order_code():
         "import json, sys\n"
         "import twins.job, twins.engine, twins.store, twins.prices, twins.config, twins.league\n"
         "import twins.leaderboard, twins.month_end, twins.allocator, research_harness.league.allocator\n"
+        "import twins.ai_council, twins.financing, forex_council\n"
         "import research_harness.league.families, sleeve_runtime.sp500_universe\n"
         "import sleeve_runtime.gear_shadow, sleeve_runtime.trend_v1b, core.oanda_client, core.build_info\n"
         "import core.bot_registry, core.symbols, core.degradation_tracker, config.settings\n"

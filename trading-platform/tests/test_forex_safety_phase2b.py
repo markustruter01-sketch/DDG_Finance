@@ -83,15 +83,15 @@ def test_registry_and_profile_include_paused_forex_safety_metadata():
 
     profile = ks._BOT_PROFILES["forex_ai"]
     assert "LEVERAGE_TIERS" not in profile
-    assert profile["FOREX_MAX_GROSS"] == pytest.approx(2.0)
+    assert profile["FOREX_MAX_GROSS"] == pytest.approx(1.5)   # Markus 21 Nov 2026 (was 2.0)
     assert "BOT_PAUSED" not in profile  # bots_state.paused is the only switch
 
 
 @pytest.mark.parametrize(
     ("gross_multiple", "trips"),
-    [(1.9, False), (2.0, False), (2.01, True)],
+    [(1.4, False), (1.5, False), (1.51, True)],   # cap 1.5x since 21 Nov 2026 (was 2.0),
 )
-def test_forex_gross_cap_trips_only_above_2x_nav(gross_multiple, trips):
+def test_forex_gross_cap_trips_only_above_1_5x_nav(gross_multiple, trips):
     account = {
         "bot_id": "forex_ai",
         "nav": 100.0,
@@ -475,3 +475,10 @@ def test_forex_trade_schema_is_additive_and_contains_required_columns():
         "closed_at",
     ):
         assert column in sql
+
+def test_live_forex_gross_cap_is_one_point_five_everywhere():
+    # Markus 21 Nov 2026: real Forex account at 1.5x. The kill switch and the order path read the same value.
+    from core import kill_switch
+    from core.bot_config import load_bot_profiles
+    assert load_bot_profiles()["forex_ai"]["FOREX_MAX_GROSS"] == pytest.approx(1.5)
+    assert kill_switch.FOREX_MAX_GROSS == pytest.approx(1.5)

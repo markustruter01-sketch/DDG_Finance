@@ -10,7 +10,7 @@ Once confirmed, nothing below changes; any change is a new dated version reporte
 - Forex AI council v3 (quant-terminal, live from 8 Nov 2026): three AIs (member 1 Groq, member 2 OpenRouter, member 3 Gemini) each pick a direction, strategy, conviction 1-5, stop and prediction per pair, once per New York trading day.
 - Vote: 3-0 = full size, 2-1 = half size, no 2-vote majority = stay out. Stop = tightest of the winners.
 - Inputs: prices/carry table for 7 USD pairs + central-bank and GDELT headlines.
-- Sizing and stops by the rules engine (forex_risk.py): 0.5% risk per trade (half on 2-1), stop 1-4x ATR, max 4 trades, gross <= 2x NAV, no new trades after a 2% daily loss.
+- Sizing and stops by the rules engine (forex_risk.py): 0.5% risk per trade (half on 2-1), stop 1-4x ATR, max 4 trades, gross <= 2x NAV (1.5x from 21 Nov 2026, see below), no new trades after a 2% daily loss.
 - Account: OANDA practice (paper).
 
 ## Period
@@ -35,6 +35,9 @@ Once confirmed, nothing below changes; any change is a new dated version reporte
 ## Stop rules
 - NAV down 10% from start at any time: trading paused and reviewed with Markus (council keeps logging, no orders).
 - A model/prompt change, or a provider failing 5+ days in a row: new dated version.
+
+## Dated change, 21 Nov 2026: gross cap 2.0x -> 1.5x
+Markus, 21 Nov 2026 07:37 Brisbane: "yes I want the real forex account to be 1.5". From the publish that carries this change, `FOREX_MAX_GROSS` = 1.5 (kraken-bot/config.py); the kill switch reads the same value. Open trades are not closed; only new trades get less room. Days before the change were traded under 2.0x, so results either side of it are not one test. The no-AI comparison line FX-BT1 keeps its registered 2.0x; from this date the two lines differ in this cap as well as in the AI.
 
 ## Not in this version: conviction-based leverage
 Markus asked (9 Nov) for higher leverage when the AIs are very sure. Not added: there is no evidence yet that the AIs' conviction predicts winners (their 1-day hit rate so far is ~37%, below the baseline's ~40%, on 74 calls). From 9 Nov the scorecard scores final calls by conviction. If high-conviction calls clearly win more often over a fair sample, a "conviction sizing" version can be registered as a new dated version and tested separately.

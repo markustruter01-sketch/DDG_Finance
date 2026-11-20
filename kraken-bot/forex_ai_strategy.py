@@ -11,6 +11,7 @@ from typing import Any, Callable
 
 from loguru import logger
 
+from core.bot_config import load_bot_profiles
 from core.bot_state import write_heartbeat, write_portfolio
 from core.oanda_client import OandaClient
 from forex_quant_desk import build_signal_sheet
@@ -306,7 +307,7 @@ def run_forex_cycle(
         _maybe_run_weekly_audit()
     execution_status = "trading off"
     if trading:
-        execution_status = _maybe_execute(sheet, factory, float((profile or {}).get("FOREX_MAX_GROSS", 2.0)))
+        execution_status = _maybe_execute(sheet, factory, float((profile or {}).get("FOREX_MAX_GROSS") or load_bot_profiles()["forex_ai"]["FOREX_MAX_GROSS"]))
         logger.info(f"FOREX execution | {execution_status}")
     return {
         "bot_id": BOT_ID,

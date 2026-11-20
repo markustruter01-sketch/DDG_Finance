@@ -21,7 +21,9 @@ GLOBAL_EMERGENCY_STOP = False
 
 # APPROVED 10 Oct 2026 (registered Forex plan, item 4): gross exposure cap
 # 2.0x Forex equity for MVP. No 5x/10x tiers.
-FOREX_MAX_GROSS = 2.0
+# CHANGED 21 Nov 2026 by Markus ("yes I want the real forex account to be 1.5"):
+# 1.5x from the next publish. Open trades are kept; only new entries get less room.
+FOREX_MAX_GROSS = 1.5
 
 BOT_PROFILES = {
     "oracle": {

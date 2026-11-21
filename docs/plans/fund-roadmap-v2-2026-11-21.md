@@ -222,6 +222,7 @@ One flaw in (b) worth knowing: its table gives forex 10% to 25% of the fund, spl
 Tags: **[GATE]** merge and publish by Fri 4 Dec · **[LOCK]** switched on 12–13 Dec · **[JAN]** intake 1 · **[APR]** intake 2 · **[BRANCH]** research on a branch, no deadline on merging. One pull request per order unless it says otherwise.
 
 ### V2-00 Put this plan in the repo — today, docs only
+**DONE 22 Nov 2026, PR #173** (research file still to come from Markus).
 - Add this file as `docs/plans/fund-roadmap-v2-2026-11-21.md`, and beside it `macro-research-2026-11-21.md` (the research file) and `fund-thesis-2027.md` (the thesis).
 - `docs/plans/README.md`: add this file to the reading order straight after the 17 Nov roadmap, with the words "amends the roadmap; wins where they differ". Put the thesis first in the reading order, as "start here: what the platform is, why, and what we expect". List the research file as "background; not a rule".
 - `fund-roadmap-build-guide-for-opus.md`: one line at the top of Part A pointing here. Do not edit the 17 Nov roadmap; it is the record of what was agreed.
@@ -259,6 +260,7 @@ Tags: **[GATE]** merge and publish by Fri 4 Dec · **[LOCK]** switched on 12–1
 - Done when: rehearsal clean; tests green; merged and published by 4 Dec with the switch off; switched on at the lock after Markus's yes.
 
 ### V2-04 New lines — [GATE], else [JAN] · needs D3
+**DONE (version 0) 22 Nov 2026, PR #175, published 22 Nov.** Registration at the lock or intake 1 after 5 nights of values.
 All rules PROPOSED. Each is a pure function in `research_harness/league/families.py` (forex: `forex.py`), one registration file in `research_harness/registrations/league/` with the same fields as `D-XTREND.json`, and a test that checks the holdings by hand on two recorded dates. "Trend votes" always means the existing rule: how many of "close above its own close 63, 126 and 252 sessions ago" hold (`core_v1.votes`).
 
 | Id | Family | When | Rule |
@@ -293,6 +295,7 @@ All rules PROPOSED. Each is a pure function in `research_harness/league/families
 - Done when: 5 nights of rows for every series; a test proves a stored row is never updated; every tile shows a date and a source.
 
 ### V2-06 Macro state — [GATE], else [JAN]
+**DONE (code, storage) 22 Nov 2026, PRs #176/#177, published 22 Nov.** Still to do: hand check on three recorded dates (`python -m twins.macro_check`).
 All PROPOSED. Pure, prices only: `research_harness/league/macro_state.py`, in the style of `league/allocator.py`.
 - **Growth votes:** SPY above its 200-session average · IWM above its 200-session average · the ratio HYG ÷ IEF above its own 200-session average (risky bonds beating safe bonds). Growth is "up" on 2 of 3.
 - **Inflation votes:** DBC above its 200-session average · USO above its 200-session average · the ratio TIP ÷ IEF above its own 200-session average (inflation-protected bonds beating plain bonds). Inflation is "up" on 2 of 3.
@@ -418,6 +421,7 @@ Add to the monthly report (`trading-platform/twins/month_end.py`): the label for
 - Done when: every gauge shows a value, a date and a source; Y-GOLD writes a value on 5 nights in a row; a test fails if any file under `research_harness/league/` or `trading-platform/twins/allocator.py` mentions `long_cycle`.
 
 ### V2-19 Four daily flags — inside V2-06 · needs D12 (the fourth needs D14)
+**DONE (code, storage) 22 Nov 2026, PRs #176/#177.** Still to do: show the fast flag for April 2025 (`python -m twins.macro_check 2025-04-01 2025-04-30`); shown on the Macro card with V2-05.
 All PROPOSED. Prices only. Worked out in `research_harness/league/macro_state.py` and stored each day in `macro_state`, beside "bonds are hedging". Shown on the Macro card. Read by no table and no fund (rule 10).
 - **Three-way sell-off, fast:** SPY, TLT and UUP each closed lower than 21 sessions earlier. US shares, long US bonds and the dollar falling together means money leaving the country, not moving around inside it.
 - **Three-way sell-off, slow:** SPY, TLT and UUP each below their own 200-session average.
@@ -533,6 +537,7 @@ All PROPOSED. A pure function in `funds_v2.py`, wired into `trading-platform/twi
 - Done when: a test where one bucket loses steadily for a year shows its share cut to zero at the next month start; a test proves fund (w) never holds more of any bucket than fund (m); a test proves that changing returns after a date changes no decision on or before that date.
 
 ### V2-26 The old walk-forward check — step 1 now; step 2 needs D17
+**DONE 22 Nov 2026: step 1 in the status log; step 2 (D17 = A, Markus 22 Nov 06:22) PR #178, published 22 Nov.**
 - **What it is** (VERIFIED at `2447d4a`): `trading-platform/analysis/arc2_walk_forward.py`, run by the job `nightly_walk_forward` in `trading-platform/core/scheduler.py` (Monday to Friday, 17:30 New York; in `_ALWAYS_ACTIVE_JOBS`). Each night it works out 30- and 90-day figures from closed trades for `oracle`, `spy_qqq_trend` and `jerome_macro`, grades each GREEN, AMBER, RED or INSUFFICIENT_DATA against stored reference numbers, and writes the grade to `bot_evaluation_history`. It is read by `routes/claude_report.py` (`_build_walk_forward_status` and the text section "WALK-FORWARD VALIDATION (ARC 2)"), `routes/reports.py` and the dashboard hook `artifacts/dashboard/src/hooks/useFleetData.ts`.
 - **What is wrong** (VERIFIED: `_OOS_ENVELOPE` and `_STRATEGY_PARAMS` in that file): the reference numbers describe strategies these accounts no longer run. `oracle`: an Asia-Pacific fund trend rule, seeded 7 Aug 2026. `jerome_macro`: an emerging-markets rule, seeded 11 Aug. `spy_qqq_trend`: a 50/200-day average rule, numbers dated 14 Jul. Today the accounts run FLEET-V1-F1, FLEET-V1-C1 and MOMO-V2, whose live code was added on 2 Nov. A grade from this job says nothing about them. The protocol in the file's header (red for 60 days: halve size; 120 days: halt entries; done by hand) is not among the 2027 rules.
 - **Step 1, now, no decision:** write in the Status log what the job wrote on the last five nights, and every place a person can see it. UNKNOWN from here.

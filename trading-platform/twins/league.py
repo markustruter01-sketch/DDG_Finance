@@ -144,6 +144,25 @@ def run_days(calendar: tuple[date, ...], last_run: date | None, session: date) -
     return days[-CATCH_UP_SESSIONS:], max(0, len(days) - CATCH_UP_SESSIONS)
 
 
+def record_macro(get_conn, view: HistoryView, calendar: tuple[date, ...], days: list[date], now: datetime) -> dict:
+    """Store each session's macro state once. A failure here never stops the league night."""
+    from research_harness.league import macro_state
+    out: dict[str, Any] = {}
+    for d in days:
+        try:
+            row = macro_state.state(view, calendar, d)
+        except Exception as exc:
+            logger.warning(f"league | macro state for {d} failed: {type(exc).__name__}: {exc}")
+            out[d.isoformat()] = f"failed: {type(exc).__name__}"
+            continue
+        if row["votes"] is None:
+            out[d.isoformat()] = "not enough data"
+            continue
+        store.record_macro_state(get_conn, d, row, now)
+        out[d.isoformat()] = row["label"] or f"unconfirmed ({row['raw_label']})"
+    return out
+
+
 def run(get_conn, now: datetime, session: date, *, fetch_daily=None,
         universe_loader: Callable[[], tuple[tuple[str, ...], dict[str, str], str]] | None = None,
         fetch_fx_daily: Callable[[list[str]], dict[str, list[dict[str, Any]]]] | None = None,
@@ -177,7 +196,8 @@ def run(get_conn, now: datetime, session: date, *, fetch_daily=None,
             report["universe"] = f"unavailable: {type(exc).__name__}"
             logger.warning(f"league | S&P 500 list unavailable tonight: {type(exc).__name__}: {exc}")
 
-    symbols = set(families.fixed_symbols()) | set(universe)
+    from research_harness.league import macro_state
+    symbols = set(families.fixed_symbols()) | set(universe) | set(macro_state.SYMBOLS)   # + the macro votes and flags (V2-06)
     bars = prices.alpaca_daily(sorted(symbols), oldest - timedelta(days=HISTORY_CALENDAR_DAYS), now,
                                fetch=fetch_daily)
     fx_ok = False
@@ -235,6 +255,8 @@ def run(get_conn, now: datetime, session: date, *, fetch_daily=None,
                 sent += 1
             has_decision = True
         report[tid] = {"sessions": len(mine), "decisions": sent}
+    if days:                                  # roadmap v2 macro label and flags (V2-06, V2-19): read by no rule yet
+        report["macro"] = record_macro(get_conn, view, calendar, days, now)
     if days and universe:                     # the Allocator's regime label (breadth needs the member list)
         from twins import allocator
         report["regime"] = allocator.record_labels(get_conn, view, ctx.universe, days, now)

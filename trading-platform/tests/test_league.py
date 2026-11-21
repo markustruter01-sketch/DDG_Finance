@@ -343,7 +343,7 @@ LIVE_CAL = tuple(d for d in CAL if d <= date(2026, 11, 18))
 def fake_fetch(symbols, start):
     bars, names = stock_market(60, LIVE_CAL)
     for s in ("QQQ", "SSO", "QLD", "AGG", "IEF", "GLD", "DBC", "UUP", "RSP",
-              "USO", "XLE", "EFA", "EEM", "TLT", "TIP", "DBMF", "TAIL"):
+              "USO", "XLE", "EFA", "EEM", "TLT", "TIP", "DBMF", "TAIL", "IWM", "HYG"):
         bars[s] = bars_from(steady(0.0005, len(LIVE_CAL), wiggle=0.004), LIVE_CAL)
     return {s: [b for b in bars.get(s, []) if b["day"] >= start] for s in symbols if s in bars}
 
@@ -394,6 +394,9 @@ def test_two_nights_start_every_line_value_it_and_keep_the_chain(tmp_path):
     accts = [a for a in store.accounts(get_conn) if a["bot_id"] == league.LEAGUE_BOT]
     assert len(accts) == 29 and all(a["start_equity"] == 100_000 for a in accts)
     assert all(a["config"]["registration_hash"] for a in accts)
+    assert report["macro"] and store.macro_states(get_conn)                # roadmap v2 label and flags (V2-06)
+    assert set(store.macro_states(get_conn)[-1]["flags"]) == {"sell_off_fast", "sell_off_slow", "hard_assets_lead",
+                                                              "tight_money"}
     for a in accts:                                  # every line decided on its first night
         rows = store.decisions(get_conn, a["twin_id"])
         assert rows and not rows[0]["missed"], a["twin_id"]

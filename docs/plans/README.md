@@ -7,7 +7,7 @@ Read in this order:
 1. This file (how to work, Replit facts, publish rules).
 2. `fund-roadmap-2026-11-17.md` — AGREED (Markus 17 Nov): the road from today to a self-running fund (fix window, Shadow League, Allocator in shadow, staged real money). **This is the target.**
 2a. `fund-roadmap-v2-2026-11-21.md` — **amends the roadmap; wins where they differ.** The macro-led fund: four layers, seven funds, work orders V2-00 to V2-26. Markus said yes 22 Nov 2026 (see the status log).
-2b. `macro-research-2026-11-21.md` — background; not a rule. (Not yet in the repo: waiting for Markus to supply the file.)
+2b. `macro-research-2026-11-21.md` — background; not a rule. No strategy, fund, table or AI prompt reads it (roadmap v2, rule 10).
 3. `fund-roadmap-build-guide-for-opus.md` — the work orders, phase by phase, each marked DONE with date and PR when finished. **This is the "next work" list.** Part B is the whole-company build list, worked while the Finance gate runs.
 4. `finance-2027-plan.md` — the status log. **The latest Status entry (bottom of the file) is the live state.** Add a Status entry after every work session.
 5. `order-path-audit-2026-11-16.md` — every code path that can place an order, findings F1 to F5, and the "must never happen" list.

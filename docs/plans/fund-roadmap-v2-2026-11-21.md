@@ -222,7 +222,7 @@ One flaw in (b) worth knowing: its table gives forex 10% to 25% of the fund, spl
 Tags: **[GATE]** merge and publish by Fri 4 Dec · **[LOCK]** switched on 12–13 Dec · **[JAN]** intake 1 · **[APR]** intake 2 · **[BRANCH]** research on a branch, no deadline on merging. One pull request per order unless it says otherwise.
 
 ### V2-00 Put this plan in the repo — today, docs only
-**DONE 22 Nov 2026, PR #173** (research file still to come from Markus).
+**DONE 22 Nov 2026, PR #173; research file added 22 Nov.**
 - Add this file as `docs/plans/fund-roadmap-v2-2026-11-21.md`, and beside it `macro-research-2026-11-21.md` (the research file) and `fund-thesis-2027.md` (the thesis).
 - `docs/plans/README.md`: add this file to the reading order straight after the 17 Nov roadmap, with the words "amends the roadmap; wins where they differ". Put the thesis first in the reading order, as "start here: what the platform is, why, and what we expect". List the research file as "background; not a rule".
 - `fund-roadmap-build-guide-for-opus.md`: one line at the top of Part A pointing here. Do not edit the 17 Nov roadmap; it is the record of what was agreed.

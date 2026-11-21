@@ -243,6 +243,9 @@ def resolution_for_event(
     pause = state["pauses"].get(bot_id) if bot_id else None
 
     if error_type == "bot_stale_workflow":
+        from core.market_hours import forex_bot_resting
+        if bot_id and forex_bot_resting(bot_id, state["checked_at"]):
+            return "forex market closed: the Forex bot rests until the Sunday open"
         if pause is None:
             return None
         if bool(pause["paused"]):

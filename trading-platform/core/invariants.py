@@ -587,7 +587,11 @@ def check_cycle_freshness(inputs: InvariantInputs) -> dict[str, Any]:
     paused: list[dict[str, Any]] = []
     stale: list[dict[str, Any]] = []
     unreadable: list[dict[str, Any]] = []
+    from core.market_hours import forex_bot_resting
     for bot_id in CYCLE_BOTS:
+        if forex_bot_resting(bot_id, inputs.now):
+            paused.append({"bot_id": bot_id, "reason": "forex market closed for the weekend"})
+            continue
         if inputs.pause_states is not None and inputs.pause_states.get(bot_id) is True:
             paused.append({"bot_id": bot_id, "reason": "intentionally paused"})
             # Forex remains a read-only monitor, but its durable cycle heartbeat

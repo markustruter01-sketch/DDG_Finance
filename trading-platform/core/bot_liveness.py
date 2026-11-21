@@ -155,6 +155,9 @@ def evaluate_liveness(
         paused = bool(paused_from_join)
         if paused:
             continue
+        from core.market_hours import forex_bot_resting
+        if forex_bot_resting(bot_id, now):
+            continue   # forex weekend (21 Nov 2026): OANDA offline, cycles cannot succeed; checks resume at the Sunday open
         if success_at is None:
             findings.append({
                 "trigger": "bot_cycle_health_missing_or_never_succeeded",

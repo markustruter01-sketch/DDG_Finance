@@ -11,7 +11,7 @@ export const BOT_COLORS: Record<string, string> = {
   spy_qqq_trend: "#A78BFA", // Momentum · Violet
   bot2_spy_qqq: "#A78BFA",  // Momentum's older ledger name
   jerome_macro: "#3DDC97",  // Atlas V2 (was Bullion) · Mint
-  forex_ai: "#FFFFFF",      // Forex · White
+  forex_ai: "#F2E35C",      // Forex · Yellow (was white, the same as the S&P 500 line: Markus 21 Nov)
 };
 export const botColor = (id?: string | null) => (id && BOT_COLORS[id]) || "rgba(255,255,255,0.5)";
 

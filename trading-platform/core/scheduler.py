@@ -403,20 +403,9 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
     )
     logger.info("Scheduler | Registered: daily_benchmark_snapshot (Mon–Fri 17:10 ET)")
 
-    scheduler.add_job(
-        func=_nightly_walk_forward,
-        trigger=CronTrigger(
-            day_of_week="mon-fri",
-            hour=17,
-            minute=30,
-            timezone="America/New_York",
-        ),
-        id="nightly_walk_forward",
-        name="Walk-Forward Validation (ARC 2)",
-        replace_existing=True,
-        misfire_grace_time=600,
-    )
-    logger.info("Scheduler | Registered: nightly_walk_forward (Mon–Fri 17:30 ET)")
+    # nightly_walk_forward (ARC 2) retired 22 Nov 2026 (roadmap v2, D17 = A, Markus): it graded the share
+    # accounts against reference numbers for strategies they no longer run. Its history stays in
+    # bot_evaluation_history; the mirror twins and the league's pass bars do this job for 2027.
 
     # ARC 4: 90-day retention sweep for shadow_signals (runs daily at 18:00 ET)
     scheduler.add_job(
@@ -1038,7 +1027,6 @@ def is_auto_trading_enabled() -> bool:
 _ALWAYS_ACTIVE_JOBS = {
     "daily_discord_pnl_report",
     "daily_health_check",
-    "nightly_walk_forward",
     "standing_invariants",
     "degradation_resolver",
     "order_watchdog",
@@ -1197,25 +1185,6 @@ async def _per_bot_vault_monthly_skim() -> None:
                     f"{[(b.get('bot_id'), b.get('action')) for b in result.get('bots', [])]}")
     except Exception as exc:
         logger.error(f"Scheduler | per_bot_vault_monthly_skim FAILED: {exc}")
-
-
-async def _nightly_walk_forward() -> None:
-    """
-    Job 5 — fires Mon–Fri at 17:30 ET (30 min after benchmark snapshot).
-    Computes trailing 30d/90d metrics for all 4 bots, classifies each vs its
-    OOS envelope (GREEN/AMBER/RED/INSUFFICIENT_DATA/DISQUALIFIED), and
-    persists to bot_evaluation_history.  Runs regardless of trading toggle
-    (monitoring job — always active).
-    """
-    logger.info("Scheduler | JOB STARTING: nightly_walk_forward")
-    try:
-        import asyncio
-        from analysis.arc2_walk_forward import run_walk_forward_job
-        results = await asyncio.to_thread(run_walk_forward_job, False)
-        summary = ", ".join(f"{b}: {r['status']}" for b, r in results.items())
-        logger.info(f"Scheduler | nightly_walk_forward complete — {summary}")
-    except Exception as exc:
-        logger.error(f"Scheduler | nightly_walk_forward FAILED: {exc}")
 
 
 async def _daily_benchmark_snapshot() -> None:

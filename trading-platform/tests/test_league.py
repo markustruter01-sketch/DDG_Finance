@@ -251,7 +251,7 @@ def test_f1_split_matches_the_live_fleet():
 def test_every_strategy_has_a_registration_and_no_crypto_anywhere():
     from core.no_crypto import is_crypto
 
-    assert len(fam.STRATEGIES) == 18 and len(fam.BY_ID) == 18         # + FX-COUNCIL (the Forex mirror) = 19 lines
+    assert len(fam.STRATEGIES) == 19 and len(fam.BY_ID) == 19         # incl. FX-BT1-CAP (21 Nov); + FX-COUNCIL = 20 lines
     assert sum(1 for s in fam.STRATEGIES if s.family == "yardstick") == 3
     for s in fam.STRATEGIES:
         reg = league.load_registration(s.id)
@@ -314,9 +314,9 @@ def test_two_nights_start_every_line_value_it_and_keep_the_chain(tmp_path):
     now = datetime.combine(date(2026, 11, 17), time(17, 15), NEW_YORK)
     report, bars = league.run(get_conn, now, date(2026, 11, 17), fetch_daily=fake_fetch, universe_loader=fake_universe,
                               fetch_fx_daily=fake_fx_now)
-    assert report["started"] and len(report["started"]) == 18
+    assert report["started"] and len(report["started"]) == 19   # 18 + FX-BT1-CAP (21 Nov)
     accts = [a for a in store.accounts(get_conn) if a["bot_id"] == league.LEAGUE_BOT]
-    assert len(accts) == 18 and all(a["start_equity"] == 100_000 for a in accts)
+    assert len(accts) == 19 and all(a["start_equity"] == 100_000 for a in accts)
     assert all(a["config"]["registration_hash"] for a in accts)
     for a in accts:                                  # every line decided on its first night
         rows = store.decisions(get_conn, a["twin_id"])

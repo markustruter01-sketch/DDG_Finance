@@ -28,7 +28,7 @@ from core.fleet_capital import RUN_START, bot_starting_capital
 from research_harness.harness.overfit import deflated_sharpe, sharpe_per_period, variance
 from research_harness.league.base import CASH
 
-N_TRIALS = 16          # shadows declared in the roadmap (the forex three included), counted up front
+N_TRIALS = 17          # shadows declared: the roadmap's 16 (forex three included) + FX-BT1-CAP (AU13, 21 Nov)
 MIN_LUCK_DAYS = 60
 LUCK_CLEAR = 0.95
 REAL_BOTS = ("oracle", "jerome_macro", "spy_qqq_trend", "forex_ai")

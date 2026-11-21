@@ -66,9 +66,34 @@ def signal(bars: list[dict[str, Any]]) -> dict[str, Any] | None:
     return {"call": call, "atr": atr, "strength": abs(mom) / (atr / close) if atr else 0.0, "close": close}
 
 
-def bt1_positions(view: HistoryView, start: date, trail: list | None = None) -> dict[str, dict[str, Any]]:
+def currency_exposure(pos: dict[str, dict[str, Any]]) -> dict[str, float]:
+    """Net exposure to each currency, as a multiple of equity: a long EUR_USD of w is +w EUR and -w USD."""
+    out: dict[str, float] = {}
+    for pair, q in pos.items():
+        base, quote = pair.split("_")
+        s = q["w"] if q["dir"] == "long" else -q["w"]
+        out[base] = out.get(base, 0.0) + s
+        out[quote] = out.get(quote, 0.0) - s
+    return out
+
+
+def capped_size(pos: dict[str, dict[str, Any]], pair: str, direction: str, w: float, cap: float) -> float:
+    """The largest size up to ``w`` that keeps every currency's net exposure within ``cap`` (0 = skip)."""
+    base, quote = pair.split("_")
+    s = 1.0 if direction == "long" else -1.0
+    now = currency_exposure(pos)
+    room = w
+    for cur, sign in ((base, s), (quote, -s)):
+        have = now.get(cur, 0.0)
+        room = min(room, cap - have if sign > 0 else cap + have)
+    return max(0.0, room)
+
+
+def bt1_positions(view: HistoryView, start: date, trail: list | None = None,
+                  currency_cap: float | None = None) -> dict[str, dict[str, Any]]:
     """Walk FX-BT1 from ``start`` to view.today; the open positions at today's close.
-    ``trail`` (tests) collects every closed holding: (pair, dir, entry_day, exit_day, reason)."""
+    ``trail`` (tests) collects every closed holding: (pair, dir, entry_day, exit_day, reason).
+    ``currency_cap`` (FX-BT1-CAP, AU13): a new entry is cut so no currency's net exposure passes it."""
     today = view.today
     hist = {p: [b for b in view.bars(p)] for p in PAIRS if p in view.symbols()}
     days = sorted({b["day"] for rows in hist.values() for b in rows if start <= b["day"] <= today})
@@ -103,6 +128,10 @@ def bt1_positions(view: HistoryView, start: date, trail: list | None = None) -> 
             if room <= 1e-9:
                 break
             w = min(w, room)
+            if currency_cap is not None:
+                w = capped_size(pos, p, s["call"], w, currency_cap)
+                if w <= 1e-9:
+                    continue                                  # this currency is full: try the next pair
             pos[p] = {"dir": s["call"], "w": w, "entry_day": day, "entry": s["close"],
                       "stop": s["close"] - dist if s["call"] == "long" else s["close"] + dist}
     return pos
@@ -114,12 +143,15 @@ def _close(pos: dict[str, dict[str, Any]], pair: str, day: date, reason: str, tr
         trail.append((pair, q["dir"], q["entry_day"], day, reason))
 
 
-def _fx_bt1(view: HistoryView, ctx: Context) -> Call | None:
+CURRENCY_CAP = 1.5          # FX-BT1-CAP: Markus 21 Nov 2026 07:02 Brisbane ("1.5, not 1")
+
+
+def _fx_bt1(view: HistoryView, ctx: Context, currency_cap: float | None = None) -> Call | None:
     if ctx.start is None or not any(has_today(view, p) for p in PAIRS):
         return None
     if any(len(closes(view, p, WARMUP + 1)) < WARMUP + 1 for p in PAIRS if has_today(view, p)):
         return None
-    pos = bt1_positions(view, ctx.start)
+    pos = bt1_positions(view, ctx.start, currency_cap=currency_cap)
     weights = dict(signed_weight(p, q["dir"], q["w"]) for p, q in pos.items())
     state = tuple(sorted((p, q["dir"], q["entry_day"].isoformat()) for p, q in pos.items()))
     note = {p: {"dir": q["dir"], "stop": round(q["stop"], 6), "entry": round(q["entry"], 6)} for p, q in pos.items()}
@@ -147,6 +179,10 @@ def _fx_trend(view: HistoryView, ctx: Context) -> Call | None:
     scale = min(1.0, GROSS_CAP / sum(raw.values()))
     weights = dict(signed_weight(p, dirs[p], raw[p] * scale) for p in PAIRS)
     return Call(weights, state=tuple(sorted(dirs.items())))
+
+
+def _fx_bt1_cap(view: HistoryView, ctx: Context) -> Call | None:
+    return _fx_bt1(view, ctx, currency_cap=CURRENCY_CAP)
 
 
 def bars_from_daily_candles(candles: dict[str, list[dict[str, Any]]]) -> dict[str, list[dict[str, Any]]]:

@@ -222,7 +222,7 @@ function DrawdownLimits() {
   );
 }
 
-type Link = { name: string; state: "working" | "failing" | "unknown"; last_ok: string | null; last_fail: string | null; last_error: string | null };
+type Link = { name: string; state: "working" | "failing" | "closed" | "unknown"; last_ok: string | null; last_fail: string | null; last_error: string | null };
 
 /** Every outside link and when it last worked / failed. A link that worked after its last failure is working. */
 function Connections() {
@@ -243,10 +243,10 @@ function Connections() {
             {(links.data?.links ?? []).map((l) => (
               <tr key={l.name}>
                 <td>{l.name}</td>
-                <td><Status tone={l.state === "working" ? "ok" : l.state === "failing" ? "problem" : "none"} word={l.state === "working" ? "Working" : l.state === "failing" ? "Failing" : "No data yet"} /></td>
+                <td><Status tone={l.state === "working" ? "ok" : l.state === "failing" ? "problem" : "none"} word={l.state === "working" ? "Working" : l.state === "failing" ? "Failing" : l.state === "closed" ? "Market closed (weekend)" : "No data yet"} /></td>
                 <td>{when(l.last_ok)}</td>
                 <td>{when(l.last_fail)}</td>
-                <td className="small">{l.state === "failing" ? l.last_error : l.last_error ? <span className="note">{l.last_error} (recovered)</span> : "—"}</td>
+                <td className="small">{l.state === "failing" ? l.last_error : l.state === "closed" ? <span className="note">offline is normal until the market opens, Sunday 5pm New York (Monday 7–8am Brisbane)</span> : l.last_error ? <span className="note">{l.last_error} (recovered)</span> : "—"}</td>
               </tr>
             ))}
             {links.data && !links.data.links.length && <tr><td colSpan={5} className="note">No links reported yet. They appear after the next cycle.</td></tr>}

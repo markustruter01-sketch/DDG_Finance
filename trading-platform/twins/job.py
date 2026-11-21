@@ -25,6 +25,7 @@ from typing import Any, Callable
 
 from loguru import logger
 
+from core.market_hours import forex_open  # one definition of the forex week
 from twins import config, engine, prices, store
 from twins.config import DAILY, HOURLY, FOREX_BOT, SHARE_BOTS
 from twins.engine import NEW_YORK, SnapshotError
@@ -68,19 +69,6 @@ def _ensure_schema(get_conn) -> None:
 
 def _ny(now: datetime) -> datetime:
     return now.astimezone(NEW_YORK)
-
-
-def forex_open(now: datetime) -> bool:
-    """Sunday 17:00 to Friday 17:00, New York."""
-    ny = _ny(now)
-    wd, t = ny.weekday(), ny.time()
-    if wd == 5:
-        return False
-    if wd == 6:
-        return t >= engine.FOREX_DAY_CLOSE
-    if wd == 4:
-        return t < engine.FOREX_DAY_CLOSE
-    return True
 
 
 # ── reads of the platform's own tables ────────────────────────────────────────

@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
 import { Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api } from "@/hooks/use-trading-client";
+import { useLeaderboard } from "@/hooks/use-leaderboard";
 import { Shell, Status } from "@/components/Shell";
 import { rebase, returnSince, sharedStart } from "@/lib/curves";
 
@@ -90,7 +91,7 @@ const LINES = [{ id: "forex_ai", name: "AI council (real account)", color: "var(
 const tone = (v: number | null | undefined) => (v == null || v === 0 ? "" : v > 0 ? "gain" : "loss");
 
 function ForexOverview() {
-  const board = useQuery({ queryKey: ["league-leaderboard"], queryFn: async () => (await api.get("/league/leaderboard")).data as { rows: BoardRow[] } });
+  const board = useLeaderboard<{ rows: BoardRow[] }>();
   const cost = useQuery({ queryKey: ["forex-council-costs"], queryFn: async () => (await api.get("/forex-council/costs")).data as { months: { month: string; usd: number; calls: number; unpriced: number }[] } });
   const thisMonth = cost.data?.months[0];
   const open = useQuery({ queryKey: ["forex-open"], queryFn: async () => (await api.get("/forex/open")).data as OpenTrades, refetchInterval: 5 * 60_000 });

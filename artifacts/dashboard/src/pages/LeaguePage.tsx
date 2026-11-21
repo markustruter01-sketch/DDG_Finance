@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api } from "@/hooks/use-trading-client";
+import { useLeaderboard } from "@/hooks/use-leaderboard";
 import { Shell, Status } from "@/components/Shell";
 import { rebase, sharedStart } from "@/lib/curves";
 
@@ -76,7 +77,7 @@ function Detail({ row, spxRow }: { row: Row; spxRow: Row | undefined }) {
   const data = (from ? rebase(row.curve, from) : []).map(([d, v]) => ({ d, line: v, spx: spx.get(d) ?? null }));
   return (
     <section className="glass panel" aria-label={`${row.name} detail`}>
-      <div className="panel-head"><h2>{row.name}</h2><span className="label">{FAMILY[row.family ?? ""] ?? row.family} · {row.id}</span></div>
+      <div className="panel-head"><h2>{row.name}</h2><span className="label">{FAMILY[row.family ?? ""] ?? row.family}{row.kind !== "real" ? ` · ${row.id}` : ""}</span></div>
       <div className="league-detail">
         <div style={{ height: 220 }}>
           {data.length < 2 ? <div className="empty">Not enough days to draw yet.</div> : (
@@ -105,11 +106,7 @@ function Detail({ row, spxRow }: { row: Row; spxRow: Row | undefined }) {
 }
 
 export default function LeaguePage() {
-  const board = useQuery({
-    queryKey: ["league-leaderboard"],
-    queryFn: async () => (await api.get("/league/leaderboard")).data as Board,
-    refetchInterval: 15 * 60_000,
-  });
+  const board = useLeaderboard<Board>();
   const costs = useQuery({
     queryKey: ["league-costs"],
     queryFn: async () => (await api.get("/league/costs")).data as Costs,
@@ -222,7 +219,7 @@ export default function LeaguePage() {
                   {table.map((r, i) => (
                     <tr key={r.id} className={pickedRow?.id === r.id ? "picked" : ""} onClick={() => setPicked(r.id)} style={{ cursor: "pointer" }}>
                       <td className="small">{i + 1}</td>
-                      <td>{r.name}<div className="note">{r.id}</div></td>
+                      <td>{r.name}{r.kind !== "real" && <div className="note">{r.id}</div>}</td>
                       <td className="small">{FAMILY[r.family ?? ""] ?? r.family}</td>
                       <td><span className={tone(r.return_pct)}>{pct(r.return_pct)}</span></td>
                       <td>{pct(r.worst_fall_pct, false)}</td>

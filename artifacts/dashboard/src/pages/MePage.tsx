@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/hooks/use-trading-client";
+import { useLeaderboard } from "@/hooks/use-leaderboard";
 import { Shell, Status } from "@/components/Shell";
 import { returnSince, type Curve } from "@/lib/curves";
 
@@ -135,7 +136,7 @@ export default function MePage() {
   const qc = useQueryClient();
   const catalog = useQuery({ queryKey: ["human-catalog"], queryFn: async () => (await api.get("/human/catalog")).data as Catalog, staleTime: 3600_000 });
   const acct = useQuery({ queryKey: ["human-account"], queryFn: async () => (await api.get("/human/account")).data as AccountView });
-  const board = useQuery({ queryKey: ["league-leaderboard"], queryFn: async () => (await api.get("/league/leaderboard")).data as { rows: Row[] } });
+  const board = useLeaderboard<{ rows: Row[] }>();
   const preds = useQuery({ queryKey: ["predictions"], queryFn: async () => (await api.get("/predictions")).data as Predictions });
   const ask = useMutation({
     mutationFn: async () => (await api.post("/predictions/ask-council")).data as Record<string, { filed?: number; error?: string }>,

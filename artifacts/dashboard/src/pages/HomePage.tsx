@@ -26,7 +26,7 @@ import { useFleetData, fmtEq, getBotStatus, type BotSlice, type LivePos } from "
 import { useBotRegistry, useFleetHistory } from "@/hooks/use-portfolio";
 import { useExportReport } from "@/hooks/use-report";
 import { useBotHistory, type BotDay } from "@/hooks/use-bot-history";
-import { botColor } from "@/lib/bot-identity";
+import { botColor, botLabel } from "@/lib/bot-identity";
 import { useComparison, useFleetV1State, useHoldings, useMomoV2State, useVaultSummary, type Holdings } from "@/hooks/use-fleet-v1";
 import { ComparisonPanel, FleetAccountPanel, MomoPanel, VaultPanel } from "@/components/FleetV1";
 import { AllocatorCard, LeagueTop, RecordsCard, useLeague } from "@/components/LeagueCards";
@@ -246,7 +246,7 @@ export default function HomePage() {
       .sort((a, b) => a.display_order - b.display_order);
     return bots.map((b) => ({
       id: b.id,
-      name: b.display_name,
+      name: botLabel(b),
       subtitle: b.rule || b.subtitle || b.strategy_label,
       shade: botColor(b.id),
       paused: pause.data ? pause.data.bots.find((r) => r.bot_id === b.id)?.paused !== false : b.status === "paused",

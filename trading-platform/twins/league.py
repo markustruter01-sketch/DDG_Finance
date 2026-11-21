@@ -77,18 +77,32 @@ def _http_get(url: str) -> bytes:
 
 
 def load_universe(http_get: Callable[[str], bytes] = _http_get) -> tuple[tuple[str, ...], dict[str, str], str]:
-    """S&P 500 members and their sectors (same source as MOMO-V2)."""
+    """S&P 500 members (same source as MOMO-V2) and their sectors.
+
+    Sectors come from the holdings file; if it has none, from iShares IVV, then from
+    Wikipedia's S&P 500 list. The label names a sector source only when that source
+    covered at least MIN_SECTOR_SHARE of the members (21 Nov: it used to name IVV
+    even when IVV returned nothing)."""
     from sleeve_runtime.sp500_universe import (MIN_SECTOR_SHARE, load_ivv_sectors, load_sp500_rows,
-                                               sector_share, sectors)
+                                               load_wikipedia_sectors, sector_share, sectors)
 
     tickers, rows, source = load_sp500_rows(http_get)
     by_ticker = sectors(rows, tickers)
-    if sector_share(by_ticker) < MIN_SECTOR_SHARE:      # 20 Nov: SSGA's Sector column is "-" in every row
+    if sector_share(by_ticker) >= MIN_SECTOR_SHARE:
+        return tuple(tickers), by_ticker, source
+    tried = []
+    for name, load in (("ishares_ivv", load_ivv_sectors), ("wikipedia", load_wikipedia_sectors)):
         try:
-            by_ticker, source = load_ivv_sectors(http_get, tickers), f"{source}; sectors from ishares_ivv"
+            got = load(http_get, tickers)
         except Exception as exc:
-            logger.warning(f"league | IVV sector list unavailable: {type(exc).__name__}: {exc}")
-    return tuple(tickers), by_ticker, source
+            tried.append(f"{name} {type(exc).__name__}")
+            continue
+        share = sector_share(got)
+        if share >= MIN_SECTOR_SHARE:
+            return tuple(tickers), got, f"{source}; sectors from {name}"
+        tried.append(f"{name} {share:.0%}")
+    logger.warning(f"league | no sector source covered {MIN_SECTOR_SHARE:.0%} of members: {', '.join(tried)}")
+    return tuple(tickers), by_ticker, f"{source}; no sectors ({', '.join(tried)})"
 
 
 def ensure_accounts(get_conn, session: date, registrations: dict[str, dict[str, Any]]) -> list[str]:

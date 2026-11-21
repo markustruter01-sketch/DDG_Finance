@@ -18,6 +18,10 @@ any existing table.
   (TWINS-V2 "Record keeping"; twins/month_end.py).
 - allocator_labels: APPEND-ONLY. The Allocator's regime label for each US
   session, written the night of that session (twins/allocator.py).
+- macro_state: APPEND-ONLY. Roadmap v2 macro label, its six votes, the four
+  daily flags and the side measures for each US session, written the night of
+  that session (research_harness/league/macro_state.py, V2-06 and V2-19).
+  The flags are read by no rule (roadmap v2, rule 10).
 
 Every function takes get_conn (a context manager yielding a psycopg2
 connection), so tests run on a throwaway local Postgres.
@@ -138,6 +142,14 @@ CREATE TABLE IF NOT EXISTS allocator_labels (
     recorded_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS macro_state (
+    day           DATE PRIMARY KEY,            -- the US session the state is for
+    label         TEXT,                        -- confirmed label (5-session rule); NULL until one has held
+    raw_label     TEXT,                        -- that session's own label
+    detail        JSONB NOT NULL,              -- votes, flags, side measures
+    recorded_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS twin_fx_financing (
     day           DATE NOT NULL,               -- New York date the rates were read (after the 17:00 roll)
     pair          TEXT NOT NULL,               -- OANDA pair, e.g. USD_CHF
@@ -156,7 +168,7 @@ $$;
 """
 
 APPEND_ONLY = ("twin_decisions", "twin_votes", "change_log", "twin_month_freeze", "allocator_labels",
-               "twin_fx_financing")
+               "twin_fx_financing", "macro_state")
 _TRIGGERS = "".join(f"""
 DO $$ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = '{t}_append_only') THEN
@@ -417,6 +429,22 @@ def labels(get_conn: GetConn) -> list[dict[str, Any]]:
         cur.execute("SELECT day, label, measurements, recorded_at FROM allocator_labels ORDER BY day")
         return [{"day": d, "label": lab, "measurements": m if isinstance(m, dict) else json.loads(m),
                  "recorded_at": at} for d, lab, m, at in cur.fetchall()]
+
+
+def record_macro_state(get_conn: GetConn, day: date, row: dict[str, Any], at: datetime) -> bool:
+    """One session's macro state, written once (a session already stored is kept)."""
+    detail = {k: row[k] for k in ("votes", "flags", "side")}
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute("INSERT INTO macro_state (day, label, raw_label, detail, recorded_at) VALUES (%s, %s, %s, %s, %s) "
+                    "ON CONFLICT (day) DO NOTHING", (day, row["label"], row["raw_label"], json.dumps(detail), at))
+        return cur.rowcount == 1
+
+
+def macro_states(get_conn: GetConn) -> list[dict[str, Any]]:
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute("SELECT day, label, raw_label, detail, recorded_at FROM macro_state ORDER BY day")
+        return [{"day": d, "label": lab, "raw_label": raw, **(det if isinstance(det, dict) else json.loads(det)),
+                 "recorded_at": at} for d, lab, raw, det, at in cur.fetchall()]
 
 
 def record_fx_rates(get_conn: GetConn, day: date, rows: list[dict[str, Any]]) -> int:

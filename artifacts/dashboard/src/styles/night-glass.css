@@ -168,8 +168,6 @@ table.ng .money, table.ng th.money { font-family: var(--ng-mono); text-align: ri
   .home-right .engine > .stat .small { overflow: hidden; text-overflow: ellipsis; }
   .home-right .engine > .stat .gain, .home-right .engine > .stat .loss { padding-bottom: 1px; }
 }
-.flip-stage.on .flip-page > .pair.accounts { flex: 1 1 auto; min-height: 0; }
-.flip-stage.on .flip-page > .pair.accounts > .panel { height: auto; min-height: 0; }
 .flip-stage.on .is-away { visibility: hidden; pointer-events: none; }
 .flip-stage.on .flip-out { pointer-events: none; }
 /* The sheet is lifted toward you, turned over on its middle, and laid back down. */
@@ -491,3 +489,18 @@ table.ng input { width: 7em; }
   .me-grid { grid-template-columns: minmax(0, 1.4fr) minmax(0, 0.8fr) minmax(0, 1.2fr); grid-template-areas: "ticket hold log"; }
   .me-grid > .panel { height: 100%; }
 }
+
+/* Home chart: tooltip rows carry their line's colour; the S&P 500 key is dashed like its line. */
+.chart-tip .tip-row { display: flex; align-items: center; gap: 6px; }
+.chart-tip .tip-row i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.key i.dashed { background: none !important; height: 0; border-top: 2px dashed; border-radius: 0; }
+
+/* Home detail (21 Nov 2026): a plain scrolling page. Every block keeps its natural
+   height (no shrinking, no scroll boxes inside panels), so nothing overlaps. */
+.home-detail-page { flex: none; display: flex; flex-direction: column; gap: 12px; padding-bottom: 24px; }
+.home-detail-page > * { flex: none; }
+.home-detail-page .fold { margin-top: 4px; }
+.home-accounts { display: grid; gap: 12px; align-items: start;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); }
+.home-accounts > .panel { height: auto; overflow: visible; }
+@media (max-width: 900px) { .home-detail-page .home-detail { grid-template-columns: 1fr; } }

@@ -223,15 +223,22 @@ table.ng .money, table.ng th.money { font-family: var(--ng-mono); text-align: ri
 /* Phone: logo and page action on one row, the three pages as equal tabs,
    then status; the phone shows its own clock. */
 @media (max-width: 640px) {
-  .topbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+  .topbar { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; }
   .topbar .brand { grid-column: 1; grid-row: 1; justify-self: start; }
-  .topbar > .btn { grid-column: 2; grid-row: 1; }
+  .topbar > .seg { grid-column: 2; grid-row: 1; }
+  .topbar > .btn { grid-column: 3; grid-row: 1; }
+  .topbar .brand { min-width: 0; overflow: hidden; }
   .topbar .nav { grid-column: 1 / -1; }
   .topbar .nav a { flex: 1; justify-content: center; }
   .topbar .statuses { grid-column: 1 / -1; padding: 8px 14px; }
   .topbar .spacer, .topbar > .pill { display: none; }
   .page-title { font-size: 28px; }
   .display { font-size: 42px; }
+}
+/* Narrow phones (21 Nov: "DDG | Finance" ran under Overview/Detail): the mark and DDG only. */
+@media (max-width: 440px) {
+  .topbar .brand i, .topbar .brand span, .topbar > .btn .btn-text { display: none; }
+  .topbar > .btn { padding: 0 12px; }
 }
 /* Big screens: use the width and scale the type with it. */
 @media (min-width: 2200px) {

@@ -306,7 +306,7 @@ export default function HomePage() {
     <>
       <FlipButtons side={side} onSide={setSide} labels={["Overview", "Detail"]} />
       <button className="btn glass" onClick={downloadReport} disabled={report.isPending} title="Download the full text report">
-        <Download size={15} aria-hidden="true" /> {report.isPending ? "Preparing" : "Report"}
+        <Download size={15} aria-hidden="true" /> <span className="btn-text">{report.isPending ? "Preparing" : "Report"}</span>
       </button>
     </>
   );

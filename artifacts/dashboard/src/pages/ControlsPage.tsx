@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { OctagonX, Pause, Play, RefreshCw } from "lucide-react";
 import { api } from "@/hooks/use-trading-client";
-import { botColor, formatBotLabel, useBotIdentity } from "@/lib/bot-identity";
+import { botColor, useBotIdentity, useBotLabels } from "@/lib/bot-identity";
 import { Shell, Status, bneTime } from "@/components/Shell";
 import { useClearHalt, useFleetV1State, useMomoV2State } from "@/hooks/use-fleet-v1";
 
@@ -54,8 +54,8 @@ function BotRow({ row }: { row: PauseRow }) {
   return (
     <li className="control-row" data-testid={`row-bot-${row.bot_id}`}>
       <div className="grow">
-        <div className="card-title"><span className="dot" style={{ background: botColor(row.bot_id), marginRight: 8, verticalAlign: "middle" }} aria-hidden="true" />{formatBotLabel(identity)}</div>
-        <div className="label">{identity.code}</div>
+        <div className="card-title"><span className="dot" style={{ background: botColor(row.bot_id), marginRight: 8, verticalAlign: "middle" }} aria-hidden="true" />{identity.displayName}</div>
+        {identity.subtitle && <div className="note">{identity.subtitle}</div>}
         {row.pause_reason && row.paused !== false && (
           <div className="note">Reason: {row.pause_reason}{row.paused_at ? ` · since ${bneTime(row.paused_at)}` : ""}</div>
         )}
@@ -262,6 +262,7 @@ type Alarm = { id: number; error_type: string; message: string; ts?: string; cre
 
 /** Overview first (approved design 20 Nov): what needs Markus, in order of urgency, then the counts. */
 function NeedsYou({ state }: { state: PauseState }) {
+  const labels = useBotLabels();
   const alarms = useQuery({
     queryKey: ["unresolved-alarms"],
     queryFn: async () => (await api.get("/system/degradations", { params: { hours: 24 * 30, unresolved_only: true, limit: 50 } })).data as { events: Alarm[] },
@@ -278,7 +279,7 @@ function NeedsYou({ state }: { state: PauseState }) {
   const items: { tone: "problem" | "late"; text: string }[] = [
     ...(state.kill_switch_tripped ? [{ tone: "problem" as const, text: "Emergency stop has tripped" }] : []),
     ...failing.map((l) => ({ tone: "problem" as const, text: `${l.name} is failing${l.last_error ? `: ${l.last_error}` : ""}` })),
-    ...(open.length ? [{ tone: "problem" as const, text: `${open.length} alarm${open.length > 1 ? "s" : ""} open · newest: ${open[0].message}` }] : []),
+    ...(open.length ? [{ tone: "problem" as const, text: `${open.length} alarm${open.length > 1 ? "s" : ""} open · newest: ${labels.humanize(open[0].message)}` }] : []),
     ...paused.map((b) => ({ tone: "late" as const, text: `${b.bot_id} is ${b.paused === null ? "unknown (treated as paused)" : "paused"}${b.pause_reason ? `: ${b.pause_reason}` : ""}` })),
   ];
   return (<>
@@ -296,7 +297,7 @@ function NeedsYou({ state }: { state: PauseState }) {
       {open.length > 0 && (
         <details style={{ marginTop: 8 }}><summary className="small" style={{ cursor: "pointer" }}>Every open alarm</summary>
           <table className="ng"><tbody>{open.map((a) => (
-            <tr key={a.id}><td className="small">{(a.ts ?? a.created_at ?? "").slice(0, 16).replace("T", " ")}</td><td>{a.error_type}<div className="note">{a.message}</div></td></tr>
+            <tr key={a.id}><td className="small">{(a.ts ?? a.created_at ?? "").slice(0, 16).replace("T", " ")}</td><td>{a.error_type}<div className="note">{labels.humanize(a.message)}</div></td></tr>
           ))}</tbody></table>
         </details>
       )}

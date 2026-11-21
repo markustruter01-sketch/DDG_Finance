@@ -120,6 +120,18 @@ MASTER COPY: this file in GitHub. The claude.ai Project doc `claude/finance-2027
 - Still from Markus: UptimeRobot heartbeat URL for the runner.
 - Next (Opus): Forex, Research and Controls page redesigns; phone tab bar and Home card carousel; ddg.limited public PC/phone view; AU6 build.
 
+### Status 22 Nov morning Brisbane (Opus 5.5): roadmap v2 adopted, thesis page, first GATE orders
+- MARKUS 22 Nov 05:47 Brisbane: roadmap v2 (`fund-roadmap-v2-2026-11-21.md`) and the thesis (`fund-thesis-2027.md`) are "the ultimate source of truth"; "make sure that we match this fund roadmap exactly"; the thesis is the public paper. Read as: yes to D1 and to the recommended answer of every decision. Still asked explicitly before acting (roadmap rule 2 and README): 🔴 D2 (what Atlas V2 trades at the lock), D17 (stopping the old walk-forward job), the V2-23 write of table F to the production database.
+- Open PRs (Opus cannot merge from this session; Markus merges):
+  - #173 V2-00: roadmap v2 + thesis in docs/plans, README reading order, build-guide pointer (docs only). `macro-research-2026-11-21.md` NOT added: not supplied yet.
+  - #174 Paper page: `scripts/thesis_page.py` builds `artifacts/dashboard/public/paper.html` word for word from the thesis file (test: every sentence on the page; source SHA-256 printed). Replaces the 3 Nov paper.
+  - DDG-Control #161: the same page at ddg.limited/thesis/index.html + "Read the 2027 thesis" button on /finance. Markus approves the button words before publish.
+  - #175 V2-04 + Y-GOLD: D-OIL, H-ASSET, T-GLOBAL, FX-CARRY, D-TIPS, and yardsticks Y-MF, Y-PERM, Y-TIPS, Y-INS, Y-GOLD (version 0 files). Luck-check tries 17 → 22.
+  - #176 V2-06 + V2-19 (stacked on #175): macro label, six votes, four flags; append-only `macro_state` table; read by no rule. `python -m twins.macro_check` for the hand checks.
+- Tests (local Postgres 16, 22 Nov): trading-platform 1,224 passed / 1 skipped; kraken-bot + sleeve_runtime 295 passed.
+- UNKNOWN until the first night after publish: Alpaca daily bars for USO, XLE, EFA, EEM, TLT, TIP, DBMF, TAIL, IWM, HYG; whether TAIL still trades.
+- Next (Opus): V2-05 macro tape + V2-18 long-view panel (GATE, by Fri 4 Dec); V2-01 evidence table; V2-07, V2-08 (with warm-up), V2-09, V2-24, V2-25 for intake 1; V2-16 intake page; V2-22 drills.
+
 ## Not doing
 - Any crypto, on any account or system, full stop (Markus 17 Nov; was "no crypto sleeve", 10 Nov). Coins, pairs and crypto funds. Buys refused in code (PR #117). The last BTC was sold 17 Nov (owner-approved); no crypto is held anywhere.
 - A fourth Alpaca paper account (cap is 3).

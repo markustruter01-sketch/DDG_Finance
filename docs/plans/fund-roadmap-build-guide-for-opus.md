@@ -14,6 +14,8 @@ Part A dates always win. If Phase 1 work is due, do it before any Part B work.
 
 # Part A — DDG Finance
 
+**Roadmap v2 (21 Nov 2026) amends this part: `fund-roadmap-v2-2026-11-21.md`, work orders V2-00 to V2-26. Where the two differ, v2 wins. Its rules are added to "Rules that never bend" below.**
+
 ## Read first, in this order
 1. `docs/plans/README.md` (how to work, Replit facts, publish rules).
 2. `docs/plans/finance-2027-plan.md` (history; see "Status 17 Nov": the old gate is stopped).

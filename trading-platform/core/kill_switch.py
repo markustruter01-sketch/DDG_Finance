@@ -631,7 +631,31 @@ def evaluate_snapshot(snapshot: dict[str, Any], now: float | None = None) -> lis
     # from silently querying a real database.
     triggers.extend(snapshot.get("liveness_findings", []))
 
+    from core.market_hours import oanda_weekend
+    if oanda_weekend(now):
+        triggers = _quiet_weekend_oanda(triggers)
     return triggers
+
+
+def _is_oanda_read_failure(t: dict[str, Any]) -> bool:
+    from core.market_hours import mentions_oanda
+    if t.get("kind") == "oanda_read_failed":
+        return True
+    return t.get("kind") == "reconciliation_check_failed" and mentions_oanda(t.get("error", ""))
+
+
+def _quiet_weekend_oanda(triggers: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Forex market closed: OANDA read failures are expected (weekend maintenance), so they
+    are dropped, and so is "fleet equity unknown" when the only unread account is OANDA's.
+    Everything else (Alpaca, drawdown, real mismatches) stays."""
+    oanda = [t for t in triggers if _is_oanda_read_failure(t)]
+    if not oanda:
+        return triggers
+    other_read_fail = any(t.get("trigger") == "missing_account" and not _is_oanda_read_failure(t) for t in triggers)
+    kept = [t for t in triggers if not _is_oanda_read_failure(t)
+            and not (t.get("trigger") == "fleet_equity_unknown" and not other_read_fail)]
+    logger.info(f"Kill switch | forex market closed: {len(triggers) - len(kept)} OANDA weekend finding(s) not raised")
+    return kept
 
 
 def _confirmed_read_failures(snapshot: dict[str, Any]) -> list[dict[str, Any]]:

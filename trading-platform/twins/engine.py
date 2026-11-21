@@ -37,7 +37,7 @@ from twins.config import DAILY, HOURLY, REGISTRATION
 NEW_YORK = ZoneInfo("America/New_York")
 SESSION_OPEN = time(9, 30)
 SESSION_CLOSE = time(16, 0)
-FOREX_DAY_CLOSE = time(17, 0)        # New York; the forex trading day ends here
+from core.market_hours import FOREX_DAY_CLOSE   # noqa: E402  New York; the forex trading day ends here
 HOUR = timedelta(hours=1)
 STEPS_PER_YEAR = {DAILY: 252, HOURLY: 24 * 5 * 52}   # accrual of financing per step
 

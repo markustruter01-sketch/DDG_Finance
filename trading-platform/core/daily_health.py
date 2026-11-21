@@ -48,7 +48,7 @@ def summarize(report: dict[str, Any], *, pause_states: dict[str, bool] | None,
     checks = report.get("results", [])
     for r in checks:
         line = f"{CHECK_NAMES.get(r['name'], r['name'])}: {r['message']}"[:300]
-        if r["status"] == "DRIFT":
+        if r["status"] in ("DRIFT", "CLOSED"):      # CLOSED: forex weekend, OANDA not checked
             notes.append(f"ℹ️ {line}")
         elif r["status"] != "PASS":
             problems.append(f"{'❓' if r['status'] == 'UNKNOWN' else '❌'} {line}")

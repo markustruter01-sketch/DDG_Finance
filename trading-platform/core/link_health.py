@@ -81,8 +81,14 @@ def read_links() -> list[dict[str, Any]]:
         cur.execute(DDL)
         cur.execute("SELECT name, last_ok, last_fail, last_error FROM link_health ORDER BY name")
         rows = cur.fetchall()
+    from core.market_hours import mentions_oanda, oanda_weekend
+    weekend = oanda_weekend()
+
+    def shown(name, ok, fail):
+        st = state(ok, fail)
+        return "closed" if st == "failing" and weekend and mentions_oanda(name) else st   # expected, not a fault
     return [
-        {"name": name, "state": state(ok, fail),
+        {"name": name, "state": shown(name, ok, fail),
          "last_ok": ok.isoformat() if ok else None,
          "last_fail": fail.isoformat() if fail else None,
          "last_error": err if fail else None}

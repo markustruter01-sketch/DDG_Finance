@@ -48,7 +48,7 @@ from core.cash_park import is_cash_park
 from core.stop_policy import stop_exempt
 
 
-Status = Literal["PASS", "DRIFT", "FAIL", "UNKNOWN"]
+Status = Literal["PASS", "DRIFT", "FAIL", "UNKNOWN", "CLOSED"]   # CLOSED: forex weekend, OANDA not checked
 
 QUANTITY_TOLERANCE = 1e-8
 # PROPOSED — 0.5 percentage-point appreciation allowance above the hard cap.
@@ -1634,6 +1634,17 @@ def collect_inputs(now: datetime | None = None) -> InvariantInputs:
     return inputs
 
 
+def _weekend(result: dict[str, Any], now: datetime) -> dict[str, Any]:
+    """A check that could not run only because OANDA did not answer while the forex
+    market is closed is CLOSED (a note), not UNKNOWN (an alarm)."""
+    from core.market_hours import WEEKEND_NOTE, mentions_oanda, oanda_weekend
+    actual = result.get("actual")
+    source_error = actual.get("source_error") if isinstance(actual, dict) else None
+    if result.get("status") == "UNKNOWN" and source_error and mentions_oanda(source_error) and oanda_weekend(now):
+        return {**result, "status": "CLOSED", "message": f"{WEEKEND_NOTE} ({result.get('message')})"}
+    return result
+
+
 def run_all_invariants(
     inputs: InvariantInputs | None = None,
     *,
@@ -1642,11 +1653,11 @@ def run_all_invariants(
     """Run every invariant and return an aggregate report."""
     if inputs is None:
         inputs = collect_inputs(now)
-    results = [function(inputs) for function in INVARIANT_FUNCTIONS]
+    results = [_weekend(function(inputs), inputs.now) for function in INVARIANT_FUNCTIONS]
     statuses = {result["status"] for result in results}
     counts = {
         status: sum(1 for result in results if result["status"] == status)
-        for status in ("PASS", "DRIFT", "FAIL", "UNKNOWN")
+        for status in ("PASS", "DRIFT", "FAIL", "UNKNOWN", "CLOSED")
     }
     if "FAIL" in statuses:
         overall: Status = "FAIL"

@@ -185,6 +185,61 @@ def _fx_bt1_cap(view: HistoryView, ctx: Context) -> Call | None:
     return _fx_bt1(view, ctx, currency_cap=CURRENCY_CAP)
 
 
+# ── FX-CARRY (roadmap v2, V2-04; rules PROPOSED by Fable 5.2, 21 Nov 2026) ────
+# Carry tends to fall together with shares in a panic: a return source, not a hedge.
+CARRY_LEGS = 3                                   # long the top 3, short the bottom 3 of 8 currencies
+PAIR_OF = {p.replace("USD", "").strip("_"): p for p in PAIRS}      # EUR -> EUR_USD, JPY -> USD_JPY, ...
+
+
+def carry_d(fx_rates: tuple[tuple[date, str, float, float], ...], today: date) -> dict[str, float] | None:
+    """Each currency's yearly interest gap for holding it against the US dollar,
+    from the latest rates read on or before ``today``. OANDA's long rate on XXX_USD
+    is what holding XXX against USD earns (twins/financing.apply adds a positive
+    rate to equity), so d(XXX) = (long - short) / 2 on XXX_USD, and the negative
+    of that on USD_XXX. The dollar's d is 0. None when any pair has no rate yet."""
+    latest: dict[str, tuple[date, float, float]] = {}
+    for day, pair, long_rate, short_rate in fx_rates:
+        if day <= today and (pair not in latest or day > latest[pair][0]):
+            latest[pair] = (day, long_rate, short_rate)
+    if any(p not in latest for p in PAIRS):
+        return None
+    d = {"USD": 0.0}
+    for cur, pair in PAIR_OF.items():
+        _, lo, sh = latest[pair]
+        gap = (lo - sh) / 2
+        d[cur] = gap if pair.startswith(cur + "_") else -gap
+    return d
+
+
+def _fx_carry(view: HistoryView, ctx: Context) -> Call | None:
+    """Rank the 8 currencies by d (ties: alphabetical). Long the top 3, short the
+    bottom 3. Each leg sized like FX-TREND (0.10 / the pair's 63-day volatility)
+    divided by 6, placed through its dollar pair; a leg that is the dollar itself
+    needs no trade. Gross at most 2x (scaled down). Monthly. No stops."""
+    if not all(has_today(view, p) for p in PAIRS):
+        return None
+    d = carry_d(ctx.fx_rates, view.today)
+    if d is None:
+        return None
+    rank = sorted(d, key=lambda cur: (-d[cur], cur))
+    longs, shorts = rank[:CARRY_LEGS], rank[-CARRY_LEGS:]
+    legs: dict[str, tuple[str, float]] = {}
+    for cur, want in [(c, "long") for c in longs] + [(c, "short") for c in shorts]:
+        if cur == "USD":
+            continue
+        pair = PAIR_OF[cur]
+        vol = ann_vol(closes(view, pair, TREND_VOL_DAYS + 1), TREND_VOL_DAYS)
+        if vol is None:
+            return None
+        pair_dir = want if pair.startswith(cur + "_") else ("short" if want == "long" else "long")
+        legs[pair] = (pair_dir, TREND_VOL_TARGET / vol / (2 * CARRY_LEGS))
+    gross = sum(w for _, w in legs.values())
+    scale = min(1.0, GROSS_CAP / gross) if gross > 0 else 1.0
+    weights = dict(signed_weight(p, dirn, w * scale) for p, (dirn, w) in legs.items())
+    return Call(weights, state="hold",
+                note={"long": longs, "short": shorts, "d": {c: round(x, 6) for c, x in sorted(d.items())}})
+
+
 def bars_from_daily_candles(candles: dict[str, list[dict[str, Any]]]) -> dict[str, list[dict[str, Any]]]:
     """OANDA daily mid candles -> view bars per pair (OANDA name) AND per
     synthetic instrument (inverted for USD_XXX), labelled with the New York

@@ -79,13 +79,20 @@ def test_monthly_rule_sends_on_month_start_and_on_a_state_change_only():
 
 # ── yardsticks ────────────────────────────────────────────────────────────────
 def test_yardsticks_hold_fixed_mixes():
-    bars = {s: bars_from(steady(0.0003)) for s in ("SPY", "AGG", "BIL")}
+    bars = {s: bars_from(steady(0.0003)) for s in ("SPY", "AGG", "BIL", "DBMF", "TLT", "GLD", "TIP", "TAIL")}
     v = HistoryView(bars)
     d = date(2026, 11, 2)
     assert base.decide(fam.BY_ID["Y-SPX"], v, ctx(), d, False).weights == {"SPY": 1.0}
     assert base.decide(fam.BY_ID["Y-SPX"], v, ctx(), date(2026, 12, 1), True) is None     # bought once
     assert base.decide(fam.BY_ID["Y-6040"], v, ctx(), d, True).weights == {"AGG": 0.4, "SPY": 0.6}
     assert base.decide(fam.BY_ID["Y-CASH"], v, ctx(), d, False).weights == {"BIL": 1.0}
+    # roadmap v2 yardsticks (V2-04, V2-18)
+    assert base.decide(fam.BY_ID["Y-MF"], v, ctx(), d, False).weights == {"DBMF": 1.0}
+    assert base.decide(fam.BY_ID["Y-PERM"], v, ctx(), d, True).weights == {"BIL": 0.25, "GLD": 0.25, "SPY": 0.25, "TLT": 0.25}
+    assert base.decide(fam.BY_ID["Y-TIPS"], v, ctx(), d, False).weights == {"TIP": 1.0}
+    assert base.decide(fam.BY_ID["Y-INS"], v, ctx(), d, True).weights == {"SPY": 0.9, "TAIL": 0.1}
+    assert base.decide(fam.BY_ID["Y-GOLD"], v, ctx(), d, False).weights == {"GLD": 1.0}
+    assert base.decide(fam.BY_ID["Y-GOLD"], v, ctx(), date(2026, 12, 1), True) is None    # bought once
 
 
 # ── trend and gearing ─────────────────────────────────────────────────────────
@@ -126,7 +133,63 @@ def test_f1_is_65_percent_core_and_35_percent_cross_asset():
     assert w["SPY"] == pytest.approx(0.65 * 0.297)
 
 
+def test_global_trend_one_third_each_times_its_own_atlas_exposure():
+    bars = {"SPY": bars_from(steady(0.001)),                       # calm rise: 3 votes, E = 1
+            "EFA": bars_from(steady(-0.001)),                      # fall: 0 votes, E = 0
+            "EEM": bars_from(steady(0.001, wiggle=0.02)),          # rise, but 20-day vol well above 15%: E < 1
+            "BIL": bars_from(steady(0.0))}
+    d = date(2026, 11, 2)
+    call = base.decide(fam.BY_ID["T-GLOBAL"], HistoryView(bars), ctx(), d, False)
+    e_eem = fam.atlas_exposure(closes_at(bars["EEM"], d), 1.0)[1]
+    assert 0 < e_eem < 1
+    assert call.weights == pytest.approx({"SPY": 1 / 3, "EEM": e_eem / 3, "BIL": 1 - 1 / 3 - e_eem / 3})
+    assert call.state == (3, 0, 3)                                 # a vote change re-decides mid-month
+    assert fam.BY_ID["T-GLOBAL"].stop_pct == core_v1.STOP_PCT
+
+
+def closes_at(rows, day):
+    return [b["close"] for b in rows if b["day"] <= day]
+
+
 # ── diversifiers ──────────────────────────────────────────────────────────────
+def test_one_trend_function_for_gold_oil_and_tips_and_gold_is_unchanged():
+    d = date(2026, 11, 2)
+    up, down = bars_from(steady(0.001)), bars_from(steady(-0.001))
+    for sid, sym in (("D-GOLD", "GLD"), ("D-OIL", "USO"), ("D-TIPS", "TIP")):
+        bars = {"SPY": bars_from(steady(0.0)), "BIL": bars_from(steady(0.0)), sym: up}
+        call = base.decide(fam.BY_ID[sid], HistoryView(bars), ctx(), d, False)
+        assert call.weights == {sym: 1.0} and call.note == {"votes": 3} and call.state == "hold"
+        assert base.decide(fam.BY_ID[sid], HistoryView({**bars, sym: down}), ctx(), d, False).weights == {"BIL": 1.0}
+    # D-GOLD is exactly the 19 Nov rule: >= 2 of 3 votes in, else out. By hand:
+    # last close 150 against 100 (63 ago), 100 (126 ago), 200 (252 ago): 2 votes -> in.
+    c = [100.0] * 300
+    c[-253], c[-1] = 200.0, 150.0
+    got = fam.trend_one("GLD")(view_at({"GLD": bars_from(c)}, CAL[-1]), ctx())
+    assert got.weights == {"GLD": 1.0} and got.note == {"votes": 2}
+    c[-127] = 200.0                                               # now only 1 vote (63 ago) -> out
+    got = fam.trend_one("GLD")(view_at({"GLD": bars_from(c)}, CAL[-1]), ctx())
+    assert got.weights == {} and got.note == {"votes": 1}
+
+
+def test_hard_assets_quarter_slots_cut_by_volatility():
+    d = date(2026, 11, 2)
+    bars = {"SPY": bars_from(steady(0.0)), "BIL": bars_from(steady(0.0)),
+            "GLD": bars_from(steady(0.001)),                       # on, smooth rise: vol ~0 -> full 25%
+            "USO": bars_from(steady(0.001, wiggle=0.03)),          # on, very jumpy: cut
+            "DBC": bars_from(steady(-0.001)),                      # off
+            "XLE": bars_from(steady(0.0008, wiggle=0.004))}        # on, calm
+    call = base.decide(fam.BY_ID["H-ASSET"], HistoryView(bars), ctx(), d, False)
+    uso_vol = fam.xasset_v1.vol63(closes_at(bars["USO"], d))
+    xle_vol = fam.xasset_v1.vol63(closes_at(bars["XLE"], d))
+    assert (fam.xasset_v1.vol63(closes_at(bars["GLD"], d)) or 0.0) < 0.20  # a smooth rise: no cut
+    want = {"GLD": 0.25, "USO": 0.25 * min(1.0, 0.20 / uso_vol), "XLE": 0.25 * min(1.0, 0.20 / xle_vol)}
+    assert uso_vol > 0.20 and want["USO"] < 0.25
+    assert "DBC" not in call.weights and call.note["votes"]["DBC"] == 0
+    for s, w in want.items():
+        assert call.weights[s] == pytest.approx(w)
+    assert call.weights["BIL"] == pytest.approx(1 - sum(want.values()))
+
+
 def test_gold_trend_all_in_or_out():
     up = {"SPY": bars_from(steady(0.0)), "GLD": bars_from(steady(0.001)), "BIL": bars_from(steady(0.0))}
     assert base.decide(fam.BY_ID["D-GOLD"], HistoryView(up), ctx(), date(2026, 11, 2), False).weights == {"GLD": 1.0}
@@ -251,8 +314,10 @@ def test_f1_split_matches_the_live_fleet():
 def test_every_strategy_has_a_registration_and_no_crypto_anywhere():
     from core.no_crypto import is_crypto
 
-    assert len(fam.STRATEGIES) == 19 and len(fam.BY_ID) == 19         # incl. FX-BT1-CAP (21 Nov); + FX-COUNCIL = 20 lines
-    assert sum(1 for s in fam.STRATEGIES if s.family == "yardstick") == 3
+    assert len(fam.STRATEGIES) == 29 and len(fam.BY_ID) == 29         # 19 + roadmap v2's 5 lines and 5 yardsticks
+    assert sum(1 for s in fam.STRATEGIES if s.family == "yardstick") == 8
+    from twins.leaderboard import N_TRIALS
+    assert N_TRIALS == sum(1 for s in fam.STRATEGIES if s.family != "yardstick") + 1 == 22   # + FX-COUNCIL
     for s in fam.STRATEGIES:
         reg = league.load_registration(s.id)
         assert reg is not None, s.id
@@ -277,7 +342,8 @@ LIVE_CAL = tuple(d for d in CAL if d <= date(2026, 11, 18))
 
 def fake_fetch(symbols, start):
     bars, names = stock_market(60, LIVE_CAL)
-    for s in ("QQQ", "SSO", "QLD", "AGG", "IEF", "GLD", "DBC", "UUP", "RSP"):
+    for s in ("QQQ", "SSO", "QLD", "AGG", "IEF", "GLD", "DBC", "UUP", "RSP",
+              "USO", "XLE", "EFA", "EEM", "TLT", "TIP", "DBMF", "TAIL"):
         bars[s] = bars_from(steady(0.0005, len(LIVE_CAL), wiggle=0.004), LIVE_CAL)
     return {s: [b for b in bars.get(s, []) if b["day"] >= start] for s in symbols if s in bars}
 
@@ -299,6 +365,15 @@ def fake_fx_now(pairs):
     return out
 
 
+def fake_rates(get_conn, day=date(2026, 11, 16)):
+    """One night of OANDA-shaped financing rates (twin_fx_financing), so FX-CARRY can decide."""
+    from research_harness.league import forex as fx
+    days = {w: 1 for w in ("MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY")}
+    rows = [{"pair": p, "long_rate": 0.01 * (k - 3), "short_rate": -0.01 * (k - 3) - 0.004, "days_charged": days}
+            for k, p in enumerate(fx.PAIRS)]
+    store.record_fx_rates(get_conn, day, rows)
+
+
 def fake_universe():
     _, names = stock_market(60, LIVE_CAL)
     return tuple(names), {n: f"Sector{i % 8}" for i, n in enumerate(names)}, "test"
@@ -310,13 +385,14 @@ def test_two_nights_start_every_line_value_it_and_keep_the_chain(tmp_path):
 
     get_conn = make_get_conn()
     store.ensure_schema(get_conn)
+    fake_rates(get_conn)
     alarms = []
     now = datetime.combine(date(2026, 11, 17), time(17, 15), NEW_YORK)
     report, bars = league.run(get_conn, now, date(2026, 11, 17), fetch_daily=fake_fetch, universe_loader=fake_universe,
                               fetch_fx_daily=fake_fx_now)
-    assert report["started"] and len(report["started"]) == 19   # 18 + FX-BT1-CAP (21 Nov)
+    assert report["started"] and len(report["started"]) == 29   # 19 + roadmap v2's 10 (22 Nov)
     accts = [a for a in store.accounts(get_conn) if a["bot_id"] == league.LEAGUE_BOT]
-    assert len(accts) == 19 and all(a["start_equity"] == 100_000 for a in accts)
+    assert len(accts) == 29 and all(a["start_equity"] == 100_000 for a in accts)
     assert all(a["config"]["registration_hash"] for a in accts)
     for a in accts:                                  # every line decided on its first night
         rows = store.decisions(get_conn, a["twin_id"])

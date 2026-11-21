@@ -190,8 +190,16 @@ def run(get_conn, now: datetime, session: date, *, fetch_daily=None,
         except Exception as exc:              # OANDA's intermittent 401s: a missed night for the forex lines
             report["forex"] = f"unavailable: {type(exc).__name__}"
             logger.warning(f"league | OANDA daily candles unavailable tonight: {type(exc).__name__}: {exc}")
+    fx_rates: tuple = ()
+    if any(s.uses_fx_rates for s, _ in todo):          # FX-CARRY: the OANDA rates read each night (AU5)
+        try:
+            fx_rates = tuple((r["day"], r["pair"], float(r["long_rate"]), float(r["short_rate"]))
+                             for r in store.fx_rates(get_conn))
+        except Exception as exc:
+            logger.warning(f"league | financing rates unreadable tonight: {type(exc).__name__}: {exc}")
     calendar = tuple(b["day"] for b in bars.get("SPY", []))
-    ctx = base.Context(calendar=calendar, universe=tuple(s for s in universe if s in bars), sectors=sectors)
+    ctx = base.Context(calendar=calendar, universe=tuple(s for s in universe if s in bars), sectors=sectors,
+                       fx_rates=fx_rates)
     view = HistoryView(bars)
     from sleeve_runtime.sp500_universe import MIN_SECTOR_SHARE, sector_share
     sectors_ok = sector_share({s: sectors.get(s, "") for s in ctx.universe}) >= MIN_SECTOR_SHARE
@@ -207,7 +215,8 @@ def run(get_conn, now: datetime, session: date, *, fetch_daily=None,
         rows = store.decisions(get_conn, tid)
         why_not = ("S&P 500 member list unavailable" if strategy.uses_universe and not ctx.universe else
                    "S&P 500 sector list unavailable" if strategy.uses_sectors and not sectors_ok else
-                   "OANDA daily candles unavailable" if strategy.forex and not fx_ok else None)
+                   "OANDA daily candles unavailable" if strategy.forex and not fx_ok else
+                   "OANDA financing rates unavailable" if strategy.uses_fx_rates and not fx_rates else None)
         if why_not:
             for d in mine:
                 _missed(get_conn, tid, now, engine.step_close(d, DAILY), why_not)

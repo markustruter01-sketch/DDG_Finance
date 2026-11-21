@@ -2,7 +2,7 @@
 
 Written by Claude (Fable 5.2), Tue 17 Nov 2026. Part B added the same day. You (Opus 5.5) are the only builder. Fable is NOT in the loop: do not wait for a Fable review, a Fable spec or a Fable decision. Where older notes say "FABLE decides", you propose, write the reason down, and Markus decides.
 
-**Handover (applies to Part A and Part B).** Several Opus sessions on different accounts share this work. Before you start, read `DDG-Control/docs/handover/README.md`. After every merged pull request, add an entry there and mark the order here "DONE, date, PR number". A session can run out of usage without warning: never leave work uncommitted; push a draft pull request that says what is left.
+**Handover (applies to Part A and Part B).** Several Opus sessions on different accounts share this work. Before you start, read `DDG_Control/docs/handover/README.md`. After every merged pull request, add an entry there and mark the order here "DONE, date, PR number". A session can run out of usage without warning: never leave work uncommitted; push a draft pull request that says what is left.
 
 **Two parts, in this order:**
 - **Part A — DDG Finance.** The plan you are building is `fund-roadmap-2026-11-17.md` (same folder). Markus agreed to it on 17 Nov 2026 (plan agreed; Defensive stocks replaces Atlas V2 at the lock; lock moves to about 12 to 13 Dec).
@@ -105,13 +105,13 @@ Stop, write what you know and do not know into the plan's Status entry, and ask 
 # Part B — the rest of the company
 
 ## Read first
-1. `DDG-Control/docs/plans/README.md` (company map, how to work with Markus).
-2. `DDG-Control/docs/plans/company-audit-2026-11-17.md` (what is wrong and why).
-3. `DDG-Control/docs/plans/growth-plan-2026-11-17.md` (where the money is and why).
-4. The start-here file of the repo you are about to touch: `cattle-dog-coffee/docs/plans/README.md`, `ddg-hypest/docs/HYPEST-BUILD-PLAN.md`, and each repo's `AGENTS.md` or `replit.md` if present.
+1. `DDG_Control/docs/plans/README.md` (company map, how to work with Markus).
+2. `DDG_Control/docs/plans/company-audit-2026-11-17.md` (what is wrong and why).
+3. `DDG_Control/docs/plans/growth-plan-2026-11-17.md` (where the money is and why).
+4. The start-here file of the repo you are about to touch: `DDG_Coffee/docs/plans/README.md`, `DDG_Hypest/docs/HYPEST-BUILD-PLAN.md`, and each repo's `AGENTS.md` or `replit.md` if present.
 
 ## Rules for Part B
-1. **Four repos only**, all under GitHub user `markustruter01-sketch`: `DDG-Control`, `cattle-dog-coffee`, `ddg-hypest`, `quant-terminal`. Never open, clone or read any other repo on that account. They are not DDG.
+1. **Four repos only**, all under GitHub user `markustruter01-sketch`: `DDG_Control`, `DDG_Coffee`, `DDG_Hypest`, `DDG_Finance`. (Renamed and made private by Markus on 22 Nov 2026: `DDG-Control` → `DDG_Control`, `cattle-dog-coffee` → `DDG_Coffee`, `ddg-hypest` → `DDG_Hypest`, `quant-terminal` → `DDG_Finance`. GitHub forwards the old names; never create a new repo with an old name.) Never open, clone or read any other repo on that account. They are not DDG.
 2. Each repo's own rules win over this list. If they clash, stop and ask Markus.
 3. One change per pull request. Checks green before you ask for a merge. Never weaken a test.
 4. **Name no charity in anything the public can see** until Markus says a partnership is signed. The wording is "animal charities".
@@ -128,7 +128,7 @@ Stop, write what you know and do not know into the plan's Status entry, and ask 
 - **Live:** ddg.limited and Hypest were published on 17 Nov after those changes (check the status entries for the result).
 - **Not live:** Cattle Dog Coffee. The live store still ran the old build on 17 Nov (its `/api/config` had no `shipping` field). The database changed, so only Markus can publish it, on the Replit website. Until he does, nothing from coffee PR #12 onward is live, including the charity wording.
 - **Some audit items came from notes and may be out of date.** The coffee API already has `lib/refunds.ts`, `lib/rate-limit.ts`, `lib/test-hardening.ts` and `routes/charity-payouts.ts`, and the store has `CharityPayoutsPage.tsx`. Read the code before you build anything.
-- **How paths are written below:** in `DDG-Control`, `cattle-dog-coffee` and `ddg-hypest`, a path starting `routes/` or `lib/` means under `artifacts/api-server/src/`. The two exceptions are the shared packages at the repo root: `lib/db` and `lib/pricing-core`. Confirm every path in the code before editing; INFERRED until you have opened the file.
+- **How paths are written below:** in `DDG_Control`, `DDG_Coffee` and `DDG_Hypest`, a path starting `routes/` or `lib/` means under `artifacts/api-server/src/`. The two exceptions are the shared packages at the repo root: `lib/db` and `lib/pricing-core`. Confirm every path in the code before editing; INFERRED until you have opened the file.
 
 ## Decisions Markus made on 17 Nov (VERIFIED, his words in chat)
 - The growth plan is approved. Build is the main effort. This means effort and order of work. **It does not mean a big new system. Build nothing that is not a numbered order in this list.**
@@ -145,7 +145,7 @@ Read the growth plan, section 3, "How to get clients". Small pieces only.
 
 **B0.2 Written-only intake.** Start: `Build.tsx`, `routes/build.ts`, `routes/quotes.ts`. The form collects enough to quote without a call (what the business does, pages or features wanted, examples they like, deadline, budget band). The page says plainly: "We work in writing. No calls needed." Then B2.3 (instant reply and draft quote).
 
-**B0.3 Marketplace pack.** No code. Write `DDG-Control/docs/sales/`: an Upwork profile draft, three proposal templates (website, store, AI helper), and a one-page check of which Australian job boards still take web jobs and what each charges (VERIFIED from each site's own pages, with links). Markus creates the accounts.
+**B0.3 Marketplace pack.** No code. Write `DDG_Control/docs/sales/`: an Upwork profile draft, three proposal templates (website, store, AI helper), and a one-page check of which Australian job boards still take web jobs and what each charges (VERIFIED from each site's own pages, with links). Markus creates the accounts.
 
 **B0.4 Proposal helper.** When Markus pastes a job post into chat, you return: fit (yes or no, one line why), a written proposal, and a small mock-up page he can link. Skip posts that demand calls. No scraping of sites that forbid it.
 
@@ -165,13 +165,13 @@ Read the growth plan, section 3, "How to get clients". Small pieces only.
 ## B1 — Safety net (from the audit). Do these first, in this order.
 
 **B1.1 Security headers on ddg.limited and the coffee store.**
-- Repos: `DDG-Control`, `cattle-dog-coffee`. One pull request each.
-- Start: copy the approach in `ddg-hypest/artifacts/api-server/src/lib/security-headers.ts`. Add it in each repo's `artifacts/api-server/src/app.ts`. Turn off the "X-Powered-By" header.
+- Repos: `DDG_Control`, `DDG_Coffee`. One pull request each.
+- Start: copy the approach in `DDG_Hypest/artifacts/api-server/src/lib/security-headers.ts`. Add it in each repo's `artifacts/api-server/src/app.ts`. Turn off the "X-Powered-By" header.
 - Care: start the content policy in report-only mode. ddg.limited draws a 3D scene and loads a Replit script (`i.replit.com/script.js`); the store redirects to Stripe. The web pages themselves are static files served by Replit, not by the API: check each `artifacts/*/.replit-artifact/artifact.toml` for a way to set headers on them. If there is none, write UNKNOWN and protect the API only.
 - Proof: a test that the headers are present on the health route (`/api/healthz`); in the preview the home page, checkout redirect and admin still work.
 
 **B1.2 Automatic type check for DDG Control.**
-- Start: copy `cattle-dog-coffee/.github/workflows/typecheck.yml`.
+- Start: copy `DDG_Coffee/.github/workflows/typecheck.yml`.
 - Proof: green on its own pull request.
 
 **B1.3 Privacy page for ddg.limited.**
@@ -195,7 +195,7 @@ Read the growth plan, section 3, "How to get clients". Small pieces only.
 - Ask first: adding an event to the live Stripe webhook is Markus's click.
 
 **B1.7 Coffee hardening list.**
-- Start: the open items in `cattle-dog-coffee/docs/plans/README.md`; then `lib/rate-limit.ts` and `lib/test-hardening.ts` to see what already exists.
+- Start: the open items in `DDG_Coffee/docs/plans/README.md`; then `lib/rate-limit.ts` and `lib/test-hardening.ts` to see what already exists.
 - Build: one pull request per item still open (checkout rate limit, which sites may call the API, safe waitlist export, admin login code scope).
 
 **B1.8 One source for coffee prices.**
@@ -224,7 +224,7 @@ Read the growth plan, section 3, "How to get clients". Small pieces only.
 - Proof: one test per key that a route outside its job answers "not allowed".
 
 **B1.13 Hypest launch checklist.**
-- Build: `ddg-hypest/docs/LAUNCH-CHECKLIST.md`: lawyer-reviewed pages replace the drafts in `artifacts/hypest-web/src/pages/legal-page.tsx`; robots tag in `artifacts/hypest-web/index.html` back to "index, follow"; `STRIPE_LIVE_APPROVED`; own domain; support mailbox working; insurance. You write the list. Markus decides each line.
+- Build: `DDG_Hypest/docs/LAUNCH-CHECKLIST.md`: lawyer-reviewed pages replace the drafts in `artifacts/hypest-web/src/pages/legal-page.tsx`; robots tag in `artifacts/hypest-web/index.html` back to "index, follow"; `STRIPE_LIVE_APPROVED`; own domain; support mailbox working; insurance. You write the list. Markus decides each line.
 
 ## B2 — Money builds (from the growth plan). After B1, in this order unless Markus changes it.
 
@@ -269,7 +269,7 @@ Read the growth plan, section 3, "How to get clients". Small pieces only.
 - Build: a page for a standing monthly order of 1 kg bags with an enquiry form. No new payment flow until an office says yes.
 
 **B2.10 Hypest demand test. No new training features.**
-- Start: `ddg-hypest/artifacts/hypest-web` and `docs/HYPEST-BUILD-PLAN.md`.
+- Start: `DDG_Hypest/artifacts/hypest-web` and `docs/HYPEST-BUILD-PLAN.md`.
 - Build: three public "coming soon" pages (service fitness tests; train for a date; shift workers), each with a waitlist form and a clear "yes, email me" tick. Only these three pages may be listed by search engines; the app stays hidden. Count sign-ups and visits per page where Markus can see them.
 - Then, in Stripe test mode only: a yearly plan. And measure AI cost per member (start in `artifacts/api-server/src/coaching` and `billing`).
 - Ask first: the words on each page. No live payments.
@@ -279,7 +279,7 @@ Read the growth plan, section 3, "How to get clients". Small pieces only.
 - Ask first: before adding any mail-sending service.
 
 **B2.12 Kit 1 "Shop". Only after a client has paid a deposit.**
-- Start: `cattle-dog-coffee`.
+- Start: `DDG_Coffee`.
 - Build: move the brand name, colours, words, product list, postage rules and charity text into one settings file. Write `docs/NEW-SHOP.md`: how to stand up a copy for a client (new Replit app, new database, the client's own Stripe keys in Replit Secrets, their domain). Clients never share a database.
 - Proof: a demo shop with a made-up brand runs from the same code.
 

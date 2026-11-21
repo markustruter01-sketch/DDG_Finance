@@ -1,5 +1,7 @@
 # DDG Finance — start here (for any Claude picking this up)
 
+Repository: `markustruter01-sketch/DDG_Finance` (named `quant-terminal` until 22 Nov 2026; GitHub forwards the old name). Private. Replit app "DDG - Finance".
+
 Last updated: Thu 19 Nov 2026 ~17:00 Brisbane (UTC+10) by Claude (Opus 5.5): old plan archived, stale "Live state" and "Next work" sections replaced by pointers (one source each).
 
 Read in this order:

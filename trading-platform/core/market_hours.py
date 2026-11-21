@@ -43,3 +43,12 @@ def oanda_weekend(now: datetime | float | None = None) -> bool:
 def mentions_oanda(value: Any) -> bool:
     text = value if isinstance(value, str) else json.dumps(value, default=str)
     return "oanda" in text.lower()
+
+
+FOREX_BOT = "forex_ai"
+
+
+def forex_bot_resting(bot_id: str, now: datetime | float | None = None) -> bool:
+    """The Forex bot over the weekend: its cycles fail or pause while OANDA is offline,
+    so "stale" or "cycles failing" is expected then, not an alarm."""
+    return bot_id == FOREX_BOT and oanda_weekend(now)

@@ -77,3 +77,34 @@ def test_link_shows_closed_not_failing_on_the_weekend(monkeypatch):
     monkeypatch.setattr(link_health, "_conn", lambda: _Conn())
     states = {l["name"]: l["state"] for l in link_health.read_links()}
     assert states == {"OANDA": "closed", "Alpaca · Atlas": "failing"}
+
+
+def test_forex_bot_rests_on_the_weekend_only():
+    assert market_hours.forex_bot_resting("forex_ai", SAT)
+    assert not market_hours.forex_bot_resting("forex_ai", TUE)
+    assert not market_hours.forex_bot_resting("oracle", SAT)
+
+
+def test_stale_forex_alarm_clears_on_the_weekend_but_not_an_alpaca_one():
+    from core import degradation_resolver as dr
+    state = {"checked_at": SAT, "pauses": {"forex_ai": {"paused": False}, "oracle": {"paused": False}},
+             "portfolios": {}, "invariants": {}, "cycles": {}}
+    fx = {"error_type": "bot_stale_workflow", "component": "bot/forex_ai"}
+    assert dr.resolution_for_event(fx, state)
+    assert dr.resolution_for_event({"error_type": "bot_stale_workflow", "component": "bot/oracle"}, state) is None
+    assert dr.resolution_for_event(fx, {**state, "checked_at": TUE}) is None
+
+
+def test_cycle_freshness_lists_forex_as_resting_on_the_weekend():
+    from datetime import timedelta
+    inputs = invariants.InvariantInputs(now=SAT)
+    inputs.cycle_rows = {b: {"last_success_at": (SAT - timedelta(minutes=5)).isoformat()} for b in invariants.CYCLE_BOTS}
+    inputs.cycle_rows["forex_ai"] = {"last_success_at": (SAT - timedelta(days=2)).isoformat()}
+    inputs.pause_states = {}
+    r = invariants.check_cycle_freshness(inputs)
+    assert r["status"] == "PASS", r["message"]
+    assert {"bot_id": "forex_ai", "reason": "forex market closed for the weekend"} in r["actual"]["paused"]
+    inputs.now = TUE
+    inputs.cycle_rows = {b: {"last_success_at": (TUE - timedelta(minutes=5)).isoformat()} for b in invariants.CYCLE_BOTS}
+    inputs.cycle_rows["forex_ai"] = {"last_success_at": (TUE - timedelta(days=2)).isoformat()}
+    assert invariants.check_cycle_freshness(inputs)["status"] == "FAIL"

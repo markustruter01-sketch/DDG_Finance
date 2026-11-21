@@ -596,6 +596,10 @@ def _build_stale_flags(errors: list) -> list[dict]:
                     "portfolio staleness is not a degradation"
                 )
                 continue
+            from core.market_hours import forex_bot_resting
+            if forex_bot_resting(bot_id):
+                logger.info(f"claude_report | {bot_id}: forex market closed — staleness is not a degradation")
+                continue
             if age_s > threshold:
                 flags.append({
                     "type":      "bot_stale",

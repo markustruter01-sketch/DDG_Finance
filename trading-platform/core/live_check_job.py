@@ -22,13 +22,15 @@ _ROOT = str(Path(__file__).resolve().parents[2])
 if _ROOT not in sys.path:
     sys.path.append(_ROOT)  # sleeve_runtime and research_harness live at the repo root
 
+from sleeve_runtime.fleet_accounts import ACCOUNTS as _FLEET_ACCOUNTS, state_key as _state_key  # noqa: E402
+
 # Same key names the Home page's live positions use (routes/portfolio.py).
 ACCOUNT_KEYS = {
     "oracle": ("ALPACA_API_KEY", "ALPACA_SECRET_KEY"),
     "jerome_macro": ("ALPACA_JEROME_API_KEY", "ALPACA_JEROME_SECRET_KEY"),
     "spy_qqq_trend": ("ALPACA_BB_API_KEY", "ALPACA_BB_SECRET_KEY"),
 }
-STATE_KEYS = {"oracle": "fleet_v1_f1", "jerome_macro": "fleet_v1_c1", "spy_qqq_trend": "momo_v2"}
+STATE_KEYS = {**{bot: _state_key(reg) for bot, reg in _FLEET_ACCOUNTS.items()}, "spy_qqq_trend": "momo_v2"}
 
 DDL = """
 CREATE TABLE IF NOT EXISTS live_research_check (

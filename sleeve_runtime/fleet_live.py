@@ -2,7 +2,9 @@
 
 Owner's decision (Markus, 2 Nov 2026): run FLEET-V1-F1 on Atlas's (oracle's)
 Alpaca paper account, and its equity core alone (C1) on Momentum's account
-as a forward control. F1 FAILED its registered "beat the index" bar on
+as a forward control. Which variant runs where: sleeve_runtime/fleet_accounts.py
+(the one place). Roadmap v2, V2-03: X1, the cross-asset rule alone (no shares),
+replaces C1 on Atlas V2's account at the lock (Markus, D2 = B). F1 FAILED its registered "beat the index" bar on
 2011-2020 (ledger FLEET-V1-F1); it is run for what it did deliver: about
 half the index's drawdowns.
 
@@ -37,6 +39,7 @@ from typing import Any, Callable
 
 from research_harness.harness.portfolio import HistoryView
 from research_harness.sleeves import core_v1, xasset_v1
+from sleeve_runtime import fleet_accounts
 from sleeve_runtime.trend_executor import (
     MAX_ATTEMPTS,
     MAX_BAR_AGE_DAYS,
@@ -76,13 +79,31 @@ class FleetVariant:
     xasset_weight: float
 
     @property
+    def has_core(self) -> bool:
+        return self.core_weight > 0
+
+    @property
     def symbols(self) -> tuple[str, ...]:
-        return CORE_SYMBOLS + (XASSET_SYMBOLS if self.xasset_weight > 0 else ())
+        """The instruments this variant may hold. X1 holds no share fund."""
+        return ((CORE_SYMBOLS if self.has_core else ())
+                + (XASSET_SYMBOLS if self.xasset_weight > 0 else ()))
+
+    @property
+    def feed(self) -> tuple[str, ...]:
+        """The bars it reads: its instruments plus SPY, the session calendar (never a target unless held)."""
+        return tuple(dict.fromkeys(self.symbols + (SIGNAL,)))
 
 
-F1 = FleetVariant("FLEET-V1-F1", "fleet_v1_f1", "fleet_v1_f1_rebalance", 0.65, 0.35)
-C1 = FleetVariant("FLEET-V1-C1", "fleet_v1_c1", "fleet_v1_c1_rebalance", 1.00, 0.00)
-VARIANTS = {v.registration: v for v in (F1, C1)}
+def _variant(registration: str) -> FleetVariant:
+    key = fleet_accounts.state_key(registration)
+    return FleetVariant(registration, key, f"{key}_rebalance", *fleet_accounts.SPLITS[registration])
+
+
+F1 = _variant("FLEET-V1-F1")
+C1 = _variant("FLEET-V1-C1")
+X1 = _variant("FLEET-V1-X1")       # roadmap v2, V2-03: the cross-asset rule alone (D2 = B, at the lock)
+VARIANTS = {v.registration: v for v in (F1, C1, X1)}
+ACCOUNTS = {bot: VARIANTS[reg] for bot, reg in fleet_accounts.ACCOUNTS.items()}   # which variant trades where
 
 
 # ── signal (pure) ─────────────────────────────────────────────────────────────
@@ -119,7 +140,7 @@ def fleet_weights(core_w: dict[str, float], xasset_w: dict[str, float],
                   variant: FleetVariant, scale: float = 1.0) -> dict[str, float]:
     """The account's target vector. Raises (never clamps) if gross exceeds 1."""
     out: dict[str, float] = {}
-    for s, w in core_w.items():
+    for s, w in (core_w.items() if variant.has_core else ()):
         out[s] = out.get(s, 0.0) + variant.core_weight * w * scale
     if variant.xasset_weight > 0:
         for s, w in xasset_w.items():
@@ -205,12 +226,16 @@ def compute_fleet_plan(*, bars, positions, equity, cash, signal_day=None, frozen
                              no_stop=NO_STOP_SYMBOLS)
 
 
-def rebalance_key(day: date, votes: int, mode: str) -> str:
-    """A rebalance is due whenever this changes: new month, new vote count, new drawdown mode."""
+def rebalance_key(day: date, votes: int, mode: str, variant: FleetVariant = F1) -> str:
+    """A rebalance is due whenever this changes: new month, new vote count, new drawdown mode.
+    A variant with no share core (X1) ignores the vote count: its weights only change monthly."""
+    if not variant.has_core:
+        return f"{day.year:04d}-{day.month:02d}|{mode}"
     return f"{day.year:04d}-{day.month:02d}|v{votes}|{mode}"
 
 
-def fleet_due(bars, today_ny: date, state: dict[str, Any], mode: str) -> tuple[date, dict, str] | None:
+def fleet_due(bars, today_ny: date, state: dict[str, Any], mode: str,
+              variant: FleetVariant = F1) -> tuple[date, dict, str] | None:
     """(signal day, signal, key) if a rebalance is due now, else None.
     A stale feed is never due; a halted account is due once (to go to cash)."""
     spy = bars.get(SIGNAL) or []
@@ -220,7 +245,7 @@ def fleet_due(bars, today_ny: date, state: dict[str, Any], mode: str) -> tuple[d
     core = core_signal(bars, signal_day)
     if core is None:
         return None
-    key = rebalance_key(signal_day, core["votes"], mode)
+    key = rebalance_key(signal_day, core["votes"], mode, variant)
     if mode == "halt" and str(state.get("key", "")).endswith("|halt") and state.get("done"):
         return None                         # already in cash; stays there until cleared
     if state.get("key") == key and (state.get("done") or int(state.get("attempts", 0)) >= MAX_ATTEMPTS):
@@ -250,8 +275,8 @@ def daily_mark(state: dict[str, Any], bars, sleeve_equity: float,
 
 def fetch_fleet_bars(fetch_bars: BarFetcher, held: dict[str, float], now: datetime,
                      variant: FleetVariant):
-    """The variant's symbols plus anything held (legacy holdings get a price to sell)."""
-    symbols = sorted(set(variant.symbols) | set(held))
+    """The variant's feed plus anything held (legacy holdings get a price to sell)."""
+    symbols = sorted(set(variant.feed) | set(held))
     return completed_bars(fetch_bars(symbols, now.date() - timedelta(days=HISTORY_CALENDAR_DAYS)), now)
 
 
@@ -310,14 +335,14 @@ def run_fleet_cycle(
     if marked is not None:
         state = marked
         write_state(state)
-    due = fleet_due(bars, today_ny, state, mode)
+    due = fleet_due(bars, today_ny, state, mode, variant)
     if due is not None:
         signal_day, core, key = due
         attempts = int(state.get("attempts", 0)) + 1 if state.get("key") == key else 1
         # Record the attempt BEFORE any order, so a crash mid-way cannot loop.
-        base = {"key": key, "votes": core["votes"], "exposure": round(core["exposure"], 4),
-                "vol20": round(core["vol20"], 4), "attempts": attempts,
-                "signal_day": signal_day.isoformat(), "at": now.isoformat()}
+        base = {"key": key, "attempts": attempts, "signal_day": signal_day.isoformat(), "at": now.isoformat()}
+        if variant.has_core:               # X1 holds no shares: SPY's votes would only mislead a reader
+            base.update(votes=core["votes"], exposure=round(core["exposure"], 4), vol20=round(core["vol20"], 4))
         write_state({**state, **base, "done": False})
         try:
             report = execute_rebalance(engine, bot_id=bot_id, bars=bars, signal_day=signal_day,

@@ -279,7 +279,13 @@ def test_no_stop_symbols_match_the_platforms_stop_policy():
     spec.loader.exec_module(mod)
     assert mod.TREND_EXIT_LINES == fl.NO_STOP_SYMBOLS
     assert mod.stop_exempt("oracle", "IEF") and not mod.stop_exempt("oracle", "SPY")
-    assert not mod.stop_exempt("jerome_macro", "GLD")            # other accounts keep their stops
+    assert not mod.stop_exempt("spy_qqq_trend", "GLD")           # other accounts keep their stops
+    # Every FLEET-V1 account is exempt for the cross-asset lines only (roadmap v2, V2-03: Atlas V2 runs X1
+    # after the lock). Under C1 it never holds those lines, so the exemption changes nothing before then.
+    for bot, variant in fl.ACCOUNTS.items():
+        assert mod.STOP_EXEMPT[bot] == fl.NO_STOP_SYMBOLS
+        assert not mod.stop_exempt(bot, "SPY") and not mod.stop_exempt(bot, "QLD")
+    assert not set(fl.C1.symbols) & fl.NO_STOP_SYMBOLS
 
 
 def test_drawdown_limits_match_the_platforms_risk_limits():
@@ -325,3 +331,58 @@ def test_owner_kept_holding_is_left_alone_without_an_alarm_but_any_other_still_a
     assert len(errors) == 1 and "XYZ" in errors[0] and "ETHUSD" not in errors[0]
     _, errors = run(lambda s: s in {"ETHUSD", "XYZ"})
     assert errors == []
+
+
+# ── FLEET-V1-X1: the cross-asset rule alone (roadmap v2, V2-03; Markus D2 = B) ──
+def test_x1_holds_no_share_fund_but_still_reads_spy_as_its_calendar():
+    assert fl.X1.symbols == fl.XASSET_SYMBOLS and not set(fl.X1.symbols) & set(fl.CORE_SYMBOLS)
+    assert fl.SIGNAL in fl.X1.feed
+    assert fl.F1.feed == fl.F1.symbols and fl.C1.feed == fl.C1.symbols      # unchanged for the running variants
+    assert (fl.X1.core_weight, fl.X1.xasset_weight) == (0.0, 1.0)
+    assert (fl.X1.state_key, fl.X1.exit_reason) == ("fleet_v1_x1", "fleet_v1_x1_rebalance")
+
+
+def test_x1_vector_is_the_cross_asset_weights_alone():
+    bars = _bars()
+    t = fl.targets_on(bars, LAST, fl.X1, "normal")
+    assert t["fleet"] == pytest.approx(t["xasset"]) and set(t["fleet"]) == set(xasset_v1.LINES)
+    assert fl.targets_on(bars, LAST, fl.X1, "soft")["fleet"] == pytest.approx({s: w / 2 for s, w in t["xasset"].items()})
+
+
+def test_x1_is_due_monthly_and_on_a_mode_change_not_on_spy_votes():
+    bars = _bars()
+    assert fl.rebalance_key(LAST, 3, "normal", fl.X1) == "2026-10|normal"
+    assert fl.rebalance_key(LAST, 3, "normal", fl.C1) == "2026-10|v3|normal"          # C1 and F1 unchanged
+    done = {"key": "2026-10|normal", "done": True, "attempts": 1}
+    assert fl.fleet_due(bars, date(2026, 10, 23), done, "normal", fl.X1) is None
+    assert fl.fleet_due(bars, date(2026, 10, 23), {**done, "key": "2026-09|normal"}, "normal", fl.X1)
+    assert fl.fleet_due(bars, date(2026, 10, 23), done, "soft", fl.X1)[2] == "2026-10|soft"
+
+
+def test_switching_atlas_v2_from_c1_to_x1_sells_the_shares_and_buys_the_four_lines_without_stops():
+    """The lock-day cutover, rehearsed on the fake broker: Atlas V2's holdings on 21 Nov 2026
+    (SPY 19 and QQQ 14 with 20% stops, BIL vault, SGOV parked cash), then the first X1 cycle."""
+    bars = _bars()
+    positions = {"SPY": 19, "QQQ": 14, "BIL": 49.3, "SGOV": 56.7}
+    rows = [{"symbol": s, "qty": q, "stop_price": 1.0, "stop_order_id": f"s-{s}"} for s, q in (("SPY", 19), ("QQQ", 14))]
+    eng = _engine(bars, positions, 80_000.0, rows)
+    eng.stops = {"SPY": (19, 1.0), "QQQ": (14, 1.0)}
+    out, state, events = _run(eng, bars, variant=fl.X1)
+    assert out["status"].startswith("rebalanced (2026-10|normal)") and state["done"] is True
+    held = {s for s, q in eng.pos.items() if q >= 1}
+    assert not held & set(fl.CORE_SYMBOLS)                     # SPY and QQQ sold; no share fund bought
+    assert set(xasset_v1.LINES) <= held
+    assert not set(eng.stops) & set(fl.CORE_SYMBOLS)           # the old stops went with the shares
+    assert not set(eng.stops) & set(xasset_v1.LINES)           # the four lines carry no stop by design
+    assert eng.pos["BIL"] == 49.3                              # vault never traded
+    assert "votes" not in state and "exposure" not in state    # no SPY numbers on an account that holds no shares
+    assert not [e for e in events if isinstance(e, tuple) and e[0] in ("critical", "error")]
+    out2, _, _ = _run(eng, bars, state=state, variant=fl.X1)
+    assert out2["status"] == "no rebalance due"                # the same month: nothing more to do
+
+
+def test_the_switch_is_one_line_and_off_until_the_lock():
+    from sleeve_runtime import fleet_accounts as fa
+    assert fa.ACCOUNTS == {"oracle": "FLEET-V1-F1", "jerome_macro": "FLEET-V1-C1"}   # 🔴 X1 at the lock (D2 = B)
+    assert {b: v.registration for b, v in fl.ACCOUNTS.items()} == fa.ACCOUNTS
+    assert set(fa.LABELS) == set(fa.SPLITS) == set(fl.VARIANTS)

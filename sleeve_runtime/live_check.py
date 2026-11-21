@@ -33,7 +33,7 @@ from sleeve_runtime.trend_v1b import completed_bars
 Bars = dict[str, list[dict[str, Any]]]
 
 # Which sleeve owns which account. Change with the strategy cutover (plan item 18).
-SLEEVES = {"oracle": fleet_live.F1, "jerome_macro": fleet_live.C1, "spy_qqq_trend": "MOMO-V2"}
+SLEEVES = {**fleet_live.ACCOUNTS, "spy_qqq_trend": "MOMO-V2"}     # fleet variants from sleeve_runtime/fleet_accounts.py
 FEED_SESSIONS = 20
 # Flags: a gap this large is worth a look (not a pass bar).
 FEED_GAP_FLAG = 0.005             # 0.5% on one close
@@ -214,7 +214,7 @@ def check_account(bot_id: str, *, live_fetch, research_fetch, state: dict[str, A
         if sleeve == "MOMO-V2":
             symbols = sorted(set(state.get("names") or []) | {momo_live.SIGNAL})
         else:
-            symbols = list(sleeve.symbols)
+            symbols = list(sleeve.feed)
         live = completed_bars(live_fetch(symbols, start), now)
         research = completed_bars(research_fetch(symbols, start), now)
         spy = live.get("SPY") or []

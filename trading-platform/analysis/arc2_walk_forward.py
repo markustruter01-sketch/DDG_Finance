@@ -1,4 +1,8 @@
 """
+RETIRED 22 Nov 2026 (roadmap v2, D17 = A, Markus): no longer scheduled or shown. Kept for its history in
+bot_evaluation_history; delete in a later pull request. Its reference numbers describe strategies the
+accounts no longer run, and its protocol (halve size / halt entries by hand) is not a 2027 rule.
+
 analysis/arc2_walk_forward.py — Nightly walk-forward validation engine.
 
 ARC 2: Compares each bot's trailing live performance against its

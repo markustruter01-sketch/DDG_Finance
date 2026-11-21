@@ -192,16 +192,6 @@ export function useFleetData() {
     retry: 1,
   });
 
-  const { data: reportData } = useQuery<{
-    walk_forward_status?: Array<{ bot_id: string; wf_status: string | null }>;
-  }>({
-    queryKey: ["claude-report-wf"],
-    queryFn: () => fleetApi.get("/claude-report").then((r) => r.data),
-    refetchInterval: 5 * 60_000,
-    staleTime: 4 * 60_000,
-    retry: false,
-  });
-
   const { data: entryWindowData } = useQuery<EntryWindowsResponse>({
     queryKey: ["fleet-entry-windows"],
     queryFn: () => fleetApi.get("/fleet/entry-windows").then((r) => r.data),
@@ -220,9 +210,6 @@ export function useFleetData() {
 
   const allPos   = livePosResp?.positions ?? [];
   const positionsByBot = livePosResp?.positions_by_bot;
-  const wfMap    = new Map(
-    (reportData?.walk_forward_status ?? []).map((r) => [r.bot_id, r.wf_status]),
-  );
 
   return {
     fleet,
@@ -233,7 +220,6 @@ export function useFleetData() {
     total:   fleet?.fleet_total,
     allPos,
     positionsByBot,
-    wfMap,
     regime:      market?.regime,
     killTripped: summary == null
       ? null

@@ -20,6 +20,7 @@ from pathlib import Path
 
 from research_harness.explore.gear_v1 import COSTS as SHARE_COSTS  # noqa: F401  (one cost source)
 from research_harness.sleeves import core_v1, xasset_v1
+from sleeve_runtime.fleet_accounts import ACCOUNTS as FLEET_ACCOUNTS, SPLITS as FLEET_SPLITS  # pure data, no order path
 
 _KRAKEN_BOT = str(Path(__file__).resolve().parents[2] / "kraken-bot")
 if _KRAKEN_BOT not in sys.path:
@@ -49,7 +50,7 @@ MIRROR_GUARD_PP = 1.0
 
 # Copied from the live code, which the twins may not import (it carries the
 # order path). tests/test_twins_config.py checks both still match.
-FLEET_F1_SPLIT = (0.65, 0.35)          # sleeve_runtime.fleet_live.F1: core, cross-asset
+FLEET_F1_SPLIT = FLEET_SPLITS["FLEET-V1-F1"]   # core, cross-asset (sleeve_runtime/fleet_accounts.py)
 MOMO_STATE_KEY = "momo_v2"             # sleeve_runtime.momo_live.STATE_KEY
 
 
@@ -86,14 +87,13 @@ def baseline_weights(bot_id: str, kind: str, momo_names: list[str] | None = None
         return {"SPY": 1.0}
     if kind != "baseline_full":
         raise ValueError(f"{kind} is not a baseline")
-    core = core_v1.weights_for(core_v1.MAX_EXPOSURE, core_v1.MIXES["C1"])   # the 1.5x core
-    if bot_id == "jerome_macro":          # FLEET-V1-C1: the core at its 1.5x limit, never in cash
-        return core
-    if bot_id == "oracle":                # FLEET-V1-F1: core at 1.5x + all four cross-asset lines
-        core_w, xasset_w = FLEET_F1_SPLIT
-        out = {s: core_w * w for s, w in core.items()}
+    if bot_id in FLEET_ACCOUNTS:          # a FLEET-V1 variant: its core at the 1.5x limit and every
+        core_w, xasset_w = FLEET_SPLITS[FLEET_ACCOUNTS[bot_id]]   # cross-asset line, never in cash
+        core = core_v1.weights_for(core_v1.MAX_EXPOSURE, core_v1.MIXES["C1"])   # the 1.5x core
+        out = {s: core_w * w for s, w in core.items() if core_w > 0}
         for line in xasset_v1.LINES:
-            out[line] = out.get(line, 0.0) + xasset_w / len(xasset_v1.LINES)
+            if xasset_w > 0:
+                out[line] = out.get(line, 0.0) + xasset_w / len(xasset_v1.LINES)
         return out
     if bot_id == "spy_qqq_trend":         # MOMO-V2: this month's names, equal weight, no brakes
         names = sorted(set(momo_names or []))

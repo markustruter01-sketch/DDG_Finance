@@ -30,10 +30,14 @@ fleet_v1_router = APIRouter()
 REPO_ROOT = Path(__file__).resolve().parents[2]
 EXPLORATION_LOG = REPO_ROOT / "research_harness" / "exploration_log.jsonl"
 LEDGER = REPO_ROOT / "research_harness" / "ledger.jsonl"
-# Momentum's account runs MOMO-V2 since 2 Nov (routes/momo_v2.py); Bullion runs C1 since 3 Nov.
-ACCOUNTS = {"oracle": "FLEET-V1-F1", "jerome_macro": "FLEET-V1-C1"}
-ROLE = {"oracle": "The fleet (65% equity core + 35% cross-asset)",
-        "jerome_macro": "The equity core alone (F1 without the cross-asset sleeve)"}
+# Momentum's account runs MOMO-V2 since 2 Nov (routes/momo_v2.py). Which FLEET-V1 variant
+# runs on the other two: sleeve_runtime/fleet_accounts.py (the one place).
+from sleeve_runtime.fleet_accounts import ACCOUNTS, state_key  # noqa: E402
+
+ROLES = {"FLEET-V1-F1": "The fleet (65% equity core + 35% cross-asset)",
+         "FLEET-V1-C1": "The equity core alone (F1 without the cross-asset sleeve)",
+         "FLEET-V1-X1": "The cross-asset trend rule alone: bonds, gold, commodities, dollar (no shares)"}
+ROLE = {bot: ROLES[reg] for bot, reg in ACCOUNTS.items()}
 CLEAR_CONFIRMATION_ENV_VAR = "KILL_SWITCH_RESET_CONFIRMATION"    # same owner token as a kill-switch reset
 PLAN_ID = "FLEET-V1"
 REGISTRATION = "FLEET-V1-F1"
@@ -211,7 +215,7 @@ async def fleet_v1_record() -> dict[str, Any]:
 
 
 # Every account whose runtime keeps a drawdown governor in bots_state.metadata.
-HALT_STATE_KEYS = {"oracle": "fleet_v1_f1", "spy_qqq_trend": "momo_v2", "jerome_macro": "fleet_v1_c1"}
+HALT_STATE_KEYS = {**{bot: state_key(reg) for bot, reg in ACCOUNTS.items()}, "spy_qqq_trend": "momo_v2"}
 
 
 class ClearHaltRequest(BaseModel):

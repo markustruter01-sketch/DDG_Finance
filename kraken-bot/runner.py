@@ -133,7 +133,7 @@ from core.bot_registry import active_bot_ids as _registry_active_bot_ids
 
 _BOT_RUNNERS = {
     "oracle": ("asia_trend_strategy", "run_asia_cycle"),
-    "jerome_macro": ("bullion_strategy", "run_bullion_cycle"),   # FLEET-V1-C1 since 3 Nov 2026
+    "jerome_macro": ("bullion_strategy", "run_bullion_cycle"),   # FLEET-V1 variant from sleeve_runtime/fleet_accounts.py
     "spy_qqq_trend": ("momo_strategy", "run_momo_account_cycle"),       # MOMO-V2 (forward-only experiment)
     "forex_ai": ("forex_ai_strategy", "run_forex_cycle"),
 }

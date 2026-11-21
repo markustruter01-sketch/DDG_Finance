@@ -13,8 +13,11 @@ No imports: this file is loaded by path in tests.
 
 TREND_EXIT_LINES = frozenset({"IEF", "GLD", "DBC", "UUP"})
 
-# Accounts running FLEET-V1-F1 (the only variant with the cross-asset sleeve).
-STOP_EXEMPT = {"oracle": TREND_EXIT_LINES}
+# Accounts whose FLEET-V1 variant can hold the cross-asset sleeve: Atlas (F1), and Atlas V2,
+# which runs C1 (no cross-asset lines, so nothing to exempt yet) until the lock and X1
+# (the cross-asset rule alone) after it (roadmap v2, V2-03). Every other holding keeps its stop.
+# A test ties this to sleeve_runtime/fleet_accounts.py.
+STOP_EXEMPT = {"oracle": TREND_EXIT_LINES, "jerome_macro": TREND_EXIT_LINES}
 
 
 def stop_exempt(bot_id: str | None, symbol: str | None) -> bool:

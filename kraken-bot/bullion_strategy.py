@@ -1,4 +1,7 @@
-"""Bullion's account (jerome_macro): FLEET-V1-C1, the fleet's equity core alone.
+"""Atlas V2's account (jerome_macro): the FLEET-V1 variant sleeve_runtime/fleet_accounts.py names.
+
+FLEET-V1-C1 (the fleet's equity core alone) until the lock; then FLEET-V1-X1,
+the cross-asset trend rule alone (roadmap v2, V2-03; Markus D2 = B, 22 Nov 2026).
 
 Owner's decision 3 Nov 2026, after VOL-V1 failed its exploration bar
 (research_harness/explore/VOL-V1-PLAN.md, Amendment 1): the third account
@@ -28,7 +31,7 @@ def run_bullion_cycle(profile: dict[str, Any] | None = None, db_id: int | None =
     """Live cycle. Only called by the runner, which enforces bots_state.paused."""
     from alpaca_etf_engine import AlpacaEtfEngine
     from fleet_account import run_fleet_account
-    from sleeve_runtime.fleet_live import C1
+    from sleeve_runtime.fleet_live import ACCOUNTS
 
     profile = profile or {}
     engine = AlpacaEtfEngine(
@@ -39,6 +42,7 @@ def run_bullion_cycle(profile: dict[str, Any] | None = None, db_id: int | None =
     )
     live = engine.get_positions()
     engine.reconcile_protective_stops(BOT_ID, engine.get_db_positions(BOT_ID))
-    result = run_fleet_account(engine, bot_id=BOT_ID, variant=C1, label="Atlas V2", live_positions=live)
-    logger.info(f"Atlas V2 | FLEET-V1-C1 live cycle | {result['status']}")
+    variant = ACCOUNTS[BOT_ID]
+    result = run_fleet_account(engine, bot_id=BOT_ID, variant=variant, label="Atlas V2", live_positions=live)
+    logger.info(f"Atlas V2 | {variant.registration} live cycle | {result['status']}")
     return result

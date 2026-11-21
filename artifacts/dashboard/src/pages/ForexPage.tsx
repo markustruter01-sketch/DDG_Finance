@@ -91,6 +91,8 @@ const tone = (v: number | null | undefined) => (v == null || v === 0 ? "" : v > 
 
 function ForexOverview() {
   const board = useQuery({ queryKey: ["league-leaderboard"], queryFn: async () => (await api.get("/league/leaderboard")).data as { rows: BoardRow[] } });
+  const cost = useQuery({ queryKey: ["forex-council-costs"], queryFn: async () => (await api.get("/forex-council/costs")).data as { months: { month: string; usd: number; calls: number; unpriced: number }[] } });
+  const thisMonth = cost.data?.months[0];
   const open = useQuery({ queryKey: ["forex-open"], queryFn: async () => (await api.get("/forex/open")).data as OpenTrades, refetchInterval: 5 * 60_000 });
   const rows = Object.fromEntries((board.data?.rows ?? []).map((r) => [r.id, r]));
   const me = rows.forex_ai, bt1 = rows["FX-BT1"];
@@ -108,6 +110,7 @@ function ForexOverview() {
       <div className="stat"><span className="label">Return since start</span><span className={`num-sm ${tone(me?.return_pct)}`}>{me?.return_pct == null ? "—" : signed(me.return_pct)}</span><span className="small">since 9 Nov, after costs</span></div>
       <div className="stat"><span className="label">vs no-AI rules</span><span className={`num-sm ${tone(gap)}`}>{gap == null ? "—" : `${gap > 0 ? "+" : ""}${gap.toFixed(2)} pts`}</span><span className="small">against FX-BT1, since {from ?? "—"}</span></div>
       <div className="stat"><span className="label">Worst fall</span><span className="num-sm">{me?.worst_fall_pct == null ? "—" : `${me.worst_fall_pct.toFixed(2)}%`}</span><span className="small">since start</span></div>
+      <div className="stat"><span className="label">AI cost</span><span className="num-sm">{thisMonth ? `US$${thisMonth.usd.toFixed(2)}` : "—"}</span><span className="small">{thisMonth ? `${thisMonth.month} · ${thisMonth.calls} calls${thisMonth.unpriced ? ` · ${thisMonth.unpriced} unpriced` : ""}` : "no council days yet"}</span></div>
       <div className="stat"><span className="label">Open trades</span><span className="num-sm">{o ? o.open.length : "—"}</span><span className="small">{o ? `$${o.margin_used.toLocaleString("en-AU", { maximumFractionDigits: 0 })} margin used` : "OANDA unreadable"}</span></div>
     </section>
     <div className="me-two" style={{ gridTemplateColumns: "minmax(0, 2fr) minmax(0, 1fr)" }}>

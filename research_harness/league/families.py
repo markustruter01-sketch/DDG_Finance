@@ -68,6 +68,26 @@ def _atlas(cap: float):
     return target
 
 
+GLOBAL_SLOTS = ("SPY", "EFA", "EEM")          # US, developed non-US, emerging
+
+
+def _global_trend(view: HistoryView, ctx: Context) -> Call | None:
+    """T-GLOBAL (roadmap v2, V2-04; PROPOSED 21 Nov): three slots of one third.
+    Each slot holds one third x E, where E is the Atlas rule at a 1.0 ceiling on
+    that fund's own closes. The rest in T-bills. First session of each month,
+    and whenever any fund's vote count changes. 20% stop per holding."""
+    w, votes = {}, {}
+    for s in GLOBAL_SLOTS:
+        c = closes(view, s, core_v1.NEED)
+        got = atlas_exposure(c, 1.0) if len(c) >= core_v1.NEED else None
+        if got is None:
+            return None
+        votes[s], e = got
+        if e > 0:
+            w[s] = e / len(GLOBAL_SLOTS)
+    return Call(w, state=tuple(votes[s] for s in GLOBAL_SLOTS), note={"votes": votes})
+
+
 F1_SPLIT = (0.65, 0.35)          # FLEET-V1-F1: core, cross-asset (sleeve_runtime.fleet_live.F1)
 
 
@@ -92,14 +112,42 @@ def _xtrend(view: HistoryView, ctx: Context) -> Call | None:
     return Call(w, state="hold", note={"on": sorted(w)})
 
 
-def _gold(view: HistoryView, ctx: Context) -> Call | None:
-    """100% gold (GLD) when >= 2 of the 3 Atlas trend votes (close above its
-    close 63 / 126 / 252 sessions ago) hold, else cash. Monthly."""
-    c = closes(view, "GLD", core_v1.NEED)
-    v = core_v1.votes(c) if len(c) >= core_v1.NEED else None
-    if v is None:
-        return None
-    return Call({"GLD": 1.0} if v >= xasset_v1.MIN_VOTES else {}, state="hold", note={"votes": v})
+def trend_one(symbol: str):
+    """100% ``symbol`` when >= 2 of the 3 Atlas trend votes (close above its
+    close 63 / 126 / 252 sessions ago) hold, else cash. Monthly.
+    One function for D-GOLD (GLD), D-OIL (USO) and D-TIPS (TIP): roadmap v2, V2-04."""
+    def target(view: HistoryView, ctx: Context) -> Call | None:
+        c = closes(view, symbol, core_v1.NEED)
+        v = core_v1.votes(c) if len(c) >= core_v1.NEED else None
+        if v is None:
+            return None
+        return Call({symbol: 1.0} if v >= xasset_v1.MIN_VOTES else {}, state="hold", note={"votes": v})
+    return target
+
+
+_gold = trend_one("GLD")
+
+
+HARD_SLOTS = ("GLD", "USO", "DBC", "XLE")      # gold, oil, commodities, energy shares
+HARD_VOL_TARGET = 0.20
+
+
+def _hard_assets(view: HistoryView, ctx: Context) -> Call | None:
+    """H-ASSET (roadmap v2, V2-04; PROPOSED 21 Nov): four slots of 25%. A slot is
+    on when its fund has >= 2 of 3 trend votes; an on slot holds
+    25% x min(1, 0.20 / its 63-session volatility). The rest in T-bills. Monthly.
+    A volatility of zero (no movement at all) counts as no cut."""
+    w, votes = {}, {}
+    for s in HARD_SLOTS:
+        c = closes(view, s, core_v1.NEED)
+        v = core_v1.votes(c) if len(c) >= core_v1.NEED else None
+        if v is None:
+            return None
+        votes[s] = v
+        if v >= xasset_v1.MIN_VOTES:
+            vol = xasset_v1.vol63(c)
+            w[s] = 0.25 * (1.0 if vol is None else min(1.0, HARD_VOL_TARGET / vol))
+    return Call(w, state="hold", note={"votes": votes})
 
 
 RP_LINES = ("SPY", "IEF", "GLD")
@@ -298,14 +346,23 @@ def _defensive(view: HistoryView, ctx: Context) -> Call | None:
     return Call({n: 1.0 / DEF_TOP for n in names}, state="hold", note={"names": names})
 
 
-# ── the catalogue: 3 yardsticks + 15 shadows here; the 16th, FX-COUNCIL, is the Forex
-#    account's mirror twin (TWINS-V1), shown in the league by twins/leaderboard.py
+# ── the catalogue: 8 yardsticks + 21 shadows here; FX-COUNCIL, the Forex account's
+#    mirror twin (TWINS-V1), is shown in the league by twins/leaderboard.py.
+#    Roadmap v2 (V2-04, V2-18) added D-OIL, H-ASSET, T-GLOBAL, FX-CARRY, D-TIPS and the
+#    yardsticks Y-MF, Y-PERM, Y-TIPS, Y-INS, Y-GOLD (rules PROPOSED by Fable 5.2, 21 Nov 2026).
 ATLAS_SYMBOLS = ("SPY", "QQQ", "SSO", "QLD")
 STRATEGIES: tuple[Strategy, ...] = (
     Strategy("Y-SPX", "yardstick", "S&P 500, buy and hold", "once", ("SPY",), _fixed({"SPY": 1.0})),
     Strategy("Y-6040", "yardstick", "60% shares / 40% bonds", "monthly", ("SPY", "AGG"),
              _fixed({"SPY": 0.6, "AGG": 0.4})),
     Strategy("Y-CASH", "yardstick", "Cash (T-bills)", "once", ("BIL",), _fixed({"BIL": 1.0})),
+    Strategy("Y-MF", "yardstick", "Managed futures fund (DBMF), held", "once", ("DBMF",), _fixed({"DBMF": 1.0})),
+    Strategy("Y-PERM", "yardstick", "Permanent mix: shares, long bonds, gold, T-bills", "monthly",
+             ("SPY", "TLT", "GLD", "BIL"), _fixed({"SPY": 0.25, "TLT": 0.25, "GLD": 0.25, "BIL": 0.25})),
+    Strategy("Y-TIPS", "yardstick", "Inflation-linked Treasuries (TIP), held", "once", ("TIP",), _fixed({"TIP": 1.0})),
+    Strategy("Y-INS", "yardstick", "90% shares, 10% bought insurance (TAIL)", "monthly", ("SPY", "TAIL"),
+             _fixed({"SPY": 0.9, "TAIL": 0.1})),
+    Strategy("Y-GOLD", "yardstick", "Gold (GLD), held", "once", ("GLD",), _fixed({"GLD": 1.0})),
     Strategy("T-1X", "trend", "Atlas trend rule at 1x", "monthly", ATLAS_SYMBOLS, _atlas(1.0),
              stop_pct=core_v1.STOP_PCT),
     Strategy("T-15X", "trend", "Atlas trend rule at 1.5x", "monthly", ATLAS_SYMBOLS, _atlas(1.5),
@@ -314,6 +371,8 @@ STRATEGIES: tuple[Strategy, ...] = (
              stop_pct=core_v1.STOP_PCT),
     Strategy("T-F1", "trend", "Today's multi-asset Atlas (FLEET-V1-F1)", "monthly",
              ATLAS_SYMBOLS + xasset_v1.LINES, _atlas_f1, stop_pct=core_v1.STOP_PCT),
+    Strategy("T-GLOBAL", "trend", "Atlas trend rule on US, developed and emerging shares", "monthly",
+             GLOBAL_SLOTS, _global_trend, stop_pct=core_v1.STOP_PCT),
     Strategy("S-MOMO", "stocks", "Momentum (MOMO-V2)", "monthly", (), _momo(False, None),
              stop_pct=0.20, uses_universe=True, history_sessions=380),
     Strategy("S-MOMO-CAP", "stocks", "Momentum, weekly re-entry, 25% sector cap", "monthly", (),
@@ -326,6 +385,11 @@ STRATEGIES: tuple[Strategy, ...] = (
              xasset_v1.LINES, _xtrend),
     Strategy("D-GOLD", "diversifier", "Gold trend alone", "monthly", ("GLD",), _gold),
     Strategy("D-RP", "diversifier", "Risk-balanced shares, bonds, gold", "monthly", RP_LINES, _risk_parity),
+    Strategy("D-OIL", "diversifier", "Oil trend alone", "monthly", ("USO",), trend_one("USO")),
+    Strategy("H-ASSET", "diversifier", "Hard assets: gold, oil, commodities, energy shares, each on trend",
+             "monthly", HARD_SLOTS, _hard_assets),
+    Strategy("D-TIPS", "diversifier", "Inflation-linked Treasuries (TIP) on trend", "monthly", ("TIP",),
+             trend_one("TIP")),
     Strategy("ST-DIP", "short_term", "Buy index dips, hold a few days", "once", ("SPY",), _dip),
     Strategy("ST-TOM", "short_term", "Index only around the turn of the month", "once", ("SPY",), _tom),
     Strategy("FX-BT1", "forex", "Forex trend baseline (FX-BT1, no AI)", "once", fx.PAIRS, fx._fx_bt1,
@@ -334,6 +398,8 @@ STRATEGIES: tuple[Strategy, ...] = (
              max_gross=fx.GROSS_CAP, allow_short=True, forex=True),
     Strategy("FX-TREND", "forex", "Simple currency trend", "monthly", fx.PAIRS, fx._fx_trend,
              max_gross=fx.GROSS_CAP, allow_short=True, forex=True),
+    Strategy("FX-CARRY", "forex", "Currency carry: long the 3 best payers, short the 3 worst", "monthly",
+             fx.PAIRS, fx._fx_carry, max_gross=fx.GROSS_CAP, allow_short=True, forex=True, uses_fx_rates=True),
 )
 BY_ID = {s.id: s for s in STRATEGIES}
 

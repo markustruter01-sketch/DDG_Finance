@@ -1,0 +1,21 @@
+{
+  "id": "D-TIPS",
+  "status": "FROM ROADMAP V2",
+  "registered_at": "PROPOSED 2026-11-22 (Sun) ~07:30 Brisbane by Claude (Opus 5.5) from roadmap v2 order V2-04 (decision D14) (rule written by Claude Fable 5.2, 21 Nov 2026, never run on data). Markus said yes to roadmap v2 on 22 Nov 2026 05:47 Brisbane. Version 0 = proving run only (not the record): five nights of values, then registered for the record at the lock (12-13 Dec 2026) or at intake 1 (2-3 Jan 2027); after that nothing here changes (a change = a new id and one more try).",
+  "source_document": "docs/plans/fund-roadmap-v2-2026-11-21.md V2-04 (decision D14) (amends fund-roadmap-2026-11-17.md); code research_harness/league/families.py (trend_one)",
+  "hypothesis": "Do inflation-linked Treasuries on a trend rule give inflation protection that can step aside?",
+  "candidate": "Inflation-linked Treasuries on trend",
+  "rules": "100% TIP when TIP has at least 2 of 3 trend votes (the Atlas trend votes: how many of 'close above its own close 63, 126 and 252 sessions ago' hold (core_v1.votes)), else 100% BIL. The same function as D-GOLD and D-OIL (families.trend_one).",
+  "universe": "TIP (+ BIL)",
+  "rebalance_day": "first session of each month",
+  "stops": "none",
+  "leverage": "no borrowing: weights add to at most 100% (max_gross 1.0). Effective exposure above 1x only through 2x funds.",
+  "fills": "decision after a session close, filled at the next session's open (twins engine = research_harness/harness/portfolio.simulate)",
+  "costs": "one shared model for every line: twins.config.SHARE_COSTS = 0 commission, 2 bps half spread, 3 bps slippage per trade (estimates; monthly re-measure from the real accounts' fills is a later work order). Gearing only through 2x funds (SSO, QLD), whose borrowing cost is inside their price; no margin. Idle money in BIL (T-bills); plain cash earns 0.",
+  "data_needed": "TIP and SPY (calendar) daily bars + BIL",
+  "start_equity": "100,000 fake dollars",
+  "window": "forward only: version 1 from its registration (the lock, or intake 1) to 31 Dec 2027. A replay of history (roadmap v2, V2-02) is planned before the lock; until it reports, no backtest stands behind this line.",
+  "candidates_declared": 22,
+  "prior_variants_tried": 0,
+  "pass_bar": "Diversifier bar Markus agreed 20 Nov 2026 (AU7): judged by what it adds to the equal-money fund (a): fund (a)'s Sharpe with the line minus without it (leaderboard 'adds to the fund'), after costs, over its counted 2027 dates; luck check counted against 22 tries. Roadmap v2: a single line is evidence, not a candidate for money."
+}

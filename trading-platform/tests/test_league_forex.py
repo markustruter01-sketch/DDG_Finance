@@ -234,3 +234,79 @@ def test_currency_cap_cuts_the_trade_that_would_pile_onto_one_currency():
     assert fx.capped_size(pos, "USD_JPY", "short", 0.7, 1.5) == pytest.approx(0.7)         # a dollar short: fine
     full = dict(pos, NZD_USD={"dir": "short", "w": 0.4})                                    # USD now at 1.5
     assert fx.capped_size(full, "USD_CAD", "long", 0.3, 1.5) == 0.0
+
+
+# ── FX-CARRY (roadmap v2, V2-04) ──────────────────────────────────────────────
+HAND_RATES = {            # pair: (long rate, short rate) -> the d each currency gets, worked by hand
+    "EUR_USD": (0.01, -0.02),      # gap +0.015 -> EUR +0.015
+    "USD_JPY": (0.04, -0.05),      # gap +0.045 -> JPY -0.045 (USD_XXX: the negative)
+    "GBP_USD": (0.02, -0.03),      # GBP +0.025
+    "AUD_USD": (0.005, -0.015),    # AUD +0.010
+    "USD_CAD": (-0.01, 0.0),       # gap -0.005 -> CAD +0.005
+    "USD_CHF": (0.03, -0.04),      # gap +0.035 -> CHF -0.035
+    "NZD_USD": (-0.02, 0.01),      # NZD -0.015
+}
+
+
+def rates_rows(day, table=HAND_RATES):
+    return tuple((day, p, lo, sh) for p, (lo, sh) in table.items())
+
+
+def test_carry_d_by_hand_and_only_from_rates_already_read():
+    day = DAYS[-1]
+    d = fx.carry_d(rates_rows(day), day)
+    assert d == pytest.approx({"USD": 0.0, "EUR": 0.015, "JPY": -0.045, "GBP": 0.025, "AUD": 0.01,
+                               "CAD": 0.005, "CHF": -0.035, "NZD": -0.015})
+    assert fx.carry_d(rates_rows(day), day - timedelta(days=1)) is None       # read after the decision day: unknown then
+    flipped = {p: (sh, lo) for p, (lo, sh) in HAND_RATES.items()}
+    newer = rates_rows(day - timedelta(days=3)) + rates_rows(day, flipped)
+    assert fx.carry_d(newer, day)["GBP"] == pytest.approx(-0.025)             # the latest row wins
+
+
+def test_fx_carry_longs_the_top_three_and_shorts_the_bottom_three():
+    bars = market()
+    day = DAYS[-1]
+    v = HistoryView(bars)
+    v.today = day
+    ctx = base.Context(calendar=DAYS, fx_rates=rates_rows(day))
+    call = fx._fx_carry(v, ctx)
+    # rank: GBP, EUR, AUD | CAD, USD | NZD, CHF, JPY
+    assert call.note["long"] == ["GBP", "EUR", "AUD"] and call.note["short"] == ["NZD", "CHF", "JPY"]
+    raw = {}
+    for pair in ("GBP_USD", "EUR_USD", "AUD_USD", "NZD_USD", "USD_CHF", "USD_JPY"):
+        vol = base.ann_vol(base.closes(v, pair, fx.TREND_VOL_DAYS + 1), fx.TREND_VOL_DAYS)
+        raw[pair] = 0.10 / vol / 6
+    scale = min(1.0, fx.GROSS_CAP / sum(raw.values()))
+    want = {"GBP_USD": raw["GBP_USD"], "EUR_USD": raw["EUR_USD"], "AUD_USD": raw["AUD_USD"],
+            "NZD_USD": -raw["NZD_USD"],                    # short NZD
+            "CHF_USD": -raw["USD_CHF"],                    # short CHF = long USD_CHF = short the CHF_USD synthetic
+            "JPY_USD": -raw["USD_JPY"]}                    # short JPY
+    assert call.weights == pytest.approx({k: w * scale for k, w in want.items()})
+    assert sum(abs(w) for w in call.weights.values()) <= fx.GROSS_CAP + 1e-9
+
+
+def test_fx_carry_trades_nothing_for_a_dollar_leg_and_waits_for_rates():
+    bars = market()
+    day = DAYS[-1]
+    v = HistoryView(bars)
+    v.today = day
+    low = {p: (-abs(lo) - 0.05, abs(sh) + 0.05) if p.endswith("_USD") else (abs(lo) + 0.05, -abs(sh) - 0.05)
+           for p, (lo, sh) in HAND_RATES.items()}           # every currency pays less than the dollar
+    call = fx._fx_carry(v, base.Context(calendar=DAYS, fx_rates=rates_rows(day, low)))
+    assert call.note["long"][0] == "USD" and len(call.weights) == 5      # the USD long leg needs no trade
+    assert fx._fx_carry(v, base.Context(calendar=DAYS)) is None          # no rates yet: no decision
+
+
+@needs_pg
+def test_no_financing_rates_is_a_missed_decision_for_fx_carry_only():
+    from test_league import fake_fetch, fake_universe
+
+    get_conn = make_get_conn()
+    store.ensure_schema(get_conn)
+    day = DAYS[-1]
+    report, _ = league.run(get_conn, datetime.combine(day, time(17, 15), NEW_YORK), day, fetch_daily=fake_fetch,
+                           universe_loader=fake_universe, fetch_fx_daily=fake_fx)
+    assert report["forex"] == "ok"
+    carry = store.decisions(get_conn, league.twin_id("FX-CARRY"))
+    assert carry and all(r["missed"] for r in carry)
+    assert not store.decisions(get_conn, league.twin_id("FX-TREND"))[0]["missed"]

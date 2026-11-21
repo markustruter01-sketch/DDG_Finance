@@ -54,10 +54,11 @@ def test_luck_check_needs_enough_days_and_uses_the_trial_count():
 
 @needs_pg
 def test_read_from_the_twins_tables_after_two_nights():
-    from test_league import fake_fetch, fake_fx_now, fake_universe
+    from test_league import fake_fetch, fake_fx_now, fake_rates, fake_universe
 
     get_conn = make_get_conn()
     store.ensure_schema(get_conn)
+    fake_rates(get_conn)
     for day in (date(2026, 11, 17), date(2026, 11, 18)):
         now = datetime.combine(day, time(17, 15), NEW_YORK)
         league.run(get_conn, now, day, fetch_daily=fake_fetch, universe_loader=fake_universe,
@@ -73,9 +74,9 @@ def test_read_from_the_twins_tables_after_two_nights():
         store.upsert_equity(get_conn, acct["twin_id"], engine.daily_points(res.curve, acct["bars"]))
     board = lb.read(get_conn)
     assert board["league_version"] == league.LEAGUE_VERSION
-    assert len([r for r in board["rows"] if r["kind"] != "allocator"]) == 19   # 18 + FX-BT1-CAP (21 Nov)
+    assert len([r for r in board["rows"] if r["kind"] != "allocator"]) == 29   # 19 + roadmap v2's 10 (22 Nov)
     assert {r["id"] for r in board["rows"] if r["kind"] == "allocator"} == {"ALLOC-EQUAL", "ALLOC-RULES"}
-    assert board["luck_rule"]["n_trials"] == 17          # declared up front (16 + FX-BT1-CAP, 21 Nov), not the count running
+    assert board["luck_rule"]["n_trials"] == 22          # declared up front (16 + FX-BT1-CAP + roadmap v2's 5), not the count running
     spx = next(r for r in board["rows"] if r["id"] == "Y-SPX")
     assert spx["days"] >= 1 and spx["return_pct"] is not None
     cash = next(r for r in board["rows"] if r["id"] == "Y-CASH")
@@ -96,7 +97,7 @@ def test_records_card_reads_logs_freeze_costs_and_heartbeat(monkeypatch):
     monkeypatch.setenv("HEARTBEAT_URL_RUNNER", "https://example.invalid/ping")
     monkeypatch.delenv("HEARTBEAT_URL_API", raising=False)
     r = lb.records(get_conn)
-    assert r["logs"]["lines"] == 19 and r["logs"]["broken"] == []
+    assert r["logs"]["lines"] == 29 and r["logs"]["broken"] == []          # 19 + roadmap v2's 10
     assert r["league_last_run"] is not None and r["last_frozen_month"] is None
     assert r["costs"]["model_bps"] == 5.0 and r["costs"]["fills"] == 0
     assert r["heartbeat"] == {"runner": True, "api": False}           # whether it is set, never the URL

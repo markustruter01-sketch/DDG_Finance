@@ -48,6 +48,7 @@ class Context:
     universe: tuple[str, ...] = ()             # S&P 500 members (stock strategies only)
     sectors: dict[str, str] = field(default_factory=dict)
     start: date | None = None                  # the shadow's first day (path-dependent rules walk from it)
+    fx_rates: tuple[tuple[date, str, float, float], ...] = ()   # (day read, pair, long rate, short rate): FX-CARRY
 
 
 @dataclass(frozen=True)
@@ -61,6 +62,7 @@ class Strategy:
     stop_pct: float | None = None
     uses_universe: bool = False
     uses_sectors: bool = False                 # needs a real sector for most members (else a missed night)
+    uses_fx_rates: bool = False                # needs OANDA financing rates (twin_fx_financing), else a missed night
     history_sessions: int = 260                # sessions of history it needs before day 1
     max_gross: float = 1.0                     # longs plus shorts, as a share of equity
     allow_short: bool = False

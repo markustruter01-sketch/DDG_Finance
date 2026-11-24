@@ -22,6 +22,41 @@ def test_catalog_has_every_class_and_two_way_currencies():
     assert "shares" not in {c["id"] for c in human.catalog([])}           # no list today: no share class
 
 
+def test_every_fund_and_pair_says_what_it_is():
+    from research_harness.league import families
+    shown = set(families.fixed_symbols()) | set(human.INDEX_FUNDS + human.BONDS_CASH + human.COMMODITIES + human.DOLLAR)
+    assert shown <= set(human.FUNDS), sorted(shown - set(human.FUNDS))
+    for c in human.catalog([]):
+        for a in c["assets"]:
+            assert a["name"] and a["about"], a
+    fx = {c["id"]: c for c in human.catalog([])}["fx"]["assets"]
+    assert next(a for a in fx if a["symbol"] == "EUR_USD")["name"] == "euro vs US dollar"
+
+
+def test_shares_carry_name_sector_and_industry():
+    wiki = {"AAPL": {"name": "Apple Inc.", "sector": "Information Technology",
+                     "industry": "Technology Hardware, Storage & Peripherals"}}
+    rows = [{"ticker": "AAPL", "name": "APPLE INC"}, {"ticker": "LMT", "name": "LOCKHEED MARTIN CORP"}]
+    d = human.share_details(["AAPL", "LMT"], {"AAPL": "", "LMT": "Industrials"}, rows, wiki)
+    assert d["AAPL"] == {"name": "Apple Inc.", "sector": "Information Technology",
+                         "industry": "Technology Hardware, Storage & Peripherals"}
+    assert d["LMT"] == {"name": "LOCKHEED MARTIN CORP", "sector": "Industrials", "industry": ""}   # no Wikipedia row
+    share = {c["id"]: c for c in human.catalog(["AAPL"], d)}["shares"]["assets"][0]
+    assert share["name"] == "Apple Inc." and share["sector"] == "Information Technology"
+
+
+def test_wikipedia_list_gives_names_and_industries():
+    from sleeve_runtime.sp500_universe import parse_wikipedia_details, parse_wikipedia_sectors
+    html = ('<table id="constituents"><tr><th>Symbol</th><th>Security</th><th>GICS Sector</th><th>GICS Sub-Industry</th></tr>'
+            '<tr><td>LMT</td><td>Lockheed Martin</td><td>Industrials</td><td>Aerospace &amp; Defense</td></tr>'
+            '<tr><td>BRK-B</td><td>Berkshire Hathaway</td><td>Financials</td><td>Multi-Sector Holdings</td></tr>'
+            '<tr><td>XYZ</td><td>Odd Co</td><td>Not a sector</td><td>Thing</td></tr></table>')
+    d = parse_wikipedia_details(html)
+    assert d["LMT"] == {"name": "Lockheed Martin", "sector": "Industrials", "industry": "Aerospace & Defense"}
+    assert d["BRK.B"]["sector"] == "Financials" and d["XYZ"]["sector"] == ""
+    assert parse_wikipedia_sectors(html) == {"LMT": "Industrials", "BRK.B": "Financials"}   # unchanged behaviour
+
+
 def test_fill_step_never_looks_ahead():
     assert human.step_for(NY(2026, 11, 25, 8, 0)) == date(2026, 11, 24)      # before the open: fills today's open
     assert human.step_for(NY(2026, 11, 25, 11, 0)) == date(2026, 11, 25)     # in the session: next open

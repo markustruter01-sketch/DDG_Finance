@@ -12,15 +12,23 @@ from loguru import logger
 from pydantic import BaseModel, Field
 
 human_router = APIRouter()
-_members: dict[str, Any] = {"day": None, "list": []}
+_members: dict[str, Any] = {"day": None, "list": [], "details": {}}
 
 
 def _sp500() -> list[str]:
-    """Today's S&P 500 members, read once a day (SSGA, iShares fallback)."""
+    """Today's S&P 500 members with name, sector and industry, read once a day
+    (SSGA, iShares fallback; names and industries from Wikipedia when it answers)."""
     if _members["day"] != date.today() or not _members["list"]:
-        from twins import league
-        tickers, _, _ = league.load_universe()
-        _members.update(day=date.today(), list=sorted(tickers))
+        from sleeve_runtime.sp500_universe import load_wikipedia_details
+        from twins import human, league
+        tickers, sectors, rows, _ = league.load_universe_rows()
+        try:
+            wiki = load_wikipedia_details(league._http_get)
+        except Exception as exc:          # names fall back to the holdings file; no industries today
+            logger.warning(f"human | Wikipedia S&P 500 list unavailable: {type(exc).__name__}: {exc}")
+            wiki = {}
+        _members.update(day=date.today(), list=sorted(tickers),
+                        details=human.share_details(sorted(tickers), sectors, rows, wiki))
     return _members["list"]
 
 
@@ -40,7 +48,7 @@ async def human_catalog() -> dict[str, Any]:
         except Exception as exc:
             logger.warning(f"human | S&P 500 list unavailable: {type(exc).__name__}: {exc}")
             members = []
-        return {"classes": human.catalog(members), "shares_available": bool(members)}
+        return {"classes": human.catalog(members, _members["details"]), "shares_available": bool(members)}
     return await asyncio.to_thread(read)
 
 

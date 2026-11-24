@@ -43,6 +43,45 @@ BONDS_CASH = ("BIL", "SGOV", "SHY", "IEF", "TLT", "AGG", "TIP", "LQD", "HYG")
 COMMODITIES = ("GLD", "SLV", "DBC", "USO", "DBA", "PDBC")
 DOLLAR = ("UUP",)
 
+# What each fund is, so the ticket never shows a bare ticker. Names: Alpaca's asset
+# records (read 25 Nov 2026), shortened where Alpaca adds legal wording; TLT from iShares
+# (Alpaca drops the "+"). "What it is" is a plain description. A test checks that every
+# fund the catalog can show is here.
+FUNDS: dict[str, tuple[str, str]] = {
+    "SPY": ("SPDR S&P 500 ETF Trust", "the 500 biggest US companies"),
+    "QQQ": ("Invesco QQQ Trust", "the 100 biggest non-financial Nasdaq companies, mostly tech"),
+    "SSO": ("ProShares Ultra S&P500", "2× the S&P 500's daily move (borrowed exposure)"),
+    "QLD": ("ProShares Ultra QQQ", "2× the Nasdaq-100's daily move (borrowed exposure)"),
+    "RSP": ("Invesco S&P 500 Equal Weight ETF", "the S&P 500 with every company the same size"),
+    "IWM": ("iShares Russell 2000 ETF", "2,000 small US companies"),
+    "DIA": ("SPDR Dow Jones Industrial Average ETF Trust", "the 30 Dow Jones companies"),
+    "MDY": ("SPDR S&P MidCap 400 ETF Trust", "400 mid-sized US companies"),
+    "BIL": ("SPDR Bloomberg 1-3 Month T-Bill ETF", "US Treasury bills, 1–3 months: cash"),
+    "SGOV": ("iShares 0-3 Month Treasury Bond ETF", "US Treasury bills, 0–3 months: cash"),
+    "SHY": ("iShares 1-3 Year Treasury Bond ETF", "US government bonds, 1–3 years"),
+    "IEF": ("iShares 7-10 Year Treasury Bond ETF", "US government bonds, 7–10 years"),
+    "TLT": ("iShares 20+ Year Treasury Bond ETF", "US government bonds, 20+ years"),
+    "AGG": ("iShares Core U.S. Aggregate Bond ETF", "the whole US investment-grade bond market"),
+    "TIP": ("iShares TIPS Bond ETF", "US government bonds that rise with inflation"),
+    "LQD": ("iShares iBoxx $ Investment Grade Corporate Bond ETF", "bonds of large, highly rated US companies"),
+    "HYG": ("iShares iBoxx $ High Yield Corporate Bond ETF", "high-yield (junk) bonds of riskier US companies"),
+    "GLD": ("SPDR Gold Shares", "gold"),
+    "SLV": ("iShares Silver Trust", "silver"),
+    "DBC": ("Invesco DB Commodity Index Tracking Fund", "a basket of commodities: energy, metals and crops"),
+    "USO": ("United States Oil Fund", "crude oil, through oil futures"),
+    "DBA": ("Invesco DB Agriculture Fund", "farm goods: grains, sugar, coffee, cocoa, livestock"),
+    "PDBC": ("Invesco Optimum Yield Diversified Commodity Strategy No K-1 ETF",
+             "a basket of commodities: energy, metals and crops"),
+    "UUP": ("Invesco DB US Dollar Index Bullish Fund", "the US dollar against six major currencies"),
+    "DBMF": ("iMGP DBi Managed Futures Strategy ETF", "managed futures: follows trends across markets"),
+    "EEM": ("iShares MSCI Emerging Markets ETF", "big companies in emerging markets (China, India, Taiwan, Brazil and others)"),
+    "EFA": ("iShares MSCI EAFE ETF", "big companies in developed markets outside the US and Canada"),
+    "TAIL": ("Cambria Tail Risk ETF", "crash insurance: options that gain when US shares fall sharply"),
+    "XLE": ("Energy Select Sector SPDR ETF", "big US energy companies (oil and gas)"),
+}
+CURRENCIES = {"EUR": "euro", "USD": "US dollar", "JPY": "Japanese yen", "GBP": "British pound",
+              "AUD": "Australian dollar", "CAD": "Canadian dollar", "CHF": "Swiss franc", "NZD": "New Zealand dollar"}
+
 
 def twin_id(version: int) -> str:
     return f"{HUMAN_BOT}:human:v{version}"
@@ -57,23 +96,50 @@ def pairs() -> tuple[str, ...]:
     return PAIRS
 
 
-def catalog(members: list[str]) -> list[dict[str, Any]]:
+def _fund(symbol: str) -> dict[str, str]:
+    name, about = FUNDS.get(symbol, ("", ""))
+    return {"symbol": symbol, "label": symbol, "name": name, "about": about}
+
+
+def _pair(pair: str) -> dict[str, str]:
+    base_c, quote = pair.split("_")
+    return {"symbol": pair, "label": pair.replace("_", "/"), "name": f"{CURRENCIES.get(base_c, base_c)} vs {CURRENCIES.get(quote, quote)}",
+            "about": f"buy = {CURRENCIES.get(base_c, base_c)} rises against the {CURRENCIES.get(quote, quote)}"}
+
+
+def catalog(members: list[str], details: dict[str, dict[str, str]] | None = None) -> list[dict[str, Any]]:
     """Asset classes and what can be bought in each. Funds: only those the
-    platform already prices (the league's fixed list); shares: today's S&P 500."""
+    platform already prices (the league's fixed list); shares: today's S&P 500,
+    with name, GICS sector and industry where ``details`` has them."""
     have = set(families.fixed_symbols())
-    pick = lambda names: [s for s in names if s in have]
+    pick = lambda names: [_fund(s) for s in names if s in have]
     known = set(INDEX_FUNDS) | set(BONDS_CASH) | set(COMMODITIES) | set(DOLLAR)
     other = sorted(have - known)
-    out = [{"id": "shares", "label": "US shares (S&P 500)", "assets": [{"symbol": s, "label": s} for s in members]},
-           {"id": "index", "label": "Share index funds", "assets": [{"symbol": s, "label": s} for s in pick(INDEX_FUNDS)]},
-           {"id": "bonds", "label": "Bonds and cash funds", "assets": [{"symbol": s, "label": s} for s in pick(BONDS_CASH)]},
-           {"id": "commodities", "label": "Commodities and the dollar",
-            "assets": [{"symbol": s, "label": s} for s in pick(COMMODITIES + DOLLAR)]},
-           {"id": "fx", "label": "Currencies", "two_way": True,
-            "assets": [{"symbol": p, "label": p.replace("_", "/")} for p in pairs()]}]
+    details = details or {}
+    share = lambda s: {"symbol": s, "label": s, "name": details.get(s, {}).get("name", ""),
+                       "sector": details.get(s, {}).get("sector", ""), "industry": details.get(s, {}).get("industry", "")}
+    out = [{"id": "shares", "label": "US shares (S&P 500)", "assets": [share(s) for s in members]},
+           {"id": "index", "label": "Share index funds", "assets": pick(INDEX_FUNDS)},
+           {"id": "bonds", "label": "Bonds and cash funds", "assets": pick(BONDS_CASH)},
+           {"id": "commodities", "label": "Commodities and the dollar", "assets": pick(COMMODITIES + DOLLAR)},
+           {"id": "fx", "label": "Currencies", "two_way": True, "assets": [_pair(p) for p in pairs()]}]
     if other:
-        out.insert(4, {"id": "other", "label": "Other funds", "assets": [{"symbol": s, "label": s} for s in other]})
+        out.insert(4, {"id": "other", "label": "Other funds", "assets": [_fund(s) for s in other]})
     return [c for c in out if c["assets"]]
+
+
+def share_details(tickers: list[str], sectors: dict[str, str], rows: list[dict],
+                  wiki: dict[str, dict[str, str]]) -> dict[str, dict[str, str]]:
+    """{ticker: name, sector, industry}. Name: Wikipedia's company name, else the holdings
+    file's; sector: the league's sector source, else Wikipedia's; industry: Wikipedia's
+    GICS sub-industry ('' when Wikipedia was not reachable)."""
+    held = {r["ticker"]: r.get("name", "") for r in rows}
+    out = {}
+    for t in tickers:
+        w = wiki.get(t, {})
+        out[t] = {"name": w.get("name") or held.get(t, ""), "sector": sectors.get(t) or w.get("sector", ""),
+                  "industry": w.get("industry", "")}
+    return out
 
 
 def step_for(now: datetime) -> date:

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useSlidingPill } from "@/components/Motion";
 
 /**
  * Two screens on one sheet. Scrolling past the end of either screen turns the
@@ -116,8 +117,11 @@ export function FlipPages({ pages, side, onSide }: {
 export function FlipButtons({ side, onSide, labels }: {
   side: 0 | 1; onSide: (s: 0 | 1) => void; labels: [string, string];
 }) {
+  const host = useRef<HTMLDivElement>(null);
+  useSlidingPill(host, "[aria-selected='true']", side);
   return (
-    <div className="seg glass" role="tablist" aria-label="Page">
+    <div ref={host} className="seg glass" role="tablist" aria-label="Page">
+      <span className="ng-pill" aria-hidden="true" />
       {labels.map((l, i) => (
         <button key={l} role="tab" aria-selected={side === i} className={side === i ? "on" : ""}
           onClick={() => onSide(i as 0 | 1)}>{l}</button>

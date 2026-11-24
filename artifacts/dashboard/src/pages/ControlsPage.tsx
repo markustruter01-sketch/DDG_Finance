@@ -5,6 +5,7 @@ import { api } from "@/hooks/use-trading-client";
 import { botColor, useBotIdentity, useBotLabels } from "@/lib/bot-identity";
 import { Shell, Status, bneTime } from "@/components/Shell";
 import { useClearHalt, useFleetV1State, useMomoV2State } from "@/hooks/use-fleet-v1";
+import { Bars, DoneTick, Loading } from "@/components/Motion";
 
 type Governed = {
   bot_id: string;
@@ -77,7 +78,7 @@ function BotRow({ row }: { row: PauseRow }) {
           }}
         >
           {action === "pause" ? <Pause size={15} aria-hidden="true" /> : <Play size={15} aria-hidden="true" />}
-          {toggle.isPending ? "Saving…" : action === "pause" ? "Pause" : "Resume"}
+          {toggle.isPending ? <><Bars /> Saving…</> : action === "pause" ? "Pause" : "Resume"}
         </button>
       </div>
     </li>
@@ -114,11 +115,11 @@ function EmergencyStop({ tripped }: { tripped: boolean }) {
           disabled={typed !== STOP_WORD || trip.isPending}
           onClick={() => trip.mutate()}
         >
-          {trip.isPending ? "Stopping…" : "Stop everything"}
+          {trip.isPending ? <><Bars /> Stopping…</> : "Stop everything"}
         </button>
       </div>
       {trip.isSuccess && (
-        <div className="small">Done. Pending orders cancelled: {trip.data?.cancelled_orders ?? 0}. {trip.data?.action}</div>
+        <div className="small"><DoneTick />Done. Pending orders cancelled: {trip.data?.cancelled_orders ?? 0}. {trip.data?.action}</div>
       )}
       {trip.isError && <div className="small"><span className="loss">Failed: {errorText(trip.error)}</span></div>}
       {tripped && <KillReset />}
@@ -151,10 +152,10 @@ function KillReset() {
           placeholder="Reset token" aria-label="Kill switch reset token" data-testid="input-kill-reset-token" />
         <button className="btn" data-testid="button-kill-reset" disabled={!token || reset.isPending}
           onClick={() => reset.mutate()}>
-          {reset.isPending ? "Clearing…" : "Clear the kill switch"}
+          {reset.isPending ? <><Bars /> Clearing…</> : "Clear the kill switch"}
         </button>
       </div>
-      {reset.isSuccess && <div className="small">Cleared. Resume the accounts above when ready.</div>}
+      {reset.isSuccess && <div className="small"><DoneTick />Cleared. Resume the accounts above when ready.</div>}
       {reset.isError && <div className="small"><span className="loss">Refused: {errorText(reset.error)}</span></div>}
     </div>
   );
@@ -187,7 +188,7 @@ function HaltRow({ account }: { account: Governed }) {
                 clear.mutate(token, { onSettled: () => setToken("") });
               }
             }}>
-            {clear.isPending ? "Clearing…" : "Clear halt"}
+            {clear.isPending ? <><Bars /> Clearing…</> : "Clear halt"}
           </button>
         </div>
       )}
@@ -323,7 +324,7 @@ export default function ControlsPage() {
           </button>
         </div>
 
-        {state.isLoading && <div className="note">Reading pause state…</div>}
+        {state.isLoading && <div className="note"><Loading>Reading pause state…</Loading></div>}
         {state.isError && (
           <div className="glass panel" role="alert">
             <Status tone="problem" word="Pause state unreadable" />

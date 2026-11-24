@@ -4,6 +4,7 @@ import { api } from "@/hooks/use-trading-client";
 import { useLeaderboard } from "@/hooks/use-leaderboard";
 import { Shell, Status } from "@/components/Shell";
 import { returnSince, type Curve } from "@/lib/curves";
+import { Bars, DoneTick } from "@/components/Motion";
 
 // Me vs the machines (Markus, 20 Nov 2026). Markus's own pretend account
 // (twins/human.py) and the 2027 predictions (twins/predictions.py). Overview
@@ -88,8 +89,8 @@ function TradeTicket({ catalog, onDone }: { catalog: Catalog; onDone: () => void
           <textarea rows={3} value={reason} maxLength={500} placeholder="What you see and why this trade fits your view" onChange={(e) => setReason(e.target.value)} /></label>
       </div>
       <div className="ticket-foot">
-        <button className="btn" disabled={!valid || send.isPending} onClick={() => send.mutate()}>{send.isPending ? "Recording…" : "Record trade"}</button>
-        {send.isSuccess && <span className="small">Recorded. Fills at the open after {send.data.fills_at_open_after}.</span>}
+        <button className="btn" disabled={!valid || send.isPending} onClick={() => send.mutate()}>{send.isPending ? <><Bars /> Recording…</> : "Record trade"}</button>
+        {send.isSuccess && <span className="small"><DoneTick />Recorded. Fills at the open after {send.data.fills_at_open_after}.</span>}
         {send.isError && <Status tone="problem" word={err(send.error)} />}
         {!catalog.shares_available && <span className="small">S&amp;P 500 list unavailable right now; funds and currencies still work.</span>}
       </div>
@@ -124,8 +125,8 @@ function PredictionForm({ p, mine }: { p: Predictions; mine?: Entry }) {
           <tr key={k}><td>{label}</td><td /><td><input type="number" step={0.05} value={macro[k]} onChange={(e) => setMacro({ ...macro, [k]: Number(e.target.value) })} /></td></tr>
         ))}</tbody></table></div>
       <div className="ticket-foot">
-        <button className="btn" disabled={send.isPending || thesis.trim().length < 50} onClick={() => send.mutate()}>{send.isPending ? "Filing…" : mine ? "File a new version" : "File my prediction"}</button>
-        {send.isSuccess && <span className="small">Filed.</span>}
+        <button className="btn" disabled={send.isPending || thesis.trim().length < 50} onClick={() => send.mutate()}>{send.isPending ? <><Bars /> Filing…</> : mine ? "File a new version" : "File my prediction"}</button>
+        {send.isSuccess && <span className="small"><DoneTick />Filed.</span>}
         {send.isError && <Status tone="problem" word={err(send.error)} />}
       </div>
     </section>
@@ -229,7 +230,7 @@ export default function MePage() {
             {!p.locked && (
               <div className="ticket-foot">
                 <button className="btn" disabled={ask.isPending} onClick={() => { if (window.confirm("Ask the three AI council members for their 2027 predictions now? Each answers once; it costs a few cents.")) ask.mutate(); }}>
-                  {ask.isPending ? "Asking the council… (can take a few minutes)" : "Ask the AI council"}</button>
+                  {ask.isPending ? <><Bars /> Asking the council… (can take a few minutes)</> : "Ask the AI council"}</button>
                 {ask.isSuccess && <span className="small">{Object.entries(ask.data).map(([r, v]) => `${AUTHOR[r] ?? r}: ${v.filed ? "filed" : `not filed (${v.error})`}`).join(" · ")}</span>}
                 {ask.isError && <Status tone="problem" word={err(ask.error)} />}
               </div>

@@ -6,6 +6,7 @@ import { Link } from "wouter";
 import { api } from "@/hooks/use-trading-client";
 import { useLeaderboard } from "@/hooks/use-leaderboard";
 import { Status, bneTime } from "@/components/Shell";
+import { Loading } from "@/components/Motion";
 
 export type LeagueRow = {
   id: string; name: string; kind: "real" | "yardstick" | "shadow" | "allocator"; family: string | null;
@@ -98,7 +99,7 @@ export function RecordsCard() {
             <span className="small tab">{c?.fills ? `${c.median_bps?.toFixed(1)} / ${c.model_bps.toFixed(1)} bps` : `— / ${c?.model_bps.toFixed(1) ?? "5.0"} bps`}</span></li>
           <li><Status tone={r.heartbeat.runner ? "ok" : "late"} word="Outside heartbeat" /><span className="grow" /><span className="small tab">{r.heartbeat.runner ? "on" : "not set up"}</span></li>
         </ul>
-      ) : <div className="empty">{q.isError ? "Records unreadable. Check the trading API." : "Reading records…"}</div>}
+      ) : <div className="empty">{q.isError ? "Records unreadable. Check the trading API." : <Loading>Reading records…</Loading>}</div>}
     </section>
   );
 }

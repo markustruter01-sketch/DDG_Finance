@@ -12,7 +12,7 @@
  * chart and the comparison table come from /fleet/comparison, the vault card
  * from /vault/per-bot/summary.
  */
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Download } from "lucide-react";
 import {
@@ -30,6 +30,7 @@ import { botColor, botLabel } from "@/lib/bot-identity";
 import { useComparison, useFleetV1State, useHoldings, useMomoV2State, useVaultSummary, type Holdings } from "@/hooks/use-fleet-v1";
 import { ComparisonPanel, FleetAccountPanel, MomoPanel, VaultPanel } from "@/components/FleetV1";
 import { AllocatorCard, LeagueTop, RecordsCard, useLeague } from "@/components/LeagueCards";
+import { CardPager, DownloadButton, Loading, Settle } from "@/components/Motion";
 
 // The four accounts in the 2027 comparison and the return-by-account chart
 // (Forex included since the 20 Nov audit, AU1).
@@ -86,7 +87,7 @@ function Stat({ label, value, sub, mark }: { label: string; value: string | null
   return (
     <div className="stat">
       <span className="label">{label}</span>
-      <span className="num-sm"><span className={mark}>{value ?? "—"}</span></span>
+      <span className="num-sm"><span className={mark}><Settle value={value} /></span></span>
       {sub != null && <span className="note">{sub}</span>}
     </div>
   );
@@ -178,7 +179,7 @@ function EngineCard({ e, mktOpen }: { e: Engine; mktOpen: boolean }) {
       </div>
       {e.slice ? (
         <div className="stat">
-          <span className="num">{money(e.slice.equity)}</span>
+          <span className="num"><Settle value={money(e.slice.equity)} /></span>
           <span className="small tab">
             <span className={line(e.slice.pnl)}>{signedMoney(e.slice.pnl) ?? "—"}</span> · {signedPct(e.slice.pnl_pct) ?? "—"} since start
           </span>
@@ -233,6 +234,7 @@ export default function HomePage() {
   const report = useExportReport();
   const league = useLeague();
   const [side, setSide] = useState<0 | 1>(0);
+  const cards = useRef<HTMLDivElement>(null);
   // Running/paused comes from bots_state (same read as Controls), not the static registry.
   const pause = useQuery({
     queryKey: ["/bots/pause-state"],
@@ -299,15 +301,15 @@ export default function HomePage() {
       a.download = `ddg-finance-report-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-")}.txt`;
       a.click();
       URL.revokeObjectURL(a.href);
-    } catch { /* the mutation keeps its own error state */ }
+      return true;
+    } catch { return false; /* the mutation keeps its own error state */ }
   };
 
   const reportButton = (
     <>
       <FlipButtons side={side} onSide={setSide} labels={["Overview", "Detail"]} />
-      <button className="btn glass" onClick={downloadReport} disabled={report.isPending} title="Download the full text report">
-        <Download size={15} aria-hidden="true" /> <span className="btn-text">{report.isPending ? "Preparing" : "Report"}</span>
-      </button>
+      <DownloadButton className="glass" run={downloadReport} title="Download the full text report"
+        icon={<Download size={15} aria-hidden="true" />} label="Report" />
     </>
   );
 
@@ -341,7 +343,7 @@ export default function HomePage() {
       <section className="glass panel home-summary" aria-label="Fleet summary">
         <div className="stat home-hero">
           <span className="label">Fleet equity · paper</span>
-          <span className="display">{money(total?.equity) ?? "—"}</span>
+          <span className="display"><Settle value={money(total?.equity)} /></span>
           <span className="small tab">
             <span className={line(total?.pnl)}>{signedMoney(total?.pnl) ?? "—"}</span> · {signedPct(total?.pnl_pct) ?? "—"} since start
           </span>
@@ -392,12 +394,14 @@ export default function HomePage() {
         </div>
 
         <div className="home-right">
-          <div className="engines">
+          <div ref={cards} className="engines">
             {engines.length
               ? [...engines].sort((a, b) => (b.slice?.pnl_pct ?? -1e9) - (a.slice?.pnl_pct ?? -1e9))   // best first (Markus 20 Nov)
                   .map((e) => <EngineCard key={e.id} e={e} mktOpen={mktOpen} />)
-              : <Empty>{registry.isError ? "Engine list unavailable. Check the trading API." : "Loading engines…"}</Empty>}
+              : <Empty>{registry.isError ? "Engine list unavailable. Check the trading API." : <Loading>Loading engines…</Loading>}</Empty>}
           </div>
+          <CardPager target={cards} label="Account cards"
+            names={[...engines].sort((a, b) => (b.slice?.pnl_pct ?? -1e9) - (a.slice?.pnl_pct ?? -1e9)).map((e) => e.name)} />
         </div>
       </div>
       <div className="home-bottom">
@@ -459,12 +463,12 @@ export default function HomePage() {
           <FleetAccountPanel key={a.bot_id} account={a} state={fleetV1.data!} />
         )) : (
           <Panel title="FLEET-V1">
-            <Empty>{fleetV1.isError ? "FLEET-V1 state unavailable. Check the trading API." : "Reading FLEET-V1 state…"}</Empty>
+            <Empty>{fleetV1.isError ? "FLEET-V1 state unavailable. Check the trading API." : <Loading>Reading FLEET-V1 state…</Loading>}</Empty>
           </Panel>
         )}
         {momo.data ? <MomoPanel momo={momo.data} limits={fleetV1.data?.limits ?? null} /> : (
           <Panel title="MOMO-V2">
-            <Empty>{momo.isError ? "MOMO-V2 state unavailable. Check the trading API." : "Reading MOMO-V2 state…"}</Empty>
+            <Empty>{momo.isError ? "MOMO-V2 state unavailable. Check the trading API." : <Loading>Reading MOMO-V2 state…</Loading>}</Empty>
           </Panel>
         )}
       </div>

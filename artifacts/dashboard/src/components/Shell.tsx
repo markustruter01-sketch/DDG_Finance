@@ -1,9 +1,10 @@
 /** Page frame for every DDG Finance screen (Night Glass v5): the full landscape
  *  photo on Home, "dusk" everywhere else, and one top bar with the logo lockup,
  *  the pill navigation, live status (a dot plus a word) and Brisbane time. */
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { useFleetData } from "@/hooks/useFleetData";
+import { useSlidingPill } from "@/components/Motion";
 
 const NAV = [
   { path: "/", label: "Home" },
@@ -20,8 +21,9 @@ const brisbane = (d: Date | string | number, opts: Intl.DateTimeFormatOptions) =
 export const bneTime = (iso?: string | null) =>
   iso ? brisbane(iso, { hour: "numeric", minute: "2-digit" }) : null;
 
-export function Status({ tone, word }: { tone: "ok" | "late" | "problem" | "none"; word: string }) {
-  return <span className="status"><span className={`dot ${tone === "ok" ? "" : tone}`} aria-hidden="true" />{word}</span>;
+/** `live`: a slow ring spreads from the dot (only while something is live, e.g. the US market is open). */
+export function Status({ tone, word, live = false }: { tone: "ok" | "late" | "problem" | "none"; word: string; live?: boolean }) {
+  return <span className="status"><span className={`dot ${tone === "ok" ? "" : tone}${live ? " live" : ""}`} aria-hidden="true" />{word}</span>;
 }
 
 function Clock() {
@@ -51,13 +53,16 @@ function TopBar({ actions }: { actions?: ReactNode }) {
       : killSwitchArmed ? { tone: "ok" as const, word: "Kill switch armed" }
         : { tone: "late" as const, word: "Kill switch report-only" };
   const active = (p: string) => (p === "/" ? location === "/" || location === "" : location.startsWith(p));
+  const nav = useRef<HTMLElement>(null);
+  useSlidingPill(nav, "a[aria-current='page']", location, { remember: "nav" });
   return (
     <header className="topbar">
       <Link href="/" className="brand glass" aria-label="DDG Finance home">
         <img src={`${import.meta.env.BASE_URL}ddg-mark-white-256.png`} alt="" />
         <b>DDG</b><i aria-hidden="true" /><span>Finance</span>
       </Link>
-      <nav className="nav glass" aria-label="Main">
+      <nav ref={nav} className="nav glass" aria-label="Main">
+        <span className="ng-pill" aria-hidden="true" />
         {NAV.map((n) => (
           <Link key={n.path} href={n.path} aria-current={active(n.path) ? "page" : undefined}>{n.label}</Link>
         ))}
@@ -67,7 +72,7 @@ function TopBar({ actions }: { actions?: ReactNode }) {
         <span className="label">Paper accounts</span>
         <Status tone={runner.tone} word={runner.word} />
         <Status tone={kill.tone} word={kill.word} />
-        <Status tone={mktOpen ? "ok" : "none"} word={mktOpen ? "US market open" : "US market closed"} />
+        <Status tone={mktOpen ? "ok" : "none"} word={mktOpen ? "US market open" : "US market closed"} live={!!mktOpen} />
         <span className="small tab synced">Synced {bneTime(lastCycle) ?? "—"}</span>
       </div>
       <span className="spacer" />
@@ -88,6 +93,8 @@ function TabBar() {
   const [open, setOpen] = useState(false);
   const active = (p: string) => (p === "/" ? location === "/" || location === "" : location.startsWith(p));
   const moreActive = MORE.some((n) => active(n.path));
+  const bar = useRef<HTMLElement>(null);
+  useSlidingPill(bar, "[aria-current='page']", location, { remember: "tabbar" });
   return (<>
     {open && (
       <div className="sheet-backdrop" onClick={() => setOpen(false)}>
@@ -98,7 +105,8 @@ function TabBar() {
         </nav>
       </div>
     )}
-    <nav className="tabbar glass" aria-label="Main">
+    <nav ref={bar} className="tabbar glass" aria-label="Main">
+      <span className="ng-pill" aria-hidden="true" />
       {TABS.map((n) => <Link key={n.path} href={n.path} aria-current={active(n.path) ? "page" : undefined}>{n.label}</Link>)}
       <button aria-expanded={open} aria-current={moreActive ? "page" : undefined} onClick={() => setOpen((v) => !v)}>More</button>
     </nav>

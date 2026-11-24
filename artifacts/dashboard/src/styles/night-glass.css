@@ -511,3 +511,86 @@ table.ng input { width: 7em; }
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); }
 .home-accounts > .panel { height: auto; overflow: visible; }
 @media (max-width: 900px) { .home-detail-page .home-detail { grid-template-columns: 1fr; } }
+
+/* ── Motion (Night Glass motion guide, DDG_Control docs/brand/night-glass-motion.md) ──
+   Finance is the calmest DDG product. Things you touch respond fast; numbers and
+   money only ease in; loaders loop only while waiting. All timings are tokens, and
+   the reduce-motion rule at the top of this file stops every CSS animation. */
+.btn, .chip, .seg button, .nav a, .multiple, .tabbar a, .tabbar button, .card-pager button {
+  transition: background-color var(--ng-dur-instant) var(--ng-ease-out), border-color var(--ng-dur-instant) var(--ng-ease-out),
+    color var(--ng-dur-instant) var(--ng-ease-out), transform var(--ng-dur-instant) var(--ng-ease-out);
+}
+.btn:active:not(:disabled) { transform: scale(0.98); }
+.bench-exp summary > svg, .disclosure summary svg { transition: transform var(--ng-dur-base) var(--ng-ease-out); }
+
+/* Sliding pill under the chosen page or tab (components/Motion useSlidingPill). Until it is
+   measured, the chosen item keeps its own background, so nothing is lost without it. */
+.ng-pill { position: absolute; left: 0; top: 0; z-index: 0; pointer-events: none; opacity: 0; }
+.has-pill > .ng-pill { opacity: 1; }
+.nav, .seg { position: relative; }
+.nav a, .seg button, .tabbar a, .tabbar button { position: relative; z-index: 1; }
+.nav > .ng-pill { border-radius: 10px; background: rgba(255,255,255,0.10); }
+.nav.has-pill a[aria-current='page'] { background: transparent; }
+.seg > .ng-pill { border-radius: 999px; background: rgba(255,255,255,0.14); }
+.seg.has-pill button.on, .seg.has-pill button[aria-selected='true'] { background: transparent; }
+.tabbar > .ng-pill { border-radius: 14px; background: rgba(255,255,255,0.12); }
+.tabbar.has-pill [aria-current='page'] { background: transparent; }
+
+/* A number that changed settles in place: a short fade and a 3 px rise, no overshoot. */
+.ng-settle { display: inline-block; animation: ng-settle var(--ng-dur-slow) var(--ng-ease-out) both; }
+@keyframes ng-settle { from { opacity: 0.35; transform: translateY(3px); } }
+
+/* Loaders. */
+.ng-loading { display: inline-flex; align-items: center; gap: 8px; }
+.ng-revolve { flex: none; animation: ng-spin var(--ng-loop-spin) linear infinite; }
+@keyframes ng-spin { to { transform: rotate(360deg); } }
+.ng-bars { display: inline-flex; align-items: stretch; gap: 2px; height: 12px; }
+.ng-bars i { width: 3px; border-radius: 1px; background: currentColor; opacity: 0.25; animation: ng-fade var(--ng-loop-fade) ease-in-out infinite; }
+.ng-bars i:nth-child(2) { animation-delay: calc(var(--ng-loop-fade) / 6); }
+.ng-bars i:nth-child(3) { animation-delay: calc(var(--ng-loop-fade) / 3); }
+@keyframes ng-fade { 0%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .ng-bars i { opacity: 0.7; } }
+
+/* Done: the tick draws itself once. */
+.ng-tick { flex: none; display: inline-block; vertical-align: -2px; margin-right: 6px; color: var(--ng-text); }
+.ng-tick path { stroke-dasharray: 1; stroke-dashoffset: 0; animation: ng-draw var(--ng-dur-base) var(--ng-ease-out) both; }
+@keyframes ng-draw { from { stroke-dashoffset: 1; } }
+
+/* Report download: folds into a ring, ticks, opens back out. */
+.ng-dl { position: relative; overflow: hidden;
+  transition: width var(--ng-dur-base) var(--ng-ease-out), border-radius var(--ng-dur-base) var(--ng-ease-out),
+    background-color var(--ng-dur-instant) var(--ng-ease-out); }
+.ng-dl-label { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; transition: opacity var(--ng-dur-instant) var(--ng-ease-out); }
+.ng-dl.busy, .ng-dl.done { padding: 0; border-radius: 999px; }
+.ng-dl.busy .ng-dl-label, .ng-dl.done .ng-dl-label { opacity: 0; }
+.ng-dl-ring, .ng-dl-done { position: absolute; left: 50%; top: 50%; translate: -50% -50%; }
+.ng-dl-done { display: grid; place-items: center; }
+.ng-dl-done .ng-tick { margin: 0; width: 18px; height: 18px; }
+.ng-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Live: a slow ring spreads from the dot while the US market is open (the one loop on the top bar). */
+.dot.live { position: relative; }
+.dot.live::after { content: ""; position: absolute; inset: 0; border-radius: 50%; border: 1px solid rgba(255,255,255,0.7); opacity: 0;
+  animation: ng-ripple calc(var(--ng-loop-spin) * 2) var(--ng-ease-out) infinite; }
+@keyframes ng-ripple { from { opacity: 0.7; transform: scale(1); } to { opacity: 0; transform: scale(3); } }
+
+/* Phone "More" sheet rises from the tab bar; the shade darkens in. Only colour and position
+   move: animating opacity here would switch off the glass blur until the motion ends. */
+@media (max-width: 760px) {
+  .sheet-backdrop { animation: ng-shade-in var(--ng-dur-base) var(--ng-ease-out) backwards; }
+  .sheet { animation: ng-rise var(--ng-dur-slow) var(--ng-ease-out) backwards; }
+}
+@keyframes ng-shade-in { from { background-color: transparent; } }
+@keyframes ng-rise { from { transform: translateY(24px); } }
+
+/* Phone account cards: dots under the side-scrolling row; the white pill is the card in view. */
+.card-pager { display: none; }
+@media (max-width: 760px) {
+  .card-pager { position: relative; display: flex; justify-self: center; align-self: center; padding: 0 6px; border-radius: 999px; }
+  .card-pager button { all: unset; position: relative; z-index: 1; width: 24px; height: 28px; cursor: pointer; display: grid; place-items: center; }
+  .card-pager button::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,0.28); }
+  .card-pager.has-pill button[aria-current='true']::before { background: transparent; }
+  .card-pager:not(.has-pill) button[aria-current='true']::before { background: #fff; }
+  .card-pager button:focus-visible { outline: 2px solid var(--ng-ice); outline-offset: -4px; border-radius: 8px; }
+  .card-pager > .ng-pill { border-radius: 999px; background: #fff; }
+}

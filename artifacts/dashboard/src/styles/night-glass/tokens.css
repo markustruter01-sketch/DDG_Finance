@@ -26,7 +26,7 @@
   --ng-mono: 'Geist Mono', ui-monospace, monospace;
   /* The one landscape photo: full on home pages, blurred "dusk" at the top of every other page. */
   --ng-photo: url('/backgrounds/david-becker.webp');
-  /* Motion (DDG_Control docs/brand/night-glass-motion.md). Use these; no new timings inside components. */
+  /* Motion (DDG_Control docs/brand/night-glass.md, section 10). Use these; no new timings inside components. */
   --ng-dur-instant: 120ms;
   --ng-dur-quick: 200ms;
   --ng-dur-base: 320ms;

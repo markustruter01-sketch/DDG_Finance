@@ -512,7 +512,7 @@ table.ng input { width: 7em; }
 .home-accounts > .panel { height: auto; overflow: visible; }
 @media (max-width: 900px) { .home-detail-page .home-detail { grid-template-columns: 1fr; } }
 
-/* ── Motion (Night Glass motion guide, DDG_Control docs/brand/night-glass-motion.md) ──
+/* ── Motion (Night Glass guide section 10, DDG_Control docs/brand/night-glass.md) ──
    Finance is the calmest DDG product. Things you touch respond fast; numbers and
    money only ease in; loaders loop only while waiting. All timings are tokens, and
    the reduce-motion rule at the top of this file stops every CSS animation. */

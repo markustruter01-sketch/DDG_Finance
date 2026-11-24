@@ -1,4 +1,4 @@
-/** Night Glass motion for DDG Finance (DDG_Control docs/brand/night-glass-motion.md).
+/** Night Glass motion for DDG Finance (DDG_Control docs/brand/night-glass.md, section 10).
  *  Finance is the calmest DDG product: things you touch may slide, numbers and money
  *  only ease in (no bounce), loaders loop only while waiting, and "reduce motion"
  *  turns every duration token into 1 ms (styles/night-glass/tokens.css), so all

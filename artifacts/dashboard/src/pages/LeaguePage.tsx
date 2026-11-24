@@ -6,6 +6,7 @@ import { api } from "@/hooks/use-trading-client";
 import { useLeaderboard } from "@/hooks/use-leaderboard";
 import { Shell, Status } from "@/components/Shell";
 import { rebase, sharedStart } from "@/lib/curves";
+import { Loading } from "@/components/Motion";
 
 // Shadow League (roadmap Phase 1), approved design 20 Nov: overview first on one
 // screen (headline numbers, every shadow as a small chart on the same scale, the
@@ -161,7 +162,7 @@ export default function LeaguePage() {
             <RefreshCw size={15} aria-hidden="true" /> {board.isFetching ? "Refreshing" : "Refresh"}
           </button>
         </div>
-        {board.isLoading && <div className="note">Reading the league…</div>}
+        {board.isLoading && <div className="note"><Loading>Reading the league…</Loading></div>}
         {board.isError && <Status tone="problem" word={`League unreadable: ${errorText(board.error)}`} />}
 
         {board.data && (<>

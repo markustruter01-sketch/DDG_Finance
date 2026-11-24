@@ -1,5 +1,6 @@
-/* Copied unchanged from DDG-Control artifacts/ddg-control/src/tokens.css (commit 8517d56).
-   Keep identical: Night Glass v5 is one brand across DDG Control, the website and DDG Finance. */
+/* Copied from DDG_Control artifacts/ddg-control/src/tokens.css (colours: commit 8517d56; motion:
+   commit 74174dc, DDG_Control PR #189). Keep identical: Night Glass v5 is one brand across DDG Control,
+   the website and DDG Finance. Finance-only additions: --ng-gain and --ng-loss. */
 /* Night Glass colour and font tokens — shared by DDG Control and the public website. */
 :root {
   --ng-night: #07080b;
@@ -25,5 +26,27 @@
   --ng-mono: 'Geist Mono', ui-monospace, monospace;
   /* The one landscape photo: full on home pages, blurred "dusk" at the top of every other page. */
   --ng-photo: url('/backgrounds/david-becker.webp');
+  /* Motion (DDG_Control docs/brand/night-glass-motion.md). Use these; no new timings inside components. */
+  --ng-dur-instant: 120ms;
+  --ng-dur-quick: 200ms;
+  --ng-dur-base: 320ms;
+  --ng-dur-slow: 520ms;
+  --ng-dur-story: 900ms;
+  --ng-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ng-ease-in: cubic-bezier(0.55, 0, 1, 0.45);
+  --ng-ease-move: cubic-bezier(0.65, 0, 0.35, 1);
+  --ng-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  /* A soft damped spring: about 12% overshoot, settled by the end. Browsers without linear() fall back to "ease". */
+  --ng-ease-elastic: linear(0, 0.087, 0.285, 0.518, 0.735, 0.907, 1.026, 1.093, 1.118, 1.115, 1.094, 1.067, 1.04, 1.017, 1.001, 0.991, 0.986, 0.986, 0.988, 0.991, 1);
+  --ng-stagger: 40ms;      /* delay between items in a group (chart bars, list rows) */
+  --ng-loop-spin: 1.2s;    /* one turn of a spinner */
+  --ng-loop-fade: 1s;      /* one cycle of the three-bar loader */
   color-scheme: dark;
+}
+@media (prefers-reduced-motion: reduce) {
+  /* Motion off: every state still shows, it just arrives without travel. */
+  :root {
+    --ng-dur-instant: 1ms; --ng-dur-quick: 1ms; --ng-dur-base: 1ms; --ng-dur-slow: 1ms; --ng-dur-story: 1ms;
+    --ng-ease-spring: linear; --ng-ease-elastic: linear; --ng-stagger: 0ms;
+  }
 }

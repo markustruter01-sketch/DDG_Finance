@@ -6,6 +6,7 @@ import { api } from "@/hooks/use-trading-client";
 import { useLeaderboard } from "@/hooks/use-leaderboard";
 import { Shell, Status } from "@/components/Shell";
 import { rebase, returnSince, sharedStart } from "@/lib/curves";
+import { Loading } from "@/components/Motion";
 
 // The Forex AI council's record: every day's news, each AI's call and strategy,
 // the final decision and why, and how each AI and each strategy has scored.
@@ -154,7 +155,7 @@ function ScorecardPanels() {
     queryFn: async () => (await api.get("/forex-council/scorecard")).data as Scorecard,
     staleTime: 10 * 60_000,
   });
-  if (card.isLoading) return <section className="glass panel"><div className="note">Scoring…</div></section>;
+  if (card.isLoading) return <section className="glass panel"><div className="note"><Loading>Scoring…</Loading></div></section>;
   if (card.isError || !card.data) return <section className="glass panel"><Status tone="problem" word={`Scorecard unavailable: ${errorText(card.error)}`} /></section>;
   const c = card.data;
   return (
@@ -227,7 +228,7 @@ function NewsPanel({ day }: { day: string }) {
 
 function DayDetailPanel({ day }: { day: string }) {
   const detail = useDay(day);
-  if (detail.isLoading) return <div className="note">Reading {day}…</div>;
+  if (detail.isLoading) return <div className="note"><Loading>Reading {day}…</Loading></div>;
   if (detail.isError || !detail.data) return <Status tone="problem" word={`Could not read ${day}: ${errorText(detail.error)}`} />;
   const d = detail.data;
   const roles = ["member_1", "member_2", "member_3"].filter((r) => r !== "member_3" || (d.council_version ?? 2) >= 3);
@@ -311,7 +312,7 @@ export default function ForexPage() {
         <div className="forex-days">
         <section className="glass panel" aria-label="Days">
           <div className="panel-head"><h2>Days</h2><span className="label">Newest first · pick a day</span></div>
-          {days.isLoading && <div className="note">Reading the ledger…</div>}
+          {days.isLoading && <div className="note"><Loading>Reading the ledger…</Loading></div>}
           {days.isError && <Status tone="problem" word={`Ledger unreadable: ${errorText(days.error)}`} />}
           <div className="table-scroll">
             <table className="ng">

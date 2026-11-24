@@ -14,6 +14,7 @@ import { Shell, Status } from "@/components/Shell";
 import { botColor } from "@/lib/bot-identity";
 import { FleetRecordPanel } from "@/components/FleetV1";
 import { useFleetV1Record } from "@/hooks/use-fleet-v1";
+import { Loading } from "@/components/Motion";
 
 type Experiment = {
   id: string | number;
@@ -238,7 +239,7 @@ function CatalogSkeleton() {
     <Shell>
       <main className="bench" data-testid="status-bench-loading" aria-busy="true">
         <div className="page-head"><h1 className="page-title">Strategy Bench</h1><span className="label">Research record · read-only</span></div>
-        <section className="glass panel" data-testid="panel-bench-loading"><div className="empty">Reading the research catalog…</div></section>
+        <section className="glass panel" data-testid="panel-bench-loading"><div className="empty"><Loading>Reading the research catalog…</Loading></div></section>
       </main>
     </Shell>
   );

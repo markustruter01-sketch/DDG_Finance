@@ -469,7 +469,7 @@ def nightly(now: datetime | None = None, *, get_conn=None, fetch_daily=None, fet
             report["share_close"] = "no US session today"
         report["fx_rates"] = _fx_rates(get_conn, now, record_fx_rates, alarm, resolve)
         report["twins"] = replay_all(get_conn, now, daily, fetch_hourly, alarm, resolve)
-        report["chains"] = verify_all(get_conn, alarm)
+        report["chains"] = verify_all(get_conn, alarm, resolve)
         report["month_end"] = _month_end(get_conn, now, report["twins"], alarm, resolve)
         report["allocator"] = _allocator(get_conn, now, alarm) if with_league else "off"
         # Last: the AI twins' votes (model calls can take minutes; tonight's values are already stored).
@@ -572,7 +572,7 @@ def replay_all(get_conn, now, daily, fetch_hourly, alarm, resolve) -> dict[str, 
     return out
 
 
-def verify_all(get_conn, alarm) -> dict[str, int]:
+def verify_all(get_conn, alarm, resolve: Callable[[str], None] | None = None) -> dict[str, int]:
     broken = {}
     for acct in store.accounts(get_conn, active_only=False):
         problems = store.verify_chain(store.decisions(get_conn, acct["twin_id"]))
@@ -580,6 +580,8 @@ def verify_all(get_conn, alarm) -> dict[str, int]:
             broken[acct["twin_id"]] = len(problems)
             alarm("error", "twin_ledger_broken",
                   f"{acct['twin_id']}: decision log fails its hash check: {problems[0]}", acct["bot_id"])
+    if not broken and resolve:          # every chain intact tonight: clear an old alarm
+        resolve("twin_ledger_broken")
     return broken
 
 

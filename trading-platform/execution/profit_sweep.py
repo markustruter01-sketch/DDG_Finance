@@ -401,13 +401,19 @@ def _backfill_from_trade_history() -> None:
             conn.close()
             return
 
-        # Compute expected contributions from trade tables.
+        # Compute expected contributions from trade tables. The old forex_trades table no longer
+        # exists in production (read 25 Nov 2026), so every startup logged a Postgres error here:
+        # no table = nothing to backfill.
         with conn.cursor() as cur:
-            cur.execute(
-                "SELECT COUNT(*), COALESCE(SUM(pnl_usd * 0.20), 0.0) "
-                "FROM forex_trades WHERE pnl_usd > 0"
-            )
-            f_count, f_amount = cur.fetchone()
+            cur.execute("SELECT to_regclass('public.forex_trades') IS NOT NULL")
+            if cur.fetchone()[0]:
+                cur.execute(
+                    "SELECT COUNT(*), COALESCE(SUM(pnl_usd * 0.20), 0.0) "
+                    "FROM forex_trades WHERE pnl_usd > 0"
+                )
+                f_count, f_amount = cur.fetchone()
+            else:
+                f_count, f_amount = 0, 0.0
 
         total_wins   = int(f_count or 0)
         total_amount = float(f_amount or 0)

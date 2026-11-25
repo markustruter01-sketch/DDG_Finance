@@ -141,6 +141,29 @@ MASTER COPY: this file in GitHub. The claude.ai Project doc `claude/finance-2027
 - Expected on the first league night after publish (Mon 23 Nov, New York): 10 new pretend accounts (29 in all) and the first `macro_state` rows. FX-CARRY decides once financing rates are stored (they are, from 20 Nov).
 - Next (Opus): 🔴 V2-03 (FLEET-V1-X1 for jerome_macro, switch off until the lock; rehearsal first); V2-05 + V2-18 (GATE, by Fri 4 Dec); the macro_check hand checks on Replit.
 
+### Status 26 Nov morning Brisbane (Opus 5.5): platform audit (Markus: "make sure everything is running smoothly")
+- Merged since 22 Nov: #181 V2-03 build (switch off), #182 repo renames, #183 Night Glass motion on the dashboard, #184 comments. Published 24 Nov 01:26 UTC (deployment revision 6c972955, built from main 6a3e376); post-publish stop check clean (24 Nov).
+- Live, READ-ONLY (Replit agent on production, 25 Nov 20:30–20:51 UTC, US market open):
+  - The runner is alive, heartbeat seconds old. All four bots cycle hourly, last 19:34–19:40 UTC; none paused. Fleet halt off. Kill switch not armed (alert-only by the 14 Nov decision) and not tripped.
+  - Stops: QQQ 527.61 / SPY 584.16 on oracle and jerome_macro; all 4 OANDA trades have stop-losses. Stop coverage PASS 20:30; reconciliation clean 19:33 and 20:33.
+  - Equity: oracle 85,436.34; jerome_macro 76,300.81; spy_qqq_trend 99,197.89; OANDA NAV 103,433.72.
+  - Twins nightly 24 Nov 22:15: all 29 league accounts wrote a value; macro_state for 23 and 24 Nov reads "reflation".
+  - Live checks: no flags. DDG Control push: ok. Database backup: ok (24 Nov 22:00).
+- Found and fixed (PR #186):
+  1. Two `twin_ledger_broken` alarms were false alarms. FX-CARRY's row 50 hashed a JPY carry of -0.0, and the database stores numbers without the sign of zero. Proved: the stored hash matches with JPY = -0.0. Fix: -0.0 is never stored or hashed; older rows pass only when the sign of a zero is the sole difference; the alarm clears on the first night every chain is intact.
+  2. `test_human` read the wall clock (the Me account started "today"), so CI fails from 25 Nov on. The account now starts from the first trade's time.
+  3. The ddg.limited showcase skipped `/league/leaderboard` 24 times in 48 hours on a 20 s timeout. Now 90 s, and its success lines reach the log.
+  4. The vault backfill queried the deleted `forex_trades` table on every startup (Postgres error per publish). It now skips and marks itself done.
+- Found, needs Markus:
+  - DDG Control has no `/api/inbound/finance/forex-ai-switch`. Finance's hourly read gets 401 from Control's `/inbound` guard and keeps the last state: the AI stays on unless Finance's own switch is off.
+  - `HEARTBEAT_URL_RUNNER` and `HEARTBEAT_URL_API` are not set (asked 11 Nov): nothing outside Replit notices if the platform stops.
+- Still open for the GATE (merge and publish by Fri 4 Dec, market closed):
+  - V2-05 macro tape and V2-18 long-view panel: not built.
+  - V2-03's Momentum v2 (weekly re-entry, 25% sector cap): not built, 🔴 order path.
+  - V2-06/V2-19 hand checks (`python -m twins.macro_check`): not run.
+  - Atlas V2's display name at the lock: not asked.
+- Open PRs: #185 (Me page names, sectors, % wheel), #162 (AU13 proposal), #186 (this audit's fixes; merge before #185, whose CI hits the clock test).
+
 ## Not doing
 - Any crypto, on any account or system, full stop (Markus 17 Nov; was "no crypto sleeve", 10 Nov). Coins, pairs and crypto funds. Buys refused in code (PR #117). The last BTC was sold 17 Nov (owner-approved); no crypto is held anywhere.
 - A fourth Alpaca paper account (cap is 3).

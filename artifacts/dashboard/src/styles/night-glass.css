@@ -443,7 +443,32 @@ table.ng input { width: 7em; }
 .ticket-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-top: 12px; }
 .theses { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
 .theses summary { cursor: pointer; font-size: 14px; }
-@media (max-width: 900px) { .ticket { grid-template-columns: 1fr; } }
+.ticket-asset { grid-column: span 2; }
+.ticket-asset, .ticket-percent { align-self: start; }   /* the wheel is taller than a select: line both up at the top */
+.ticket-what { grid-column: 1 / -1; margin: 0; }
+.ticket-what b { color: var(--ng-text); font-weight: 500; }
+@media (max-width: 900px) { .ticket { grid-template-columns: 1fr; } .ticket-asset { grid-column: auto; } }
+
+/* Phone tab bar and More sheet float over scrolling content, so they always use the frosted
+   photo glass. On dusk pages plain glass (5% white) let the page text show through them (25 Nov). */
+@media (max-width: 760px) {
+  .tabbar, .sheet { background: var(--ng-glass-photo); -webkit-backdrop-filter: blur(22px) saturate(140%); backdrop-filter: blur(22px) saturate(140%); }
+}
+
+/* Wheel picker (components/WheelPicker.tsx, Night Glass M22): rows snap under the centre band. */
+.wheel { --wheel-row: 40px; position: relative; height: calc(var(--wheel-row) * 3); max-width: 240px;
+  border-radius: 12px; border: 1px solid var(--ng-edge); background: rgba(255,255,255,0.04); }
+.wheel-band { position: absolute; left: 6px; right: 6px; top: var(--wheel-row); height: var(--wheel-row);
+  border-radius: 9px; background: rgba(255,255,255,0.08); border: 1px solid var(--ng-hairline); pointer-events: none; }
+.wheel-scroll { position: relative; height: 100%; overflow-y: scroll; scroll-snap-type: y mandatory; overscroll-behavior: contain;
+  padding: var(--wheel-row) 0; scrollbar-width: none; border-radius: 12px; outline: none;
+  -webkit-mask-image: linear-gradient(transparent, #000 30%, #000 70%, transparent); mask-image: linear-gradient(transparent, #000 30%, #000 70%, transparent); }
+.wheel-scroll::-webkit-scrollbar { display: none; }
+.wheel:has(.wheel-scroll:focus-visible) { outline: 2px solid var(--ng-ice); outline-offset: 2px; }
+.wheel-row { height: var(--wheel-row); display: grid; place-items: center; scroll-snap-align: center; cursor: pointer; user-select: none;
+  font: 300 17px/1 var(--ng-sans); font-variant-numeric: tabular-nums; color: var(--ng-text-3);
+  transition: color var(--ng-dur-quick) var(--ng-ease-out), font-size var(--ng-dur-quick) var(--ng-ease-out); }
+.wheel-row.on { color: var(--ng-text); font-size: 22px; font-weight: 400; }
 .me-two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 12px; }
 @media (max-width: 900px) { .me-two { grid-template-columns: 1fr; } }
 

@@ -160,9 +160,10 @@ class _WikiTable(HTMLParser):
             self._cell.append(data)
 
 
-def parse_wikipedia_sectors(html: str) -> dict[str, str]:
-    """{ticker: GICS sector} from Wikipedia's S&P 500 list. Tickers in Alpaca's dot form (BRK.B).
-    Only the 11 GICS sector names are kept; anything else counts as no sector."""
+def parse_wikipedia_details(html: str) -> dict[str, dict[str, str]]:
+    """{ticker: {"name", "sector", "industry"}} from Wikipedia's S&P 500 list (Security,
+    GICS Sector, GICS Sub-Industry). Tickers in Alpaca's dot form (BRK.B). A sector outside
+    the 11 GICS names counts as no sector (''); a missing column gives ''."""
     p = _WikiTable()
     p.feed(html)
     if not p.rows:
@@ -171,11 +172,26 @@ def parse_wikipedia_sectors(html: str) -> dict[str, str]:
     if "Symbol" not in head or "GICS Sector" not in head:
         return {}
     i_sym, i_sec = head.index("Symbol"), head.index("GICS Sector")
+    i_name = head.index("Security") if "Security" in head else None
+    i_ind = head.index("GICS Sub-Industry") if "GICS Sub-Industry" in head else None
+    cell = lambda r, i: r[i] if i is not None and i < len(r) else ""
     out = {}
     for r in p.rows[1:]:
-        if len(r) > max(i_sym, i_sec) and r[i_sec] in GICS_SECTORS:
-            out[r[i_sym].replace("-", ".").strip()] = r[i_sec]
+        if len(r) > max(i_sym, i_sec):
+            out[r[i_sym].replace("-", ".").strip()] = {
+                "name": cell(r, i_name), "sector": r[i_sec] if r[i_sec] in GICS_SECTORS else "",
+                "industry": cell(r, i_ind)}
     return out
+
+
+def parse_wikipedia_sectors(html: str) -> dict[str, str]:
+    """{ticker: GICS sector} from Wikipedia's S&P 500 list. Tickers in Alpaca's dot form (BRK.B).
+    Only the 11 GICS sector names are kept; anything else counts as no sector."""
+    return {t: d["sector"] for t, d in parse_wikipedia_details(html).items() if d["sector"]}
+
+
+def load_wikipedia_details(http_get: Callable[[str], bytes]) -> dict[str, dict[str, str]]:
+    return parse_wikipedia_details(http_get(WIKI_SP500_URL).decode("utf-8", "replace"))
 
 
 def load_wikipedia_sectors(http_get: Callable[[str], bytes], tickers: list[str]) -> dict[str, str]:

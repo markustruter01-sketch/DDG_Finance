@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/hooks/use-trading-client";
 import { useLeaderboard } from "@/hooks/use-leaderboard";
 import { Shell, Status } from "@/components/Shell";
 import { returnSince, type Curve } from "@/lib/curves";
 import { Bars, DoneTick } from "@/components/Motion";
+import { WheelPicker } from "@/components/WheelPicker";
 
 // Me vs the machines (Markus, 20 Nov 2026). Markus's own pretend account
 // (twins/human.py) and the 2027 predictions (twins/predictions.py). Overview
@@ -12,7 +13,8 @@ import { Bars, DoneTick } from "@/components/Motion";
 // the predictions. Every figure comes from the API; trades write pretend
 // decisions only (no orders), filled at the next US open by the same engine.
 
-type Asset = { symbol: string; label: string };
+// name/about: funds and currencies; name/sector/industry: shares (twins/human.py catalog).
+type Asset = { symbol: string; label: string; name?: string; about?: string; sector?: string; industry?: string };
 type AssetClass = { id: string; label: string; assets: Asset[]; two_way?: boolean };
 type Catalog = { classes: AssetClass[]; shares_available: boolean };
 type Trade = { id: number; at: string; fills_after: string; asset: string; side: string; percent: number; reason: string };
@@ -45,9 +47,24 @@ function group(rows: Row[], pick: (r: Row) => boolean, from: string | null) {
   return { best: Math.max(...vals), avg: vals.reduce((a, b) => a + b, 0) / vals.length, n: vals.length };
 }
 
+/** "LMT (Lockheed Martin — Aerospace & Defense)": the ticker, then what it is. */
+const describe = (a: Asset) => {
+  const what = a.about || a.industry || a.sector;
+  return a.name ? `${a.label} (${a.name}${what ? ` — ${what}` : ""})` : a.label;
+};
+const ALL = "";
+const counted = (values: string[]) => {
+  const n = new Map<string, number>();
+  values.filter(Boolean).forEach((v) => n.set(v, (n.get(v) ?? 0) + 1));
+  return [...n.entries()].sort(([a], [b]) => a.localeCompare(b));
+};
+
 function TradeTicket({ catalog, onDone }: { catalog: Catalog; onDone: () => void }) {
   const [cls, setCls] = useState(catalog.classes[0]?.id ?? "");
   const klass = catalog.classes.find((c) => c.id === cls);
+  const [sector, setSector] = useState(ALL);
+  const [industry, setIndustry] = useState(ALL);
+  const [find, setFind] = useState("");
   const [asset, setAsset] = useState("");
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [percent, setPercent] = useState(10);
@@ -57,34 +74,63 @@ function TradeTicket({ catalog, onDone }: { catalog: Catalog; onDone: () => void
     mutationFn: async () => (await api.post("/human/trade", { asset, side, percent, reason })).data as { fills_at_open_after: string },
     onSuccess: () => { setReason(""); qc.invalidateQueries({ queryKey: ["human-account"] }); onDone(); },
   });
-  const valid = klass?.assets.some((a) => a.symbol === asset) && reason.trim().length >= 10;
+  const all = klass?.assets ?? [];
+  const bySector = all.some((a) => a.sector);                       // shares: sort them by type
+  const sectors = useMemo(() => counted(all.map((a) => a.sector ?? "")), [all]);
+  const inSector = all.filter((a) => sector === ALL || a.sector === sector);
+  const industries = useMemo(() => counted(inSector.map((a) => a.industry ?? "")), [inSector]);
+  const q = find.trim().toLowerCase();
+  const shown = inSector.filter((a) => (industry === ALL || a.industry === industry)
+    && (!q || a.symbol.toLowerCase().includes(q) || (a.name ?? "").toLowerCase().includes(q)));
+  const chosen = all.find((a) => a.symbol === asset);
+  useEffect(() => { if (asset && !shown.some((a) => a.symbol === asset)) setAsset(""); });   // a filter hid it
+  const valid = !!chosen && reason.trim().length >= 10;
+  const base = chosen?.name?.split(" vs ")[0];
   return (
     <section className="glass panel me-ticket" aria-label="Place a trade">
       <div className="panel-head"><h2>Place a trade</h2><span className="label">sets how much of the account one asset is · fills at the next US open</span></div>
       <div className="ticket">
         <label className="field"><span className="label">Asset class</span>
-          <select value={cls} onChange={(e) => { setCls(e.target.value); setAsset(""); setSide("buy"); }}>
+          <select value={cls} onChange={(e) => { setCls(e.target.value); setSector(ALL); setIndustry(ALL); setFind(""); setAsset(""); setSide("buy"); }}>
             {catalog.classes.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
           </select></label>
-        <label className="field"><span className="label">Asset</span>
-          {klass && klass.assets.length > 40 ? (<>
-            <input list="asset-list" value={asset} placeholder="type a ticker, e.g. AAPL" onChange={(e) => setAsset(e.target.value.toUpperCase().trim())} />
-            <datalist id="asset-list">{klass.assets.map((a) => <option key={a.symbol} value={a.symbol} />)}</datalist>
-          </>) : (
-            <select value={asset} onChange={(e) => setAsset(e.target.value)}>
-              <option value="">Choose…</option>
-              {klass?.assets.map((a) => <option key={a.symbol} value={a.symbol}>{a.label}</option>)}
-            </select>
-          )}</label>
+        {bySector && (<>
+          <label className="field"><span className="label">Sector</span>
+            <select value={sector} onChange={(e) => { setSector(e.target.value); setIndustry(ALL); }}>
+              <option value={ALL}>All sectors ({all.length})</option>
+              {sectors.map(([s, n]) => <option key={s} value={s}>{s} ({n})</option>)}
+            </select></label>
+          {industries.length > 0 && (
+            <label className="field"><span className="label">Industry</span>
+              <select value={industry} onChange={(e) => setIndustry(e.target.value)}>
+                <option value={ALL}>All industries ({inSector.length})</option>
+                {industries.map(([s, n]) => <option key={s} value={s}>{s} ({n})</option>)}
+              </select></label>
+          )}
+          <label className="field"><span className="label">Find a company</span>
+            <input value={find} placeholder="name or ticker, e.g. Lockheed" onChange={(e) => setFind(e.target.value)} /></label>
+        </>)}
+        <label className="field ticket-asset"><span className="label">Asset{bySector ? ` (${shown.length})` : ""}</span>
+          <select value={asset} onChange={(e) => setAsset(e.target.value)}>
+            <option value="">{shown.length ? "Choose…" : "Nothing matches"}</option>
+            {shown.map((a) => <option key={a.symbol} value={a.symbol}>{describe(a)}</option>)}
+          </select></label>
         {klass?.two_way && (
           <div className="field"><span className="label">Direction</span>
             <div className="chips" role="group" aria-label="Direction">
-              <button className={`chip${side === "buy" ? " on" : ""}`} aria-pressed={side === "buy"} onClick={() => setSide("buy")}>Buy {asset.split("_")[0] || "base"}</button>
-              <button className={`chip${side === "sell" ? " on" : ""}`} aria-pressed={side === "sell"} onClick={() => setSide("sell")}>Sell {asset.split("_")[0] || "base"}</button>
+              <button className={`chip${side === "buy" ? " on" : ""}`} aria-pressed={side === "buy"} onClick={() => setSide("buy")}>Buy {base ?? "the first currency"}</button>
+              <button className={`chip${side === "sell" ? " on" : ""}`} aria-pressed={side === "sell"} onClick={() => setSide("sell")}>Sell {base ?? "the first currency"}</button>
             </div></div>
         )}
-        <label className="field"><span className="label">Share of the account (0% = sell it all)</span>
-          <input type="number" min={0} max={100} step={1} value={percent} onChange={(e) => setPercent(Math.max(0, Math.min(100, Number(e.target.value))))} /></label>
+        <div className="field ticket-percent"><span className="label" id="ticket-percent">Share of the account (0% = sell it all)</span>
+          <WheelPicker value={percent} onChange={setPercent} min={0} max={100} unit="%" labelledBy="ticket-percent" /></div>
+        {chosen && (
+          <p className="small ticket-what">
+            <b>{chosen.label}</b> is {chosen.name || chosen.label}
+            {chosen.about ? `: ${chosen.about}` : chosen.sector ? `, ${chosen.sector}${chosen.industry ? `, ${chosen.industry}` : ""}` : ""}.
+            {" "}This trade sets it to <b>{percent}%</b> of the account{klass?.two_way ? ` (${side === "buy" ? "buying" : "selling"} the ${base})` : ""}.
+          </p>
+        )}
         <label className="field ticket-reason"><span className="label">Why (required)</span>
           <textarea rows={3} value={reason} maxLength={500} placeholder="What you see and why this trade fits your view" onChange={(e) => setReason(e.target.value)} /></label>
       </div>
@@ -96,6 +142,13 @@ function TradeTicket({ catalog, onDone }: { catalog: Catalog; onDone: () => void
       </div>
     </section>
   );
+}
+
+/** A typed number that can be emptied while typing (a plain controlled number box snapped back to 0). */
+function NumberField({ value, step, onChange }: { value: number; step: number; onChange: (n: number) => void }) {
+  const [text, setText] = useState(String(value));
+  useEffect(() => { if (parseFloat(text) !== value && !(text === "" && value === 0)) setText(String(value)); }, [value]); // eslint-disable-line react-hooks/exhaustive-deps
+  return <input type="number" step={step} value={text} onChange={(e) => { setText(e.target.value); const n = parseFloat(e.target.value); onChange(Number.isFinite(n) ? n : 0); }} />;
 }
 
 function PredictionForm({ p, mine }: { p: Predictions; mine?: Entry }) {
@@ -119,10 +172,10 @@ function PredictionForm({ p, mine }: { p: Predictions; mine?: Entry }) {
           <tr key={k}><td>{label}</td>
             <td><select value={m[k]?.direction} onChange={(e) => setM({ ...m, [k]: { ...m[k], direction: e.target.value as MarketF["direction"] } })}>
               <option value="up">Up</option><option value="flat">Flat (±{p.flat_band_pct}%)</option><option value="down">Down</option></select></td>
-            <td><input type="number" step={0.5} value={m[k]?.change_pct} onChange={(e) => setM({ ...m, [k]: { ...m[k], change_pct: Number(e.target.value) } })} /></td></tr>
+            <td><NumberField step={0.5} value={m[k]?.change_pct ?? 0} onChange={(n) => setM({ ...m, [k]: { ...m[k], change_pct: n } })} /></td></tr>
         ))}
         {Object.entries(p.macro).map(([k, label]) => (
-          <tr key={k}><td>{label}</td><td /><td><input type="number" step={0.05} value={macro[k]} onChange={(e) => setMacro({ ...macro, [k]: Number(e.target.value) })} /></td></tr>
+          <tr key={k}><td>{label}</td><td /><td><NumberField step={0.05} value={macro[k] ?? 0} onChange={(n) => setMacro({ ...macro, [k]: n })} /></td></tr>
         ))}</tbody></table></div>
       <div className="ticket-foot">
         <button className="btn" disabled={send.isPending || thesis.trim().length < 50} onClick={() => send.mutate()}>{send.isPending ? <><Bars /> Filing…</> : mine ? "File a new version" : "File my prediction"}</button>

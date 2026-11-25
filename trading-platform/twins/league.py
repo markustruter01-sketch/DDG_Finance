@@ -77,7 +77,15 @@ def _http_get(url: str) -> bytes:
 
 
 def load_universe(http_get: Callable[[str], bytes] = _http_get) -> tuple[tuple[str, ...], dict[str, str], str]:
-    """S&P 500 members (same source as MOMO-V2) and their sectors.
+    """S&P 500 members (same source as MOMO-V2) and their sectors. See load_universe_rows."""
+    tickers, by_ticker, _rows, source = load_universe_rows(http_get)
+    return tickers, by_ticker, source
+
+
+def load_universe_rows(http_get: Callable[[str], bytes] = _http_get
+                       ) -> tuple[tuple[str, ...], dict[str, str], list[dict], str]:
+    """S&P 500 members (same source as MOMO-V2), their sectors, the holdings rows
+    (ticker, name, weight) and the source.
 
     Sectors come from the holdings file; if it has none, from iShares IVV, then from
     Wikipedia's S&P 500 list. The label names a sector source only when that source
@@ -89,7 +97,7 @@ def load_universe(http_get: Callable[[str], bytes] = _http_get) -> tuple[tuple[s
     tickers, rows, source = load_sp500_rows(http_get)
     by_ticker = sectors(rows, tickers)
     if sector_share(by_ticker) >= MIN_SECTOR_SHARE:
-        return tuple(tickers), by_ticker, source
+        return tuple(tickers), by_ticker, rows, source
     tried = []
     for name, load in (("ishares_ivv", load_ivv_sectors), ("wikipedia", load_wikipedia_sectors)):
         try:
@@ -99,10 +107,10 @@ def load_universe(http_get: Callable[[str], bytes] = _http_get) -> tuple[tuple[s
             continue
         share = sector_share(got)
         if share >= MIN_SECTOR_SHARE:
-            return tuple(tickers), got, f"{source}; sectors from {name}"
+            return tuple(tickers), got, rows, f"{source}; sectors from {name}"
         tried.append(f"{name} {share:.0%}")
     logger.warning(f"league | no sector source covered {MIN_SECTOR_SHARE:.0%} of members: {', '.join(tried)}")
-    return tuple(tickers), by_ticker, f"{source}; no sectors ({', '.join(tried)})"
+    return tuple(tickers), by_ticker, rows, f"{source}; no sectors ({', '.join(tried)})"
 
 
 def ensure_accounts(get_conn, session: date, registrations: dict[str, dict[str, Any]]) -> list[str]:

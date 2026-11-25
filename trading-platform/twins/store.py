@@ -30,6 +30,7 @@ connection), so tests run on a throwaway local Postgres.
 from __future__ import annotations
 
 import hashlib
+import itertools
 import json
 from datetime import date, datetime, timezone
 from typing import Any, Callable
@@ -197,12 +198,70 @@ def _iso(value: Any) -> Any:
     return value.isoformat() if isinstance(value, date) else value
 
 
-def decision_hash(prev_hash: str | None, row: dict[str, Any]) -> str:
-    body = {k: _iso(row[k]) for k in ("twin_id", "decided_at", "step_at", "weights", "missed",
-                                       "reason", "inputs", "inputs_ref")}
+def _no_negative_zero(value: Any) -> Any:
+    """-0.0 becomes 0.0, all the way down. JSONB stores numbers as Postgres numeric, which
+    has no negative zero, so a -0.0 written is read back as 0.0 (found 25 Nov 2026:
+    FX-CARRY's rounded carry for JPY was -0.0 and its row failed the nightly check)."""
+    if isinstance(value, float):
+        return value + 0.0                     # -0.0 + 0.0 == 0.0; every other float unchanged
+    if isinstance(value, dict):
+        return {k: _no_negative_zero(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_no_negative_zero(v) for v in value]
+    return value
+
+
+def _body(row: dict[str, Any]) -> dict[str, Any]:
+    return {k: _iso(row[k]) for k in ("twin_id", "decided_at", "step_at", "weights", "missed",
+                                      "reason", "inputs", "inputs_ref")}
+
+
+def _digest(prev_hash: str | None, body: dict[str, Any]) -> str:
     canonical = json.dumps({"prev": prev_hash, "row": body}, sort_keys=True,
                            separators=(",", ":"), default=str)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def decision_hash(prev_hash: str | None, row: dict[str, Any]) -> str:
+    return _digest(prev_hash, _no_negative_zero(_body(row)))
+
+
+_MAX_ZERO_SIGNS = 12      # at most 4,096 tries per row; rows have a handful of zeros
+
+
+def _zero_paths(value: Any, path: tuple = ()) -> list[tuple]:
+    if isinstance(value, float) and value == 0.0:
+        return [path]
+    if isinstance(value, dict):
+        return [p for k, v in value.items() for p in _zero_paths(v, path + (k,))]
+    if isinstance(value, list):
+        return [p for i, v in enumerate(value) for p in _zero_paths(v, path + (i,))]
+    return []
+
+
+def _with_negative_zeros(value: Any, paths: set[tuple], path: tuple = ()) -> Any:
+    if path in paths:
+        return -0.0
+    if isinstance(value, dict):
+        return {k: _with_negative_zeros(v, paths, path + (k,)) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_with_negative_zeros(v, paths, path + (i,)) for i, v in enumerate(value)]
+    return value
+
+
+def _matches_with_lost_zero_signs(row: dict[str, Any]) -> bool:
+    """Rows written before the -0.0 fix were hashed with the -0.0 that the database then
+    stored as 0.0. Such a row is intact if some choice of signs for its zeros (and nothing
+    else) gives back its hash. Only the sign of a zero is ever tried."""
+    body = _body(row)
+    zeros = _zero_paths(body)
+    if not zeros or len(zeros) > _MAX_ZERO_SIGNS:
+        return False
+    for n in range(1, len(zeros) + 1):
+        for pick in itertools.combinations(zeros, n):
+            if _digest(row["prev_hash"], _with_negative_zeros(body, set(pick))) == row["hash"]:
+                return True
+    return False
 
 
 # ── accounts ──────────────────────────────────────────────────────────────────
@@ -244,6 +303,7 @@ def append_decision(get_conn: GetConn, *, twin_id: str, decided_at: datetime, st
     row = {"twin_id": twin_id, "decided_at": decided_at, "step_at": step_at,
            "weights": {k: round(float(v), 10) for k, v in sorted(weights.items())} if weights is not None else None,
            "missed": missed, "reason": reason, "inputs": inputs or {}, "inputs_ref": inputs_ref}
+    row = {**row, "weights": _no_negative_zero(row["weights"]), "inputs": _no_negative_zero(row["inputs"])}
     with get_conn() as conn, conn.cursor() as cur:
         # One writer per twin at a time: the account row is the lock.
         cur.execute("SELECT 1 FROM twin_accounts WHERE twin_id = %s FOR UPDATE", (twin_id,))
@@ -285,7 +345,7 @@ def verify_chain(rows: list[dict[str, Any]]) -> list[str]:
     for r in rows:
         if r["prev_hash"] != prev:
             problems.append(f"decision {r['id']}: previous-row link broken")
-        if decision_hash(r["prev_hash"], r) != r["hash"]:
+        if decision_hash(r["prev_hash"], r) != r["hash"] and not _matches_with_lost_zero_signs(r):
             problems.append(f"decision {r['id']}: content does not match its hash")
         prev = r["hash"]
     return problems

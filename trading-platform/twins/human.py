@@ -89,12 +89,14 @@ def step_for(now: datetime) -> date:
     return d
 
 
-def ensure_account(get_conn, version: int) -> dict[str, Any]:
+def ensure_account(get_conn, version: int, now: datetime | None = None) -> dict[str, Any]:
+    """The account for ``version``, opened on first use. Version 0 starts at the close before
+    the first trade's fill (``now`` = the trade's time; the clock when not given)."""
     tid = twin_id(version)
     acct = next((a for a in store.accounts(get_conn, active_only=False) if a["twin_id"] == tid), None)
     if acct:
         return acct
-    start = (datetime.combine(step_for(datetime.now(engine.NEW_YORK)), engine.SESSION_CLOSE, engine.NEW_YORK)
+    start = (datetime.combine(step_for(now or datetime.now(engine.NEW_YORK)), engine.SESSION_CLOSE, engine.NEW_YORK)
              if version == 0 else RECORD_START)
     store.create_account(get_conn, twin_id=tid, bot_id=HUMAN_BOT, kind="human", version=version, bars=DAILY,
                          start_at=start, start_equity=START_EQUITY,
@@ -136,7 +138,7 @@ def trade(get_conn, now: datetime, *, asset: str, side: str, percent: float, rea
     if fx and sym != asset:                     # buying USD_CHF = selling CHF in the simulator
         w = -w
     version = version_for(now)
-    acct = ensure_account(get_conn, version)
+    acct = ensure_account(get_conn, version, now)
     target = current_target(get_conn, acct["twin_id"])
     target.pop(sym, None)
     if abs(w) > 1e-9:

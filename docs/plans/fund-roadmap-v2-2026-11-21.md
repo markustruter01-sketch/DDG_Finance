@@ -249,6 +249,7 @@ Tags: **[GATE]** merge and publish by Fri 4 Dec · **[LOCK]** switched on 12–1
 - Done when: the report holds both windows; the ledger holds the entry; no rule was edited after a run.
 
 ### V2-03 Real accounts at the lock — [GATE] build, [LOCK] switch on · 🔴 order path · needs D2
+**BUILD DONE (switch off) 22 Nov 2026, PR #181:** FLEET-V1-X1 for `jerome_macro` (D2 = B), with the fake-broker cutover rehearsal. Still to do: Momentum's new version (below, not built as of 26 Nov); the display name; switch on at the lock after Markus's yes.
 - **If D2 = B (recommended):** a third fleet variant with no share core.
   - `sleeve_runtime/fleet_live.py`: `X1 = FleetVariant("FLEET-V1-X1", "fleet_v1_x1", "fleet_v1_x1_rebalance", 0.00, 1.00)`; add to `VARIANTS` (VERIFIED: F1 is 0.65/0.35, C1 is 1.00/0.00). Check every place that assumes a variant holds the share core; a variant with core weight 0 must not ask for, size or trade the four share funds.
   - `trading-platform/core/stop_policy.py`: `STOP_EXEMPT["jerome_macro"] = TREND_EXIT_LINES` (these four funds carry no stop by design; the monthly call is the exit). Confirm the kill switch's "every position has a stop" check treats this account as it treats Atlas.

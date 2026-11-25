@@ -12,14 +12,17 @@ Control drops account numbers, keys and tokens again on its side, whatever arriv
 """
 from __future__ import annotations
 
-import logging
 import os
 from datetime import datetime, timezone
 from typing import Any
 
 import httpx
+from loguru import logger     # loguru like the rest of the API: the stdlib logger's "ok" lines never reached the logs
 
-logger = logging.getLogger(__name__)
+# Per answer. The league board alone can take over 20 s (24 of its answers timed out at 20 s,
+# 23-25 Nov 2026), so the public copy often had no league table. The job runs every 30 minutes
+# with the market closed, so a slow answer costs nothing.
+READ_TIMEOUT_S = 90.0
 
 SHOWCASE_PATHS = [
     "/fleet/equity", "/market-state", "/status/summary", "/positions/live", "/claude-report",
@@ -42,7 +45,7 @@ def _push_url() -> str | None:
 def build_showcase() -> dict[str, Any]:
     secret = os.environ.get("TRADING_API_SECRET", "").strip()
     data: dict[str, Any] = {}
-    with httpx.Client(timeout=20.0, headers={"X-Trading-API-Secret": secret}) as client:
+    with httpx.Client(timeout=READ_TIMEOUT_S, headers={"X-Trading-API-Secret": secret}) as client:
         for path in SHOWCASE_PATHS:
             try:
                 r = client.get(LOCAL_API + path)

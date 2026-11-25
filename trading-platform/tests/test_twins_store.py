@@ -109,3 +109,34 @@ def test_fills_upsert_is_a_rerun_not_a_duplicate():
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute("SELECT count(*), max(price) FROM twin_fills")
         assert cur.fetchone() == (1, 499.0)
+
+
+# ── -0.0: the database keeps no sign on zero (FX-CARRY, 23 Nov 2026) ─────────────────────────
+_FX_CARRY_ROW = {   # production row 50, read 25 Nov 2026; its JPY carry was -0.0 when hashed
+    "id": 50, "twin_id": "league:FX-CARRY:v0", "prev_hash": None, "missed": False, "reason": "FX-CARRY",
+    "decided_at": datetime(2026, 11, 23, 22, 15, 0, 688083, tzinfo=timezone.utc),
+    "step_at": datetime(2026, 11, 23, 21, tzinfo=timezone.utc), "inputs_ref": "research_harness.league.families",
+    "weights": {"AUD_USD": 0.2397189147, "CAD_USD": -0.3962924248, "CHF_USD": -0.2742950264,
+                "EUR_USD": -0.331197585, "GBP_USD": 0.3138343786, "JPY_USD": 0.2210779476},
+    "inputs": {"d": {"AUD": 0.0097, "CAD": -0.0165, "CHF": -0.04095, "EUR": -0.0145, "GBP": 0.00035,
+                     "JPY": 0.0, "NZD": -0.0121, "USD": 0.0},
+               "long": ["AUD", "GBP", "JPY"], "short": ["EUR", "CAD", "CHF"], "state": "hold"},
+    "hash": "ff1cc44373127e4431345ed3575ee080364f041e31f2ba29db898dc5a2b9de0e"}
+
+
+def test_old_row_that_lost_a_zero_sign_still_checks_clean_but_tampering_does_not():
+    assert store.verify_chain([_FX_CARRY_ROW]) == []
+    tampered = {**_FX_CARRY_ROW, "weights": {**_FX_CARRY_ROW["weights"], "AUD_USD": 0.3}}
+    assert store.verify_chain([tampered]) == ["decision 50: content does not match its hash"]
+    moved = {**_FX_CARRY_ROW, "inputs": {**_FX_CARRY_ROW["inputs"], "long": ["AUD", "GBP", "NZD"]}}
+    assert store.verify_chain([moved]) == ["decision 50: content does not match its hash"]
+
+
+@needs_pg
+def test_negative_zero_is_stored_and_hashed_as_zero():
+    get_conn = _setup()
+    store.append_decision(get_conn, twin_id="oracle:mirror:v1", decided_at=T0, step_at=T0,
+                          weights={"SPY": -0.0, "TLT": -3.3e-11}, inputs={"d": {"JPY": -0.0}, "list": [-0.0, 1.0]})
+    rows = store.decisions(get_conn, "oracle:mirror:v1")
+    assert store.verify_chain(rows) == []
+    assert rows[-1]["weights"] == {"SPY": 0.0, "TLT": 0.0} and str(rows[-1]["inputs"]["d"]["JPY"]) == "0.0"

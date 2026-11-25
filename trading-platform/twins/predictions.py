@@ -96,13 +96,13 @@ def check(thesis: str, forecasts: dict[str, Any]) -> dict[str, Any]:
         d = m["direction"]
         if (d == "up" and pct <= 0) or (d == "down" and pct >= 0) or (d == "flat" and abs(pct) > FLAT_BAND_PCT):
             raise ValueError(f"{key}: direction {d} does not match {pct}%")
-        out["markets"][key] = {"direction": d, "change_pct": round(float(pct), 2)}
+        out["markets"][key] = {"direction": d, "change_pct": round(float(pct), 2) + 0.0}   # + 0.0: never -0.0 (see store._no_negative_zero)
     macro = forecasts.get("macro") or {}
     for key in MACRO:
         v = macro.get(key)
         if isinstance(v, bool) or not isinstance(v, (int, float)) or not -5 <= v <= 30:
             raise ValueError(f"{key}: a number between -5 and 30")
-        out["macro"][key] = round(float(v), 2)
+        out["macro"][key] = round(float(v), 2) + 0.0
     return out
 
 

@@ -14,8 +14,13 @@ Columns:
 - curve: [day, return % since start] for every valued day (League page charts);
 - luck check: deflated Sharpe ratio adjusted for the number of shadows tried
   (research_harness/harness/overfit.deflated_sharpe). "clear" at DSR >= 0.95,
-  "could be luck" below, "too few days" under MIN_LUCK_DAYS. The 0.95 and the
-  day minimum are PROVISIONAL (Opus 19 Nov): Markus fixes them before the lock.
+  "could be luck" below, "too few days" under MIN_LUCK_DAYS (agreed by Markus,
+  20 Nov). Scored on returns OVER T-bills: each day's return minus Y-CASH's for
+  the same day (27 Nov audit). Without that, a line parked in BIL earns the
+  cash rate with almost no movement and reads "clear" with no skill, and its
+  huge raw Sharpe widens the spread every other line is judged against. Forex
+  lines are not reduced: their idle money earns no T-bill interest in the
+  engine, so their return is already over cash (LUCK_NO_CASH_FAMILIES).
 """
 
 from __future__ import annotations
@@ -33,6 +38,8 @@ N_TRIALS = 22          # shadows declared: the roadmap's 16 (forex three include
 MIN_LUCK_DAYS = 60
 LUCK_CLEAR = 0.95
 REAL_BOTS = ("oracle", "jerome_macro", "spy_qqq_trend", "forex_ai")
+CASH_LINE = "Y-CASH"                    # registrations/league/Y-CASH.json: 100% BIL
+LUCK_NO_CASH_FAMILIES = ("forex",)      # unfunded positions: nothing to take off
 COUNCIL_BOT, COUNCIL_LINE = "forex_ai", "FX-COUNCIL"     # registrations/league/FX-COUNCIL.json
 
 
@@ -46,6 +53,18 @@ def worst_fall(values: list[float]) -> float:
 
 def daily_returns(curve: list[tuple[date, float]]) -> list[float]:
     return [curve[i][1] / curve[i - 1][1] - 1 for i in range(1, len(curve)) if curve[i - 1][1] > 0]
+
+
+def dated_returns(curve: list[tuple[date, float]]) -> list[tuple[date, float]]:
+    """(day, return into that day) for every step daily_returns counts."""
+    return [(curve[i][0], curve[i][1] / curve[i - 1][1] - 1) for i in range(1, len(curve)) if curve[i - 1][1] > 0]
+
+
+def over_cash(curve: list[tuple[date, float]], family: str | None, cash_by_day: dict[date, float]) -> list[float]:
+    """Daily returns over T-bills, for the luck check. A day the cash line has no value for is left as it is."""
+    if family in LUCK_NO_CASH_FAMILIES:
+        return daily_returns(curve)
+    return [r - cash_by_day.get(d, 0.0) for d, r in dated_returns(curve)]
 
 
 def days_in_cash(curve_days: list[date], decisions: list[tuple[date, dict[str, float] | None]]) -> int | None:
@@ -66,7 +85,9 @@ def build(lines: list[dict[str, Any]], n_trials: int) -> list[dict[str, Any]]:
     curve [(day, equity)], decisions [(day, weights)] (shadows only)."""
     spx = next((ln for ln in lines if ln["id"] == "Y-SPX"), None)
     spx_by_day = dict(spx["curve"]) if spx else {}
-    shadow_sharpes = [sharpe_per_period(daily_returns(ln["curve"])) for ln in lines
+    cash = next((ln for ln in lines if ln["id"] == CASH_LINE), None)
+    cash_by_day = dict(dated_returns([(d, v) for d, v in cash["curve"] if v and v > 0])) if cash else {}
+    shadow_sharpes = [sharpe_per_period(over_cash(ln["curve"], ln.get("family"), cash_by_day)) for ln in lines
                       if ln["kind"] == "shadow" and len(ln["curve"]) > 2]
     var_sr = variance(shadow_sharpes) if len(shadow_sharpes) > 1 else 0.0
     out = []
@@ -98,7 +119,7 @@ def build(lines: list[dict[str, Any]], n_trials: int) -> list[dict[str, Any]]:
         if len(r) < MIN_LUCK_DAYS:
             row["luck"] = "too few days"
         elif ln["kind"] == "shadow":
-            dsr = deflated_sharpe(r, None, n_trials, var_sr)["dsr"]
+            dsr = deflated_sharpe(over_cash(curve, ln.get("family"), cash_by_day), None, n_trials, var_sr)["dsr"]
             row["dsr"] = round(dsr, 4)
             row["luck"] = "clear" if dsr >= LUCK_CLEAR else "could be luck"
         out.append(row)
@@ -150,7 +171,9 @@ def read(get_conn) -> dict[str, Any]:
     return {"league_version": league.LEAGUE_VERSION,
             "note": ("Version 0 is the proving run, not the record." if league.LEAGUE_VERSION == 0 else ""),
             "luck_rule": {"clear_at_dsr": LUCK_CLEAR, "min_days": MIN_LUCK_DAYS, "n_trials": n_trials,
-                          "status": "provisional"},
+                          "status": "provisional",
+                          "basis": ("over T-bills" if any(ln["id"] == CASH_LINE for ln in lines)
+                                    else "raw returns (no cash line yet)")},
             "regime": regime,
             "rows": build(lines, n_trials)}
 

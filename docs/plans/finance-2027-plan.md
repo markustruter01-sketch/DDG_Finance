@@ -164,6 +164,15 @@ MASTER COPY: this file in GitHub. The claude.ai Project doc `claude/finance-2027
   - Atlas V2's display name at the lock: not asked.
 - Open PRs: #185 (Me page names, sectors, % wheel), #162 (AU13 proposal), #186 (this audit's fixes; merge before #185, whose CI hits the clock test).
 
+### Status 27 Nov morning Brisbane (Fable 5.2): audit, luck check fixed
+- Audit of main `3de860f` against the thesis and roadmap v2: Project doc `claude/finance-audit-2026-11-27.md`. Nothing live was read.
+- FIXED (this PR): the luck check scored raw returns, not returns over T-bills (`twins/leaderboard.py`). A line parked in BIL would have read "clear" after 60 days with no skill, and its raw Sharpe widened the spread every other line is judged against. Now each day's return has Y-CASH's taken off. Forex lines are not reduced (their idle money earns no T-bill interest in the engine). `luck_rule.basis` says which reading the board used. FOR MARKUS: say no if forex lines should also be reduced; it is a pass-bar detail and goes into the version 1 files at the lock either way.
+- `replit.md`: Atlas V2 becomes FLEET-V1-X1 (not Defensive stocks), 22 lines and 8 yardsticks, walk-forward job retired.
+- Tests here: research_harness 172 passed; the leaderboard's three pure tests passed with the platform imports stubbed. The full platform suite was NOT run here (no packages); GitHub's run is the check.
+- OUTSIDE MONITORING, checked 27 Nov from outside, anonymous: `/trading-api/liveness` answers 302 to Replit's sign-in (ReplShield, private deployment), the same as on 13 Nov. An UptimeRobot monitor that calls the app's address therefore reaches Replit's sign-in page, not the app, and cannot tell whether the platform is alive. UNKNOWN: what Markus's two UptimeRobot monitors point at. The built route is the other direction: the platform calls out (`HEARTBEAT_URL_RUNNER`, `HEARTBEAT_URL_API`), which works through a private deployment. The 26 Nov production read found both unset.
+- 🔴 STILL OPEN, needs Markus: the 3 Sep production and development database dumps are in this public repo's git history (commits `f51aef6`, `63a1592`); #149 removed the files only. Make the repo private, or rewrite history and change every token that was in the database that day.
+- Not built, due Fri 4 Dec (GATE): Momentum v2 (🔴 order path), V2-05, V2-18; the V2-06/V2-19 hand checks. Not started: V2-01, V2-02, V2-07, V2-08, V2-09, V2-14, V2-16, V2-20 to V2-25.
+
 ## Not doing
 - Any crypto, on any account or system, full stop (Markus 17 Nov; was "no crypto sleeve", 10 Nov). Coins, pairs and crypto funds. Buys refused in code (PR #117). The last BTC was sold 17 Nov (owner-approved); no crypto is held anywhere.
 - A fourth Alpaca paper account (cap is 3).

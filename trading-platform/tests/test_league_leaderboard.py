@@ -121,3 +121,28 @@ def test_real_accounts_on_the_board_match_home():
             "start_equity": START_EQUITY["jerome_macro"], "curve": lb.real_closes(get_conn, "jerome_macro")}
     row = lb.build([line], 16)[0]
     assert row["return_pct"] == round(100 * (75638.36 / START_EQUITY["jerome_macro"] - 1), 2) < 0
+
+
+def test_luck_check_is_scored_over_t_bills():
+    """27 Nov audit: a line parked in T-bills must not read "clear", and must not widen the spread."""
+    days = [date(2026, 1, 1) + timedelta(days=i) for i in range(lb.MIN_LUCK_DAYS + 2)]
+    bills = [100 * (1 + 0.04 / 252) ** i for i in range(len(days))]                    # 4% a year, no movement
+    parked = [v * (1.00001 if i % 2 else 0.99999) for i, v in enumerate(bills)]        # BIL, a hair of noise
+    fx = [100 * 1.002 ** i * (1.003 if i % 2 else 0.997) for i in range(len(days))]
+
+    def line(sid, kind, family, curve):
+        return {"id": sid, "name": sid, "kind": kind, "family": family, "start_equity": 100.0,
+                "curve": list(zip(days, curve)), "decisions": []}
+
+    with_cash = [line("Y-CASH", "yardstick", "yardstick", bills), line("P", "shadow", "stocks", parked),
+                 line("F", "shadow", "forex", fx)]
+    rows = {r["id"]: r for r in lb.build(with_cash, n_trials=2)}
+    assert rows["P"]["luck"] == "could be luck" and rows["P"]["dsr"] < 0.9      # no return over cash: no skill shown
+    assert rows["F"]["luck"] == "clear"                                         # forex: nothing taken off
+
+    raw = {r["id"]: r for r in lb.build(with_cash[1:], n_trials=2)}             # no cash line on the board
+    assert raw["P"]["luck"] == "clear"                                          # the old reading, shown for contrast
+
+    assert lb.over_cash(list(zip(days, bills)), "stocks", dict(lb.dated_returns(list(zip(days, bills))))) \
+        == pytest.approx([0.0] * (len(days) - 1), abs=1e-12)
+    assert lb.over_cash(list(zip(days, fx)), "forex", {days[1]: 0.5}) == lb.daily_returns(list(zip(days, fx)))

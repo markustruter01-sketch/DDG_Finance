@@ -5,7 +5,7 @@ dashboard, and a separately hosted Python runner. Static code and workflow
 configuration establish registration and wiring; they do not by themselves prove
 that a runner process is currently deployed or running.
 
-## Current accounts (updated 20 Nov 2026, audit AU3)
+## Current accounts (updated 27 Nov 2026)
 
 Four paper accounts, registered in `kraken-bot/runner.py`. No crypto on any
 account or system (owner, 17 Nov 2026; buys refused in code). Start balances and
@@ -18,8 +18,9 @@ the run start (9 Nov 2026) are in `trading-platform/core/fleet_capital.py`.
    header still describes the old Asia ETF strategy; the flag decides.
 2. **`jerome_macro` (Atlas V2)** — Alpaca paper.
    `bullion_strategy.run_bullion_cycle` runs FLEET-V1-C1: the same trend core
-   without the cross-asset sleeve. Planned to become the Defensive stocks
-   strategy at the strategy lock (about 12-13 Dec 2026).
+   without the cross-asset sleeve. At the strategy lock (12-13 Dec 2026) it becomes FLEET-V1-X1, the
+   cross-asset trend rule alone (Markus, 22 Nov, roadmap v2 D2 = B). X1 is built
+   and switched off until then.
 3. **`spy_qqq_trend` (Momentum)** — Alpaca paper.
    `momo_strategy.run_momo_account_cycle` runs MOMO-V2
    (`sleeve_runtime/momo_live.py`): 50 S&P 500 members by 12-1 momentum, with
@@ -29,7 +30,7 @@ the run start (9 Nov 2026) are in `trading-platform/core/fleet_capital.py`.
    pairs (`docs/plans/forex-council-2027-registration.md`).
 
 Around them, with no orders: the pretend-account engine (`trading-platform/twins/`),
-the Shadow League of 15 strategies plus 3 yardsticks
+the Shadow League of 22 strategies plus 8 yardsticks
 (`research_harness/league/`), and the Allocator (`research_harness/league/allocator.py`).
 The runner registration is evidence of code wiring, not of live order execution.
 
@@ -43,7 +44,8 @@ subsystem, and registers additional snapshot, audit, retention, and Fleet
 Commander jobs.
 
 `trading-platform/core/scheduler.py` contains the recurring safety, reconciliation,
-liveness, postmortem, audit, benchmark, walk-forward, snapshot, and vault jobs.
+liveness, postmortem, audit, benchmark, snapshot, and vault jobs (the nightly
+walk-forward check was retired on 22 Nov 2026).
 The old `intraday_cycle` function remains as compatibility code but is not
 registered as an active job and returns before running the retired stock scanner.
 `evening_postmortem` is registered on weekdays at 16:10 ET.
